@@ -17,8 +17,8 @@ automatización, documentación, ideas y proyectos de instalación.
 - `cultura/`: mapa conceptual XIO, handoff técnico y puente MAK↔XIO.
 - `projects/cultura/MAPA_GENERATIVO.md`: contexto del XIO dentro del mapa de
   proyectos e ideas de Cauce.
-- `tests/test_xio_superficie.py`: regresiones sobre la superficie de seguridad
-  del servidor.
+- `tests/test_xio_superficie.py` y `tests/test_xio_puente_staged.py`:
+  regresiones sobre la superficie de seguridad y el puente staged.
 
 ## Arranque rápido
 
@@ -39,6 +39,7 @@ en Termux, revisar primero `xio/RUNBOOK.md`, `xio/FACES.md` y
 ```bash
 python -m pytest xio/new-plugins/showcontrol
 python -m pytest tests/test_xio_superficie.py
+python -m pytest tests/test_xio_puente_staged.py
 ```
 
 Las capacidades marcadas como implementadas no implican que estén instaladas

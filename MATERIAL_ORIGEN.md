@@ -14,7 +14,8 @@ La extracción se hizo desde la copia local de `C:\IA\flujo`, clonada de
 - `cultura/mak_xio_puente/` y `cultura/mak_plataforma/xio_evidence.py`.
 - `cultura/mak_plataforma/mak-xio.service` y `WAKE_ON_LAN.md`.
 - El mapa de ideas `projects/cultura/MAPA_GENERATIVO.md`.
-- La regresión específica `tests/test_xio_superficie.py`.
+- Las regresiones específicas `tests/test_xio_superficie.py` y
+  `tests/test_xio_puente_staged.py`.
 
 Se mantuvieron los paths originales para que las instrucciones, imports y
 workflows de XIO sigan siendo legibles y rastreables.
