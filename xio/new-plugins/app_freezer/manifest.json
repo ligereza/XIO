@@ -1,0 +1,9 @@
+{
+  "name": "App Freezer",
+  "version": "1.0.0",
+  "description": "Congela apps completamente al apagar pantalla: deep freeze, auto-unfreeze, stats de ahorro de bateria, programacion por horarios",
+  "author": "Arena Agent",
+  "icon": "automation",
+  "category": "automation",
+  "permissions": ["apps", "system"]
+}

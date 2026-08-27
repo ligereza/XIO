@@ -1,0 +1,35 @@
+# Credenciales y configuración local
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Runtime XIO / Termux
+xio/**/.remember/
+xio/**/data/
+xio/**/_logs/
+xio/**/*.log
+xio/**/.pc_watch.pid
+xio/**/ntfy_topic.txt
+xio/**/.rish_out
+
+# Redistribuibles y builds locales
+xio/actual/platform-tools/
+xio/**/*.apk
+xio/**/*.exe
+xio/**/*.dll
+xio/**/*.dex
+xio/**/build/
+xio/**/.gradle/
+
+# Autosaves y archivos de trabajo
+xio/**/*_autosave/
+*.db
+*.sqlite
+*.sqlite3
+.xio-source.tar

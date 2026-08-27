@@ -1,0 +1,9 @@
+{
+  "name": "MIUI/HyperOS Tweaker",
+  "version": "1.0.0",
+  "description": "Control específico para Xiaomi con HyperOS: desactivar publicidad, telemetría, ajustar animaciones, Game Turbo bypass",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

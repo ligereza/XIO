@@ -1,0 +1,9 @@
+{
+  "name": "Debloat Manager",
+  "version": "1.0.0",
+  "description": "Gestiona y elimina bloatware del sistema con presets seguros. Lista categorizada de apps, disable/enable con un click, backup de estado.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["apps"]
+}

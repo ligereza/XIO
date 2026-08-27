@@ -1,0 +1,9 @@
+{
+  "name": "Show Control",
+  "version": "1.8.0",
+  "description": "Send AND receive show control from the phone: OSC, Art-Net and sACN/E1.31 DMX senders (VJ / lighting), cue engine with timed fades (GO/STOP/RELEASE), timecode timeline (play/pause/locate), OSC input (opt-in listener: /xio/go, /xio/signal/* from QLab/Ableton/TouchOSC), browser control panel (/panel), signal fabric (one 0..1 signal fans out to many DMX channels/OSC faders), Art-Net node discovery (ArtPoll), optical DMX auto-mapping (light-transport matrix, single or Hadamard-multiplexed), live telemetry (/obs), Wake-on-LAN with service verification, and an optional show token gating every mutating endpoint (TOFU set/rotate, constant-time check)",
+  "author": "Cauce",
+  "icon": "network",
+  "category": "network",
+  "permissions": ["network"]
+}

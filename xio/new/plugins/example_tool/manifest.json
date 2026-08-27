@@ -1,0 +1,9 @@
+{
+  "name": "Xiaomi Enhanced Control",
+  "version": "0.1.0",
+  "description": "Bridge plugin for external Xiaomi-specific ADB extensions (e.g. from GitHub repo). Placeholder for integration with advanced Xiaomi features like game turbo, display profiles, etc.",
+  "author": "External Agent",
+  "icon": "cpu",
+  "category": "system",
+  "permissions": ["system", "input"]
+}

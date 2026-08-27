@@ -1,0 +1,9 @@
+{
+  "name": "Battery Care",
+  "version": "1.0.0",
+  "description": "Battery monitoring, optimization and protection for Xiaomi devices without root. Tracks health, alerts on anomalies, auto-enables power saving, and logs history.",
+  "author": "Arena Agent",
+  "icon": "battery",
+  "category": "battery",
+  "permissions": ["battery", "system", "apps"]
+}

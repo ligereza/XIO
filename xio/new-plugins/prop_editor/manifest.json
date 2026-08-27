@@ -1,0 +1,9 @@
+{
+  "name": "System Prop Editor",
+  "version": "1.0.0",
+  "description": "Editor visual de propiedades del sistema: leer/escribir setprop/getprop, presets, monitor de cambios en tiempo real",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

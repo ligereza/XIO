@@ -1,0 +1,28 @@
+name: build-xio-apk
+# Builds hotspot_boot_service APK (AccessibilityService reboot-recovery del
+# Xiaomi) en runner ubuntu -- esta PC no tiene toolchain Android (Java/SDK).
+# Solo manual: gh workflow run build-xio-apk.yml
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          gradle-version: '8.7'
+      - name: Build debug APK
+        run: gradle assembleDebug
+        working-directory: xio/hotspot_boot_service
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hotspot-boot-apk
+          path: xio/hotspot_boot_service/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7

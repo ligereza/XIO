@@ -1,0 +1,32 @@
+{
+  "_doc": "Duraciones (segundos) de cada visual del show DREF CHOCOLATE, ALINEADAS POR INDICE al setlist_festival_sentir.txt (misma cantidad y orden de lineas). null = tema sin visual -> sin barra de progreso en el panel (el TC y el titulo se muestran igual). Fuente: ffprobe sobre C:\\dref chocolate\\mov (dedup .mov sobre .mp4, 2026-07-24). cargar_setlist enviara text + este durations al foh_monitor.",
+  "fps": 30,
+  "durations": [71.2, null, 274.467, 191.233, 237.375, 263.2, 196.0, 145.267, null, 261.233, 170.733, 233.667, 183.1, 183.333, 16.083, 234.24, 120.021, 88.133, 194.042, 303.0, 27.6],
+  "mapa": [
+    {"i": 0,  "tema": "intro show",               "visual": "INTRO",                   "dur": 71.2,    "hhmmss": "1:11"},
+    {"i": 1,  "tema": "Ultimo Dia",               "visual": null,                       "dur": null,    "nota": "sin visual (confirmado usuario)"},
+    {"i": 2,  "tema": "2000s",                    "visual": "2000",                    "dur": 274.467, "hhmmss": "4:34"},
+    {"i": 3,  "tema": "Un call",                  "visual": "UN CALL",                 "dur": 191.233, "hhmmss": "3:11"},
+    {"i": 4,  "tema": "Lo deberias pensar",       "visual": "LO DEBERIAS PENSAR",      "dur": 237.375, "hhmmss": "3:57"},
+    {"i": 5,  "tema": "La receta",                "visual": "LA RECETA",               "dur": 263.2,   "hhmmss": "4:23"},
+    {"i": 6,  "tema": "Bossa Lova",               "visual": "bosa lova",               "dur": 196.0,   "hhmmss": "3:16"},
+    {"i": 7,  "tema": "2+1",                      "visual": "2+1",                     "dur": 145.267, "hhmmss": "2:25"},
+    {"i": 8,  "tema": "Pego fuerte",              "visual": null,                       "dur": null,    "nota": "sin visual (confirmado usuario)"},
+    {"i": 9,  "tema": "Las flores que te gustan", "visual": "FLORES QUE TE GUSTAN",    "dur": 261.233, "hhmmss": "4:21"},
+    {"i": 10, "tema": "Despertador",              "visual": "DESPERTADOR",             "dur": 170.733, "hhmmss": "2:50"},
+    {"i": 11, "tema": "Botero",                   "visual": "BOTERO",                  "dur": 233.667, "hhmmss": "3:53"},
+    {"i": 12, "tema": "Llama a tu amiga",         "visual": "LLAMA A TU AMIGA",        "dur": 183.1,   "hhmmss": "3:03"},
+    {"i": 13, "tema": "Pinky",                    "visual": "PINKY",                   "dur": 183.333, "hhmmss": "3:03"},
+    {"i": 14, "tema": "FINAL FALSO",              "visual": "finfalso",                "dur": 16.083,  "hhmmss": "0:16", "nota": "finfalso.mp4 recuperado de MAK; pendiente convertir a .mov"},
+    {"i": 15, "tema": "A Fuego",                  "visual": "A FUEGO",                 "dur": 234.24,  "hhmmss": "3:54"},
+    {"i": 16, "tema": "Misionar",                 "visual": "MISIONAR",                "dur": 120.021, "hhmmss": "2:00"},
+    {"i": 17, "tema": "Enrolar",                  "visual": "ENROLAR",                 "dur": 88.133,  "hhmmss": "1:28"},
+    {"i": 18, "tema": "Yoseke",                   "visual": "YOSEKE",                  "dur": 194.042, "hhmmss": "3:14"},
+    {"i": 19, "tema": "Funkysolo",               "visual": "FUNKYSOLO",               "dur": 303.0,   "hhmmss": "5:03"},
+    {"i": 20, "tema": "FINAL DIABLO SANTO",       "visual": "DIABLO SANTO FINAL SHOW", "dur": 27.6,    "hhmmss": "0:27"}
+  ],
+  "pendiente_confirmar": [
+    "intro show: se uso INTRO (1:11); existe tambien 'intro - intro ultimo dia' (5:31) -- confirmar cual es el real",
+    "finfalso: es .mp4 (los demas .mov); convertir a .mov cuando se pueda"
+  ]
+}

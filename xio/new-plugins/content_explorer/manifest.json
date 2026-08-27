@@ -1,0 +1,9 @@
+{
+  "name": "Content Explorer",
+  "version": "1.0.0",
+  "description": "Accede a datos del sistema via Content Provider: SMS, historial de llamadas, contactos, calendario, metadatos de fotos",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

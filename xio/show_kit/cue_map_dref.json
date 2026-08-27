@@ -1,0 +1,208 @@
+{
+  "_doc": "cue -> clip de Resolume. layer/clip null = sin match, completar a mano. osc_template usa {layer} y {clip}. fps del LTC en fps.",
+  "fps": 30,
+  "osc_template": "/composition/layers/{layer}/clips/{clip}/connect",
+  "cues": [
+    {
+      "n": "1",
+      "tema": "intro show",
+      "timecode": "00:00:00:00",
+      "layer": 1,
+      "clip": 1,
+      "clip_name": "INTRO",
+      "candidatos": null
+    },
+    {
+      "n": "2",
+      "tema": "Último Día",
+      "timecode": "01:00:00:00",
+      "layer": null,
+      "clip": null,
+      "clip_name": null,
+      "candidatos": null
+    },
+    {
+      "n": "3",
+      "tema": "2000s",
+      "timecode": "01:30:00:00",
+      "layer": 2,
+      "clip": 1,
+      "clip_name": "2000",
+      "candidatos": null
+    },
+    {
+      "n": "4",
+      "tema": "Un call",
+      "timecode": "02:00:00:00",
+      "layer": 3,
+      "clip": 1,
+      "clip_name": "UN CALL",
+      "candidatos": null
+    },
+    {
+      "n": "5",
+      "tema": "Lo deberías pensar",
+      "timecode": "02:30:00:00",
+      "layer": 4,
+      "clip": 1,
+      "clip_name": "LO DEBERIAS PENSAR",
+      "candidatos": null
+    },
+    {
+      "n": "6",
+      "tema": "La receta",
+      "timecode": "03:00:00:00",
+      "layer": 5,
+      "clip": 1,
+      "clip_name": "LA RECETA",
+      "candidatos": null
+    },
+    {
+      "n": "7",
+      "tema": "Bossa Lova",
+      "timecode": "03:30:00:00",
+      "layer": 2,
+      "clip": 3,
+      "clip_name": "BOSA LOVA",
+      "candidatos": null
+    },
+    {
+      "n": "8",
+      "tema": "2+1",
+      "timecode": "04:00:00:00",
+      "layer": 3,
+      "clip": 3,
+      "clip_name": "2+1",
+      "candidatos": null
+    },
+    {
+      "n": "9",
+      "tema": "Pegó fuerte",
+      "timecode": "04:30:00:00",
+      "layer": null,
+      "clip": null,
+      "clip_name": null,
+      "candidatos": null
+    },
+    {
+      "n": "10",
+      "tema": "Las flores que te gustan",
+      "timecode": "05:00:00:00",
+      "layer": 5,
+      "clip": 3,
+      "clip_name": "FLORES QUE TE GUSTAN",
+      "candidatos": null
+    },
+    {
+      "n": "11",
+      "tema": "Despertador",
+      "timecode": "05:30:00:00",
+      "layer": 1,
+      "clip": 5,
+      "clip_name": "DESPERTADOR",
+      "candidatos": null
+    },
+    {
+      "n": "12",
+      "tema": "Botero",
+      "timecode": "06:00:00:00",
+      "layer": 2,
+      "clip": 5,
+      "clip_name": "BOTERO",
+      "candidatos": null
+    },
+    {
+      "n": "13",
+      "tema": "Llama a tu amiga",
+      "timecode": "06:30:00:00",
+      "layer": 3,
+      "clip": 5,
+      "clip_name": "LLAMA A TU AMIGA",
+      "candidatos": null
+    },
+    {
+      "n": "14",
+      "tema": "Pinky",
+      "timecode": "07:00:00:00",
+      "layer": 4,
+      "clip": 5,
+      "clip_name": "PINKY",
+      "candidatos": null
+    },
+    {
+      "n": "%%%%%%",
+      "tema": "FINAL FALSO",
+      "timecode": "07:02:35:00",
+      "layer": 5,
+      "clip": 8,
+      "clip_name": "finfalso",
+      "candidatos": null
+    },
+    {
+      "n": "15",
+      "tema": "A Fuego",
+      "timecode": "07:30:00:00",
+      "layer": 1,
+      "clip": 7,
+      "clip_name": "A FUEGO (1-08-45-20)",
+      "candidatos": null
+    },
+    {
+      "n": "16",
+      "tema": "Misionar",
+      "timecode": "08:00:00:00",
+      "layer": 2,
+      "clip": 7,
+      "clip_name": "MISIONAR (1-14-00-10)",
+      "candidatos": null
+    },
+    {
+      "n": "17",
+      "tema": "Enrolar",
+      "timecode": "08:30:00:00",
+      "layer": 3,
+      "clip": 7,
+      "clip_name": "ENROLAR (1-17-39-14)",
+      "candidatos": null
+    },
+    {
+      "n": "18",
+      "tema": "Yoseké",
+      "timecode": "09:00:00:00",
+      "layer": 4,
+      "clip": 7,
+      "clip_name": "YOSEKE",
+      "candidatos": [
+        {
+          "layer": 5,
+          "clip": 9,
+          "name": "YOSEKE"
+        }
+      ]
+    },
+    {
+      "n": "19",
+      "tema": "Funkysolo",
+      "timecode": "09:30:00:00",
+      "layer": 5,
+      "clip": 7,
+      "clip_name": "FUNKYSOLO",
+      "candidatos": null
+    },
+    {
+      "n": "20",
+      "tema": "FINAL DIABLO SANTO",
+      "timecode": "10:00:00:00",
+      "layer": 3,
+      "clip": 9,
+      "clip_name": "DIABLO SANTO FINAL SHOW",
+      "candidatos": [
+        {
+          "layer": 6,
+          "clip": 7,
+          "name": "DIABLO SANTO FINAL SHOW"
+        }
+      ]
+    }
+  ]
+}

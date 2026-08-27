@@ -1,0 +1,19 @@
+; Espejo del unit vivo en el box: ~/.config/systemd/user/mak-xio.service
+; (2026-07-18: unit existia pero DISABLED -- el monitor solo vivia por
+; watchdog/manual; fix: WorkingDirectory pineado + enable --now.)
+;
+; Instalar en el box:
+;   cp mak-xio.service ~/.config/systemd/user/mak-xio.service
+;   systemctl --user daemon-reload
+;   systemctl --user enable --now mak-xio.service
+[Unit]
+Description=MAK xio puente (monitor GET-only)
+[Service]
+WorkingDirectory=%h/xio_puente
+ExecStart=/usr/bin/python3 %h/xio_puente/monitor.py
+Restart=always
+RestartSec=10
+TimeoutStopSec=15
+KillMode=control-group
+[Install]
+WantedBy=default.target

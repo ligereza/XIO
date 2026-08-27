@@ -1,0 +1,9 @@
+{
+  "name": "Connectivity Supervisor",
+  "version": "1.0.0",
+  "description": "Active-router awareness para un live show: vigila los clientes del hotspot, detecta cuando el iPhone/iPad se caen del Wi-Fi, cruza presencia por Bluetooth (informativo) y mantiene vivo el unico internet. El sondeo es de solo-lectura; la unica accion que toca la radio (/reassert-hotspot) esta protegida por el guard (HTTP 423).",
+  "author": "Cauce",
+  "icon": "network",
+  "category": "network",
+  "permissions": ["network", "system"]
+}

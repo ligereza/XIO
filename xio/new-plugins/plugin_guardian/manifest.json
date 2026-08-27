@@ -1,0 +1,15 @@
+{
+  "name": "Plugin Guardian",
+  "id": "plugin_guardian",
+  "version": "1.0.0",
+  "description": "Sistema de seguridad y auditoría para plugins - sandbox, monitor de red, bloqueo de comandos peligrosos",
+  "permissions": ["system", "network", "files"],
+  "config": {
+    "audit_enabled": true,
+    "sandbox_enabled": true,
+    "network_monitor": true,
+    "dangerous_cmd_block": true,
+    "alert_on_violation": true,
+    "log_all_commands": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Per-App Network Controller",
+  "version": "1.0.0",
+  "description": "Control de red por app sin root: bloquear internet, monitor de consumo, restringir WiFi/datos por app, detectar conexiones background",
+  "author": "Arena Agent",
+  "icon": "network",
+  "category": "network",
+  "permissions": ["network", "system"]
+}

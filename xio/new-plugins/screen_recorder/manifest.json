@@ -1,0 +1,9 @@
+{
+  "name": "Screen Recorder Pro",
+  "version": "1.0.0",
+  "description": "Control avanzado de grabación: calidad, bitrate, FPS, audio interno/mic, límite de tiempo, auto-record al abrir cierta app.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

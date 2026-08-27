@@ -1,0 +1,9 @@
+{
+  "name": "Performance Tweaker Pro",
+  "version": "1.0.0",
+  "description": "Tweaks de rendimiento: Fixed Performance Mode, touch latency zero, GPU vsync, multicore scheduler, refresh rate lock, app launch speedup",
+  "author": "Arena Agent",
+  "icon": "cpu",
+  "category": "system",
+  "permissions": ["system"]
+}

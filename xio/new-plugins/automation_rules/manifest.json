@@ -1,0 +1,9 @@
+{
+  "name": "Automation Rules",
+  "version": "1.0.0",
+  "description": "Motor de reglas tipo Tasker-lite: triggers + conditions + actions. Auto-ejecución por batería, hora, WiFi, app abierta, etc.",
+  "author": "Arena Agent",
+  "icon": "automation",
+  "category": "automation",
+  "permissions": ["input", "system", "apps"]
+}

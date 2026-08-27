@@ -1,0 +1,2 @@
+-r xio/new/requirements.txt
+pytest>=8.0

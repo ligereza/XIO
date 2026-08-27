@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.xio.hotspotboot">
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:allowBackup="false"
+        android:label="xio Hotspot Boot"
+        android:icon="@android:drawable/ic_menu_share">
+
+        <!-- AccessibilityService: arranca solo al boot cuando esta habilitado; no
+             necesita Activity ni interaccion. Toca la UI de tethering para reencender
+             el hotspot si quedo OFF tras el reboot. -->
+        <service
+            android:name=".HotspotAccessibilityService"
+            android:exported="false"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- BootReceiver: declarado para RECEIVE_BOOT_COMPLETED. El servicio de
+             accesibilidad ya auto-arranca al boot; el receiver es un respaldo/no-op
+             que solo marca el arranque (algunas ROMs demoran onServiceConnected). -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

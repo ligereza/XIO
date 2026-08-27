@@ -1,0 +1,9 @@
+{
+  "name": "Per-App Volume Controller",
+  "version": "1.0.0",
+  "description": "Control de volumen individual por app: subir/bajar/silenciar apps especificas, perfiles de audio, gaming mode",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

@@ -1,0 +1,1637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Xiaomi ADB Controller</title>
+<style>
+/* ── Reset & Variables ─────────────────────────────────────────── */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f1117;--bg2:#1a1d27;--bg3:#242837;--bg4:#2e3348;
+  --fg:#e8eaed;--fg2:#9aa0b0;--fg3:#6b7280;
+  --accent:#6366f1;--accent2:#818cf8;--accent-dim:#4f46e5;
+  --green:#22c55e;--red:#ef4444;--orange:#f59e0b;--cyan:#06b6d4;
+  --border:#2e3348;--radius:10px;--radius-sm:6px;
+  --shadow:0 4px 24px rgba(0,0,0,.4);
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --mono:'SF Mono','Fira Code',monospace;
+}
+html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--fg);overflow:hidden}
+a{color:var(--accent2);text-decoration:none}
+button{font-family:var(--font);cursor:pointer;border:none;outline:none}
+input,select,textarea{font-family:var(--font);background:var(--bg3);color:var(--fg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;outline:none}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* ── Layout ────────────────────────────────────────────────────── */
+.app{display:flex;height:100vh;width:100vw}
+.sidebar{
+  width:220px;min-width:220px;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;z-index:100;transition:transform .3s;
+}
+.sidebar-header{padding:20px 16px;border-bottom:1px solid var(--border)}
+.sidebar-header h1{font-size:15px;font-weight:700;color:var(--fg);display:flex;align-items:center;gap:8px}
+.sidebar-header h1 span{font-size:20px}
+.sidebar-header .subtitle{font-size:11px;color:var(--fg3);margin-top:4px}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px}
+.nav-section{margin-bottom:16px}
+.nav-section-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--fg3);padding:8px 12px 4px}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-sm);
+  color:var(--fg2);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;
+  margin-bottom:1px;
+}
+.nav-item:hover{background:var(--bg3);color:var(--fg)}
+.nav-item.active{background:var(--accent-dim);color:white}
+.nav-item .icon{font-size:16px;width:22px;text-align:center}
+.nav-item .badge{
+  margin-left:auto;background:var(--accent);color:white;font-size:10px;
+  padding:2px 6px;border-radius:10px;font-weight:600;
+}
+.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border)}
+.connection-status{
+  display:flex;align-items:center;gap:8px;font-size:12px;color:var(--fg2);
+}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.online{background:var(--green);box-shadow:0 0 8px var(--green)}
+.status-dot.offline{background:var(--red)}
+
+/* ── Main Content ──────────────────────────────────────────────── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{
+  height:52px;min-height:52px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:12px;
+}
+.topbar h2{font-size:16px;font-weight:600}
+.topbar .spacer{flex:1}
+.topbar-btn{
+  background:var(--bg3);color:var(--fg2);padding:6px 12px;border-radius:var(--radius-sm);
+  font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px;transition:all .15s;
+}
+.topbar-btn:hover{background:var(--bg4);color:var(--fg)}
+.menu-toggle{display:none;background:none;color:var(--fg);font-size:22px;padding:4px 8px}
+
+.content{flex:1;overflow-y:auto;padding:20px}
+.page{display:none}
+.page.active{display:block}
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:16px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card-title .icon{font-size:18px}
+.grid{display:grid;gap:16px}
+.grid-2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.grid-4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+
+/* ── Stat Cards ────────────────────────────────────────────────── */
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg3);margin-bottom:6px}
+.stat-value{font-size:24px;font-weight:700}
+.stat-sub{font-size:11px;color:var(--fg2);margin-top:4px}
+.stat-value.green{color:var(--green)}
+.stat-value.red{color:var(--red)}
+.stat-value.orange{color:var(--orange)}
+.stat-value.cyan{color:var(--cyan)}
+.stat-value.accent{color:var(--accent2)}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn{
+  padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;
+  display:inline-flex;align-items:center;gap:6px;transition:all .15s;
+}
+.btn-primary{background:var(--accent);color:white}
+.btn-primary:hover{background:var(--accent-dim)}
+.btn-secondary{background:var(--bg3);color:var(--fg2);border:1px solid var(--border)}
+.btn-secondary:hover{background:var(--bg4);color:var(--fg)}
+.btn-danger{background:var(--red);color:white}
+.btn-danger:hover{background:#dc2626}
+.btn-success{background:var(--green);color:white}
+.btn-success:hover{background:#16a34a}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+.btn-icon{
+  width:32px;height:32px;border-radius:var(--radius-sm);display:flex;align-items:center;
+  justify-content:center;background:var(--bg3);color:var(--fg2);font-size:16px;
+}
+.btn-icon:hover{background:var(--bg4);color:var(--fg)}
+
+/* ── Key pad ───────────────────────────────────────────────────── */
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;max-width:240px}
+.keypad .btn{justify-content:center;padding:12px}
+
+/* ── Lists ─────────────────────────────────────────────────────── */
+.list{list-style:none}
+.list-item{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);
+  border-bottom:1px solid var(--border);transition:background .15s;
+}
+.list-item:hover{background:var(--bg3)}
+.list-item:last-child{border-bottom:none}
+.list-item .icon{font-size:20px;width:32px;text-align:center;flex-shrink:0}
+.list-item .info{flex:1;min-width:0}
+.list-item .name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-item .meta{font-size:11px;color:var(--fg3)}
+.list-item .actions{display:flex;gap:4px;opacity:0;transition:opacity .15s}
+.list-item:hover .actions{opacity:1}
+
+/* ── File Explorer ─────────────────────────────────────────────── */
+.breadcrumb{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:12px;font-size:13px}
+.breadcrumb span{color:var(--fg3);cursor:pointer;padding:2px 6px;border-radius:4px}
+.breadcrumb span:hover{background:var(--bg3);color:var(--fg)}
+.breadcrumb span.current{color:var(--fg);font-weight:500}
+.breadcrumb .sep{color:var(--fg3);cursor:default;padding:0 2px}
+.breadcrumb .sep:hover{background:transparent}
+.drop-zone{
+  border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;
+  color:var(--fg3);transition:all .2s;margin-bottom:16px;
+}
+.drop-zone.active{border-color:var(--accent);background:rgba(99,102,241,.05);color:var(--accent2)}
+.file-item{
+  display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);
+  border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;
+}
+.file-item:hover{background:var(--bg3)}
+.file-item .file-icon{font-size:20px;width:32px;text-align:center}
+.file-item .file-name{flex:1;font-size:13px}
+.file-item .file-size{font-size:11px;color:var(--fg3);min-width:60px;text-align:right}
+
+/* ── Automation Builder ────────────────────────────────────────── */
+.action-row{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);
+  border-radius:var(--radius-sm);margin-bottom:6px;font-size:13px;
+}
+.action-row .action-type{
+  font-size:10px;font-weight:600;text-transform:uppercase;padding:2px 8px;
+  border-radius:4px;background:var(--accent-dim);color:white;min-width:60px;text-align:center;
+}
+.action-row .action-detail{flex:1;color:var(--fg2);font-family:var(--mono);font-size:12px}
+.action-row .action-remove{
+  color:var(--fg3);cursor:pointer;font-size:16px;padding:4px;
+}
+.action-row .action-remove:hover{color:var(--red)}
+.ui-overlay-canvas{position:relative;display:inline-block}
+
+/* ── Plugin Cards ──────────────────────────────────────────────── */
+.plugin-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:16px;transition:all .15s;
+}
+.plugin-card:hover{border-color:var(--accent)}
+.plugin-card .plugin-header{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.plugin-card .plugin-icon{
+  width:40px;height:40px;border-radius:var(--radius-sm);background:var(--bg3);
+  display:flex;align-items:center;justify-content:center;font-size:20px;
+}
+.plugin-card .plugin-name{font-size:14px;font-weight:600}
+.plugin-card .plugin-version{font-size:11px;color:var(--fg3)}
+.plugin-card .plugin-desc{font-size:12px;color:var(--fg2);margin-bottom:12px;line-height:1.5}
+.plugin-card .plugin-footer{display:flex;align-items:center;justify-content:space-between}
+.plugin-card .plugin-author{font-size:11px;color:var(--fg3)}
+
+/* Toggle switch */
+.toggle{
+  width:40px;height:22px;border-radius:11px;background:var(--bg4);position:relative;
+  cursor:pointer;transition:background .2s;
+}
+.toggle.on{background:var(--green)}
+.toggle .knob{
+  width:18px;height:18px;border-radius:50%;background:white;position:absolute;
+  top:2px;left:2px;transition:left .2s;
+}
+.toggle.on .knob{left:20px}
+
+/* ── Battery widget ────────────────────────────────────────────── */
+.battery-ring{
+  width:80px;height:80px;border-radius:50%;position:relative;display:flex;
+  align-items:center;justify-content:center;
+}
+.battery-ring .level{font-size:20px;font-weight:700}
+.battery-ring .unit{font-size:10px;color:var(--fg3)}
+
+/* ── Modal ─────────────────────────────────────────────────────── */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;
+  align-items:center;justify-content:center;padding:20px;
+}
+.modal-overlay.active{display:flex}
+.modal{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px;max-width:500px;width:100%;max-height:80vh;overflow-y:auto;
+}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.modal-header h3{font-size:16px;font-weight:600}
+.modal-close{background:none;color:var(--fg3);font-size:22px;cursor:pointer}
+.modal-close:hover{color:var(--fg)}
+
+/* ── Search ────────────────────────────────────────────────────── */
+.search-box{
+  position:relative;margin-bottom:12px;
+}
+.search-box input{width:100%;padding:10px 12px 10px 36px;font-size:13px}
+.search-box .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--fg3)}
+
+/* ── Alert / Toast ─────────────────────────────────────────────── */
+.toast-container{position:fixed;top:60px;right:20px;z-index:2000;display:flex;flex-direction:column;gap:8px}
+.toast{
+  background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:12px 16px;font-size:13px;min-width:280px;max-width:400px;
+  display:flex;align-items:center;gap:10px;animation:slideIn .3s;box-shadow:var(--shadow);
+}
+.toast.success{border-left:3px solid var(--green)}
+.toast.error{border-left:3px solid var(--red)}
+.toast.warning{border-left:3px solid var(--orange)}
+.toast.info{border-left:3px solid var(--accent)}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* ── Battery Care specific ─────────────────────────────────────── */
+.alert-badge{
+  display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;
+  font-size:11px;font-weight:600;
+}
+.alert-badge.critical{background:rgba(239,68,68,.15);color:var(--red)}
+.alert-badge.warning{background:rgba(245,158,11,.15);color:var(--orange)}
+.alert-badge.info{background:rgba(99,102,241,.15);color:var(--accent2)}
+
+.config-row{
+  display:flex;align-items:center;justify-content:space-between;padding:10px 0;
+  border-bottom:1px solid var(--border);
+}
+.config-row:last-child{border-bottom:none}
+.config-row label{font-size:13px;color:var(--fg2)}
+.config-row input[type="number"]{width:80px;text-align:center}
+.config-row input[type="range"]{width:120px}
+
+.chart-container{
+  width:100%;height:200px;position:relative;background:var(--bg3);border-radius:var(--radius-sm);
+  overflow:hidden;
+}
+
+/* ── Responsive ────────────────────────────────────────────────── */
+@media(max-width:768px){
+  .sidebar{position:fixed;left:0;top:0;bottom:0;transform:translateX(-100%);z-index:200}
+  .sidebar.open{transform:translateX(0)}
+  .menu-toggle{display:block}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+  .content{padding:12px}
+}
+
+/* ── Misc ──────────────────────────────────────────────────────── */
+.tag{
+  display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.tag-green{background:rgba(34,197,94,.15);color:var(--green)}
+.tag-red{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-orange{background:rgba(245,158,11,.15);color:var(--orange)}
+.tag-blue{background:rgba(99,102,241,.15);color:var(--accent2)}
+.tag-gray{background:rgba(107,114,128,.15);color:var(--fg3)}
+.empty-state{text-align:center;padding:40px;color:var(--fg3)}
+.empty-state .icon{font-size:48px;margin-bottom:12px;opacity:.5}
+.empty-state p{font-size:14px}
+.loading{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ═══ SIDEBAR ═══ -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <h1><span>⚡</span> Xiaomi ADB</h1>
+      <div class="subtitle">Web Controller + Plugins</div>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Overview</div>
+        <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span> Dashboard</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Control</div>
+        <div class="nav-item" data-page="input"><span class="icon">👆</span> Input & Keys</div>
+        <div class="nav-item" data-page="apps"><span class="icon">📱</span> Apps</div>
+        <div class="nav-item" data-page="files"><span class="icon">📁</span> File Explorer</div>
+        <div class="nav-item" data-page="automation"><span class="icon">⚙️</span> Automation</div>
+        <div class="nav-item" data-page="visual"><span class="icon">🎯</span> Visual Builder</div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Plugins</div>
+        <div class="nav-item" data-page="plugins"><span class="icon">🧩</span> Manage Plugins <span class="badge" id="plugin-count">0</span></div>
+        <!-- Dynamic plugin nav items inserted here -->
+        <div id="plugin-nav-items"></div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">Screen</div>
+        <div class="nav-item" data-page="screen"><span class="icon">📺</span> Screen View</div>
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="connection-status">
+        <div class="status-dot offline" id="status-dot"></div>
+        <span id="status-text">Connecting...</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══ MAIN ═══ -->
+  <div class="main">
+    <div class="topbar">
+      <button class="menu-toggle" onclick="toggleSidebar()">☰</button>
+      <h2 id="page-title">Dashboard</h2>
+      <div class="spacer"></div>
+      <button class="topbar-btn" onclick="refreshAll()" title="Refresh all data">🔄 Refresh</button>
+      <button class="topbar-btn" onclick="takeScreenshot()" title="Take screenshot">📸</button>
+    </div>
+
+    <div class="content">
+      <!-- ═══════════════════ DASHBOARD ═══════════════════ -->
+      <div class="page active" id="page-dashboard">
+        <div class="grid grid-4" style="margin-bottom:16px">
+          <div class="stat-card">
+            <div class="stat-label">Battery</div>
+            <div class="stat-value" id="dash-battery">--%</div>
+            <div class="stat-sub" id="dash-battery-status">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Temperature</div>
+            <div class="stat-value" id="dash-temp">--°C</div>
+            <div class="stat-sub" id="dash-temp-status">Normal</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Connection</div>
+            <div class="stat-value accent" id="dash-conn">--</div>
+            <div class="stat-sub" id="dash-conn-detail">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Network</div>
+            <div class="stat-value cyan" id="dash-ip">--</div>
+            <div class="stat-sub" id="dash-wifi">--</div>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">📱</span> Device Info</div>
+            </div>
+            <div id="device-info-list" style="font-size:13px">
+              <div class="loading"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">⚡</span> Quick Actions</div>
+            </div>
+            <div class="keypad">
+              <button class="btn btn-secondary" onclick="sendKey('power')">⏻ Power</button>
+              <button class="btn btn-secondary" onclick="sendKey('home')">⌂ Home</button>
+              <button class="btn btn-secondary" onclick="sendKey('back')">← Back</button>
+              <button class="btn btn-secondary" onclick="sendKey('recents')">□ Recents</button>
+              <button class="btn btn-secondary" onclick="sendKey('volume_up')">🔊 Vol+</button>
+              <button class="btn btn-secondary" onclick="sendKey('volume_down')">🔉 Vol-</button>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">🔋</span> Battery Health</div>
+              <button class="btn btn-sm btn-secondary" onclick="navigateTo('battery_care')">Open Plugin</button>
+            </div>
+            <div id="dash-battery-detail" style="font-size:13px;color:var(--fg2)">
+              Enable Battery Care plugin for detailed monitoring
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">🧩</span> Active Plugins</div>
+              <button class="btn btn-sm btn-secondary" onclick="navigateTo('plugins')">Manage</button>
+            </div>
+            <div id="dash-plugins" style="font-size:13px;color:var(--fg2)">
+              Loading...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ INPUT & KEYS ═══════════════════ -->
+      <div class="page" id="page-input">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header"><div class="card-title"><span class="icon">👆</span> Tap Coordinates</div></div>
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+              <label style="font-size:13px">X:</label>
+              <input type="number" id="tap-x" value="540" style="width:100px">
+              <label style="font-size:13px">Y:</label>
+              <input type="number" id="tap-y" value="1200" style="width:100px">
+              <button class="btn btn-primary" onclick="doTap()">Tap</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title"><span class="icon">👉</span> Swipe</div></div>
+            <div style="display:grid;grid-template-columns:auto 1fr auto 1fr auto;gap:8px;align-items:center">
+              <label style="font-size:13px">From:</label>
+              <input type="number" id="swipe-x1" value="540" placeholder="X1">
+              <input type="number" id="swipe-y1" value="1800" placeholder="Y1">
+              <span style="font-size:16px">→</span>
+              <div></div>
+              <label style="font-size:13px">To:</label>
+              <input type="number" id="swipe-x2" value="540" placeholder="X2">
+              <input type="number" id="swipe-y2" value="600" placeholder="Y2">
+              <label style="font-size:13px">ms:</label>
+              <input type="number" id="swipe-dur" value="300" style="width:80px">
+            </div>
+            <div class="btn-group" style="margin-top:12px">
+              <button class="btn btn-primary" onclick="doSwipe()">Swipe</button>
+              <button class="btn btn-secondary" onclick="doSwipePreset('up')">↑ Swipe Up</button>
+              <button class="btn btn-secondary" onclick="doSwipePreset('down')">↓ Swipe Down</button>
+              <button class="btn btn-secondary" onclick="doSwipePreset('left')">← Left</button>
+              <button class="btn btn-secondary" onclick="doSwipePreset('right')">→ Right</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title"><span class="icon">⌨️</span> Type Text</div></div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="text-input" placeholder="Text to type..." style="flex:1">
+              <button class="btn btn-primary" onclick="doText()">Send</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><div class="card-title"><span class="icon">🎮</span> Key Commands</div></div>
+            <div class="keypad">
+              <button class="btn btn-secondary" onclick="sendKey('home')">⌂ Home</button>
+              <button class="btn btn-secondary" onclick="sendKey('back')">← Back</button>
+              <button class="btn btn-secondary" onclick="sendKey('recents')">□ Recents</button>
+              <button class="btn btn-secondary" onclick="sendKey('power')">⏻ Power</button>
+              <button class="btn btn-secondary" onclick="sendKey('enter')">⏎ Enter</button>
+              <button class="btn btn-secondary" onclick="sendKey('delete')">⌫ Delete</button>
+              <button class="btn btn-secondary" onclick="sendKey('tab')">⇥ Tab</button>
+              <button class="btn btn-secondary" onclick="sendKey('escape')">⎋ Escape</button>
+              <button class="btn btn-secondary" onclick="sendKey('menu')">☰ Menu</button>
+              <button class="btn btn-secondary" onclick="sendKey('volume_up')">🔊 Vol+</button>
+              <button class="btn btn-secondary" onclick="sendKey('volume_down')">🔉 Vol-</button>
+              <button class="btn btn-secondary" onclick="sendKey('mute')">🔇 Mute</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ APPS ═══════════════════ -->
+      <div class="page" id="page-apps">
+        <div class="card">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="app-search" placeholder="Search apps..." oninput="filterApps()">
+          </div>
+          <div class="btn-group" style="margin-bottom:12px">
+            <button class="btn btn-secondary btn-sm" onclick="loadApps('launcher')">📱 Launcher Apps</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadApps('all')">📦 All Packages</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadApps()">🔄 Refresh</button>
+          </div>
+          <div id="apps-list" class="list" style="max-height:60vh;overflow-y:auto">
+            <div class="empty-state"><div class="icon">📱</div><p>Click refresh to load apps</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ FILES ═══════════════════ -->
+      <div class="page" id="page-files">
+        <div class="card">
+          <div class="drop-zone" id="drop-zone"
+               ondragover="event.preventDefault();this.classList.add('active')"
+               ondragleave="this.classList.remove('active')"
+               ondrop="handleDrop(event)">
+            📂 Drag & drop files here to upload to current directory<br>
+            <span style="font-size:12px;margin-top:8px;display:block">or</span>
+            <label class="btn btn-primary" style="margin-top:8px;cursor:pointer">
+              Choose File <input type="file" id="file-upload" style="display:none" onchange="uploadFile(this.files[0])">
+            </label>
+          </div>
+          <div class="breadcrumb" id="file-breadcrumb"></div>
+          <div class="btn-group" style="margin-bottom:12px">
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('/sdcard/')">📁 /sdcard/</button>
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('/sdcard/Download/')">📥 Downloads</button>
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('/sdcard/DCIM/')">📷 DCIM</button>
+            <button class="btn btn-secondary btn-sm" onclick="navigateTo('/data/local/tmp/')">🔧 /data/local/tmp</button>
+            <button class="btn btn-secondary btn-sm" onclick="showNewFolderDialog()">📁+ New Folder</button>
+          </div>
+          <div id="file-list" style="max-height:60vh;overflow-y:auto">
+            <div class="empty-state"><div class="icon">📁</div><p>Navigate to browse files</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ AUTOMATION ═══════════════════ -->
+      <div class="page" id="page-automation">
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">📝</span> Saved Macros</div>
+              <button class="btn btn-sm btn-primary" onclick="showNewMacroDialog()">+ New</button>
+            </div>
+            <div id="macros-list" class="list">
+              <div class="empty-state"><div class="icon">📝</div><p>No macros yet</p></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">🔧</span> Macro Builder</div>
+              <button class="btn btn-sm btn-secondary" onclick="clearBuilder()">Clear</button>
+            </div>
+            <div style="margin-bottom:12px">
+              <input type="text" id="macro-name" placeholder="Macro name..." style="width:100%;margin-bottom:8px">
+              <input type="text" id="macro-desc" placeholder="Description (optional)" style="width:100%">
+            </div>
+            <div class="btn-group" style="margin-bottom:12px">
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('tap')">+ Tap</button>
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('swipe')">+ Swipe</button>
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('text')">+ Text</button>
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('key')">+ Key</button>
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('wait')">+ Wait</button>
+              <button class="btn btn-sm btn-secondary" onclick="addBuilderAction('open_app')">+ Open App</button>
+            </div>
+            <div id="builder-actions"></div>
+            <div class="btn-group" style="margin-top:12px">
+              <button class="btn btn-primary" onclick="saveMacro()">💾 Save</button>
+              <button class="btn btn-success" onclick="runBuilderSequence()">▶ Run Now</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ VISUAL BUILDER ═══════════════════ -->
+      <div class="page" id="page-visual">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">🎯</span> Visual Automation Builder</div>
+            <div class="btn-group">
+              <button class="btn btn-sm btn-primary" onclick="refreshUITree()">🔄 Refresh UI Tree</button>
+              <button class="btn btn-sm btn-secondary" onclick="captureWithOverlay()">📸 Capture with Overlay</button>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--fg3);margin-bottom:12px">
+            Click on detected UI elements to tap them. Elements are identified via dump_ui() — no blind coordinates needed.
+          </p>
+          <div class="grid grid-2">
+            <div>
+              <div class="ui-overlay-canvas" id="ui-canvas-container" style="position:relative">
+                <img id="ui-screen-img" src="" style="max-width:100%;border-radius:var(--radius-sm)">
+                <canvas id="ui-overlay" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:auto;cursor:crosshair"></canvas>
+              </div>
+            </div>
+            <div>
+              <div style="margin-bottom:8px">
+                <input type="text" id="ui-search" placeholder="Filter elements..." style="width:100%" oninput="filterUIElements()">
+              </div>
+              <div id="ui-elements-list" style="max-height:500px;overflow-y:auto">
+                <div class="empty-state"><div class="icon">🎯</div><p>Click "Refresh UI Tree" to detect elements</p></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ PLUGINS ═══════════════════ -->
+      <div class="page" id="page-plugins">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">🧩</span> Plugin Manager</div>
+            <div class="btn-group">
+              <button class="btn btn-sm btn-primary" onclick="document.getElementById('plugin-upload').click()">
+                📦 Install Plugin
+              </button>
+              <input type="file" id="plugin-upload" accept=".zip" style="display:none" onchange="installPlugin(this.files[0])">
+              <button class="btn btn-sm btn-secondary" onclick="loadPlugins()">🔄 Refresh</button>
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--fg3);margin-bottom:16px">
+            Plugins extend functionality. Drop a .zip file or create a folder in <code style="color:var(--accent2)">plugins/</code> with an <code style="color:var(--accent2)">__init__.py</code> that exports <code style="color:var(--accent2)">plugin_class</code>.
+          </p>
+          <div class="grid grid-2" id="plugins-grid">
+            <div class="empty-state"><div class="icon">🧩</div><p>Loading plugins...</p></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><span class="icon">📖</span> Creating Plugins</div>
+          </div>
+          <div style="font-size:13px;color:var(--fg2);line-height:1.7">
+            <p>Each plugin lives in <code style="color:var(--accent2)">plugins/&lt;name&gt;/</code> and must contain:</p>
+            <ul style="margin:8px 0 8px 20px">
+              <li><code style="color:var(--accent2)">__init__.py</code> — exports <code>plugin_class</code></li>
+              <li><code style="color:var(--accent2)">manifest.json</code> — name, version, description, permissions</li>
+              <li>Optional: <code style="color:var(--accent2)">static/</code>, <code style="color:var(--accent2)">config.json</code>, <code style="color:var(--accent2)">templates/</code></li>
+            </ul>
+            <p>The plugin class inherits from <code style="color:var(--accent2)">PluginBase</code> and gets access to:</p>
+            <ul style="margin:8px 0 8px 20px">
+              <li><code>self.controller</code> — XiaomiController instance</li>
+              <li><code>self.register_route()</code> — register Flask routes</li>
+              <li><code>self.get_config()</code> / <code>self.set_config()</code> — persistent config</li>
+              <li><code>self.data_dir</code> — per-plugin data folder</li>
+              <li><code>self.context.schedule()</code> — background tasks</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ BATTERY CARE ═══════════════════ -->
+      <div class="page" id="page-battery_care">
+        <div class="grid grid-4" style="margin-bottom:16px">
+          <div class="stat-card">
+            <div class="stat-label">Level</div>
+            <div class="stat-value green" id="bc-level">--%</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Temperature</div>
+            <div class="stat-value" id="bc-temp">--°C</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Drain Rate</div>
+            <div class="stat-value orange" id="bc-drain">-- %/h</div>
+            <div class="stat-sub" id="bc-remaining">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Status</div>
+            <div class="stat-value cyan" id="bc-status">--</div>
+            <div class="stat-sub" id="bc-monitoring">--</div>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">📈</span> Battery History</div>
+              <div class="btn-group">
+                <button class="btn btn-sm btn-secondary" onclick="loadBatteryHistory(1)">1h</button>
+                <button class="btn btn-sm btn-secondary" onclick="loadBatteryHistory(6)">6h</button>
+                <button class="btn btn-sm btn-secondary" onclick="loadBatteryHistory(24)">24h</button>
+              </div>
+            </div>
+            <div class="chart-container" id="battery-chart"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">🔔</span> Alerts</div>
+              <button class="btn btn-sm btn-secondary" onclick="clearBatteryAlerts()">Clear All</button>
+            </div>
+            <div id="bc-alerts" style="max-height:300px;overflow-y:auto">
+              <div class="empty-state" style="padding:20px"><p>No alerts</p></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">⚡</span> Actions</div>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="batteryAction('start')">▶ Start Monitoring</button>
+              <button class="btn btn-secondary" onclick="batteryAction('stop')">⏹ Stop</button>
+              <button class="btn btn-danger" onclick="batteryAction('optimize')">⚡ Optimize Now</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="icon">⚙️</span> Configuration</div>
+            </div>
+            <div id="bc-config">
+              <div class="config-row">
+                <label>Overheat alert (°C)</label>
+                <input type="number" id="cfg-overheat" value="38" min="30" max="50">
+              </div>
+              <div class="config-row">
+                <label>Low battery alert (%)</label>
+                <input type="number" id="cfg-low" value="15" min="5" max="50">
+              </div>
+              <div class="config-row">
+                <label>Auto battery saver at (%)</label>
+                <input type="number" id="cfg-autosave" value="20" min="5" max="50">
+              </div>
+              <div class="config-row">
+                <label>Charge complete alert at (%)</label>
+                <input type="number" id="cfg-charge" value="80" min="50" max="100">
+              </div>
+              <div class="config-row">
+                <label>Poll interval (seconds)</label>
+                <input type="number" id="cfg-interval" value="30" min="5" max="300">
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="saveBatteryConfig()" style="margin-top:8px">💾 Save Config</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════ SCREEN VIEW ═══════════════════ -->
+      <div class="page" id="page-screen">
+        <div class="card" style="text-align:center">
+          <div class="card-header" style="justify-content:center">
+            <div class="card-title"><span class="icon">📺</span> Screen Mirror</div>
+          </div>
+          <div class="btn-group" style="margin-bottom:12px;justify-content:center">
+            <button class="btn btn-primary" onclick="takeScreenshot()">📸 Capture</button>
+            <button class="btn btn-secondary" id="auto-refresh-btn" onclick="toggleAutoRefresh()">🔄 Auto Refresh: OFF</button>
+          </div>
+          <div id="screen-container" style="display:inline-block;position:relative">
+            <img id="screen-img" src="" style="max-width:360px;border-radius:var(--radius);border:1px solid var(--border);cursor:crosshair">
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ═══ Modal ═══ -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+const state = {
+  device: null,
+  battery: null,
+  network: null,
+  apps: [],
+  allPackages: [],
+  currentFileDir: '/sdcard/',
+  fileEntries: [],
+  macros: [],
+  builderActions: [],
+  plugins: [],
+  uiElements: [],
+  screenRefresh: null,
+  screenSize: {width: 1080, height: 2400},
+};
+
+// ══════════════════════════════════════════════════════════════════
+// API HELPERS
+// ══════════════════════════════════════════════════════════════════
+async function api(url, opts = {}) {
+  try {
+    const res = await fetch(url, opts);
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      return await res.json();
+    }
+    return res;
+  } catch (e) {
+    console.error('API error:', url, e);
+    throw e;
+  }
+}
+async function apiPost(url, data) {
+  return api(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TOAST NOTIFICATIONS
+// ══════════════════════════════════════════════════════════════════
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icons = {success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️'};
+  el.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${msg}</span>`;
+  c.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 4000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════════════
+function navigateTo(page) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const navItem = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (navItem) navItem.classList.add('active');
+  const pageEl = document.getElementById(`page-${page}`);
+  if (pageEl) {
+    pageEl.classList.add('active');
+    document.getElementById('page-title').textContent = navItem ? navItem.textContent.trim().replace(/\d+$/, '') : page;
+  }
+  // Close sidebar on mobile
+  document.getElementById('sidebar').classList.remove('open');
+  // Load page data
+  onNavigate(page);
+}
+
+function onNavigate(page) {
+  if (page === 'dashboard') refreshDashboard();
+  if (page === 'apps') loadApps();
+  if (page === 'files') browseDir(state.currentFileDir);
+  if (page === 'automation') loadMacros();
+  if (page === 'plugins') loadPlugins();
+  if (page === 'battery_care') loadBatteryStatus();
+  if (page === 'screen') takeScreenshot();
+  if (page === 'visual') { takeScreenshot(); refreshUITree(); }
+}
+
+document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+  item.addEventListener('click', () => navigateTo(item.dataset.page));
+});
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+async function refreshDashboard() {
+  try {
+    const [status, plugins] = await Promise.all([
+      api('/api/status'),
+      api('/api/plugins').catch(() => [])
+    ]);
+
+    // Connection
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    if (status.connected) {
+      dot.className = 'status-dot online';
+      txt.textContent = `${status.device?.model || 'Device'} (${status.connection_type})`;
+    } else {
+      dot.className = 'status-dot offline';
+      txt.textContent = 'Disconnected';
+    }
+
+    // Battery
+    document.getElementById('dash-battery').textContent = `${status.level || '--'}%`;
+    document.getElementById('dash-battery-status').textContent = status.charging ? '⚡ Charging' : '🔋 Discharging';
+    document.getElementById('dash-battery').className = `stat-value ${status.level > 50 ? 'green' : status.level > 20 ? 'orange' : 'red'}`;
+
+    // Temperature
+    const temp = status.temperature || 0;
+    document.getElementById('dash-temp').textContent = `${temp}°C`;
+    document.getElementById('dash-temp').className = `stat-value ${temp > 38 ? 'red' : temp > 35 ? 'orange' : 'green'}`;
+
+    // Connection
+    document.getElementById('dash-conn').textContent = (status.connection_type || 'unknown').toUpperCase();
+    document.getElementById('dash-conn-detail').textContent = status.serial || '';
+
+    // Network
+    const net = status.network || {};
+    document.getElementById('dash-ip').textContent = net.ip || '--';
+    document.getElementById('dash-wifi').textContent = net.ssid ? `📶 ${net.ssid}` : 'No WiFi';
+
+    // Device info
+    const dev = status.device || {};
+    document.getElementById('device-info-list').innerHTML = `
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px">
+        <span style="color:var(--fg3)">Brand:</span><span>${dev.brand || '--'}</span>
+        <span style="color:var(--fg3)">Model:</span><span>${dev.model || '--'}</span>
+        <span style="color:var(--fg3)">Android:</span><span>${dev.android_version || '--'}</span>
+        <span style="color:var(--fg3)">SDK:</span><span>${dev.sdk || '--'}</span>
+        <span style="color:var(--fg3)">Build:</span><span>${dev.build || '--'}</span>
+        <span style="color:var(--fg3)">Screen:</span><span>${status.screen?.width || '--'}×${status.screen?.height || '--'}</span>
+      </div>
+    `;
+
+    if (status.screen) state.screenSize = status.screen;
+
+    // Plugins summary
+    const activePlugins = plugins.filter(p => p.enabled);
+    document.getElementById('dash-plugins').innerHTML = activePlugins.length
+      ? activePlugins.map(p => `<div class="list-item" style="padding:6px 0;border:none"><span style="margin-right:8px">${getPluginIcon(p.icon)}</span><span style="font-size:13px">${p.name}</span><span class="tag tag-green" style="margin-left:auto">Active</span></div>`).join('')
+      : '<span style="color:var(--fg3)">No active plugins</span>';
+
+    // Battery detail
+    document.getElementById('dash-battery-detail').innerHTML = `
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px">
+        <span style="color:var(--fg3)">Status:</span><span>${status.status || '--'}</span>
+        <span style="color:var(--fg3)">Temp:</span><span>${temp}°C</span>
+        <span style="color:var(--fg3)">AC:</span><span>${status.ac_power ? '✅' : '❌'}</span>
+        <span style="color:var(--fg3)">USB:</span><span>${status.usb_power ? '✅' : '❌'}</span>
+      </div>
+    `;
+
+    state.device = dev;
+    state.battery = status;
+  } catch (e) {
+    document.getElementById('status-dot').className = 'status-dot offline';
+    document.getElementById('status-text').textContent = 'Server error';
+  }
+}
+
+function getPluginIcon(icon) {
+  const icons = {battery:'🔋', cpu:'⚙️', puzzle:'🧩', network:'🌐', automation:'⚡', file:'📁', system:'🔧'};
+  return icons[icon] || '🧩';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INPUT
+// ══════════════════════════════════════════════════════════════════
+async function doTap() {
+  const x = parseInt(document.getElementById('tap-x').value);
+  const y = parseInt(document.getElementById('tap-y').value);
+  await apiPost('/api/tap', {x, y});
+  toast(`Tap at (${x}, ${y})`);
+}
+async function doSwipe() {
+  const data = {
+    x1: +document.getElementById('swipe-x1').value,
+    y1: +document.getElementById('swipe-y1').value,
+    x2: +document.getElementById('swipe-x2').value,
+    y2: +document.getElementById('swipe-y2').value,
+    duration: +document.getElementById('swipe-dur').value,
+  };
+  await apiPost('/api/swipe', data);
+  toast('Swipe executed');
+}
+function doSwipePreset(dir) {
+  const mid = {x: state.screenSize.width / 2, y: state.screenSize.height / 2};
+  const dist = 400;
+  const presets = {
+    up: {x1: mid.x, y1: mid.y + dist, x2: mid.x, y2: mid.y - dist},
+    down: {x1: mid.x, y1: mid.y - dist, x2: mid.x, y2: mid.y + dist},
+    left: {x1: mid.x + dist, y1: mid.y, x2: mid.x - dist, y2: mid.y},
+    right: {x1: mid.x - dist, y1: mid.y, x2: mid.x + dist, y2: mid.y},
+  };
+  const p = presets[dir];
+  document.getElementById('swipe-x1').value = p.x1;
+  document.getElementById('swipe-y1').value = p.y1;
+  document.getElementById('swipe-x2').value = p.x2;
+  document.getElementById('swipe-y2').value = p.y2;
+  doSwipe();
+}
+async function doText() {
+  const v = document.getElementById('text-input').value;
+  if (!v) return;
+  await apiPost('/api/text', {value: v});
+  toast('Text sent');
+  document.getElementById('text-input').value = '';
+}
+async function sendKey(key) {
+  await apiPost('/api/key', {key});
+  toast(`Key: ${key}`);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// APPS
+// ══════════════════════════════════════════════════════════════════
+async function loadApps(type = 'launcher') {
+  const list = document.getElementById('apps-list');
+  list.innerHTML = '<div style="text-align:center;padding:20px"><div class="loading"></div></div>';
+  try {
+    const url = type === 'all' ? '/api/all-packages' : '/api/apps';
+    const apps = await api(url);
+    state.apps = apps;
+    renderApps(apps);
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state"><p>Error loading apps</p></div>';
+  }
+}
+function renderApps(apps) {
+  const list = document.getElementById('apps-list');
+  if (!apps.length) {
+    list.innerHTML = '<div class="empty-state"><div class="icon">📱</div><p>No apps found</p></div>';
+    return;
+  }
+  list.innerHTML = apps.slice(0, 200).map(app => `
+    <div class="list-item" data-pkg="${app.package}">
+      <div class="icon">📱</div>
+      <div class="info">
+        <div class="name">${app.label || app.package}</div>
+        <div class="meta">${app.package}</div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-sm btn-success" onclick="openApp('${app.package}')">▶</button>
+        <button class="btn btn-sm btn-secondary" onclick="forceStop('${app.package}')">⏹</button>
+        <button class="btn btn-sm btn-danger" onclick="confirmUninstall('${app.package}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+function filterApps() {
+  const q = document.getElementById('app-search').value.toLowerCase();
+  const filtered = state.apps.filter(a =>
+    (a.label || '').toLowerCase().includes(q) || (a.package || '').toLowerCase().includes(q)
+  );
+  renderApps(filtered);
+}
+async function openApp(pkg) { await apiPost('/api/open', {package: pkg}); toast(`Opened ${pkg}`); }
+async function forceStop(pkg) { await apiPost('/api/force-stop', {package: pkg}); toast(`Stopped ${pkg}`); }
+function confirmUninstall(pkg) {
+  if (confirm(`Uninstall ${pkg}?`)) {
+    apiPost('/api/uninstall', {package: pkg}).then(() => { toast(`Uninstalled ${pkg}`); loadApps(); });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// FILE EXPLORER
+// ══════════════════════════════════════════════════════════════════
+async function browseDir(path) {
+  state.currentFileDir = path;
+  renderBreadcrumb(path);
+  const list = document.getElementById('file-list');
+  list.innerHTML = '<div style="text-align:center;padding:20px"><div class="loading"></div></div>';
+  try {
+    const data = await api(`/api/browse?path=${encodeURIComponent(path)}`);
+    state.fileEntries = data.entries || [];
+    renderFiles(state.fileEntries);
+  } catch (e) {
+    list.innerHTML = '<div class="empty-state"><p>Error browsing directory</p></div>';
+  }
+}
+function renderBreadcrumb(path) {
+  const parts = path.split('/').filter(Boolean);
+  const bc = document.getElementById('file-breadcrumb');
+  let html = '<span onclick="browseDir(\'/\')">/</span>';
+  let accumulated = '/';
+  parts.forEach((p, i) => {
+    accumulated += p + '/';
+    const isCurrent = i === parts.length - 1;
+    html += `<span class="sep">/</span><span class="${isCurrent ? 'current' : ''}" onclick="browseDir('${accumulated}')">${p}</span>`;
+  });
+  bc.innerHTML = html;
+}
+function renderFiles(entries) {
+  const list = document.getElementById('file-list');
+  // Parent dir link
+  const parts = state.currentFileDir.split('/').filter(Boolean);
+  let parentDir = '/';
+  if (parts.length > 1) parentDir = '/' + parts.slice(0, -1).join('/') + '/';
+  let html = '';
+  if (state.currentFileDir !== '/') {
+    html += `<div class="file-item" onclick="browseDir('${parentDir}')"><span class="file-icon">📂</span><span class="file-name">..</span><span class="file-size"></span></div>`;
+  }
+  entries.forEach(e => {
+    const icon = e.is_dir ? '📁' : getFileIcon(e.name);
+    const size = e.is_dir ? '' : formatSize(e.size);
+    html += `
+      <div class="file-item" ${e.is_dir ? `onclick="browseDir('${e.path}/')"` : ''}>
+        <span class="file-icon">${icon}</span>
+        <span class="file-name">${e.name}</span>
+        <span class="file-size">${size}</span>
+        ${!e.is_dir ? `<button class="btn-icon" onclick="event.stopPropagation();downloadFile('${e.path}')" title="Download">⬇</button>` : ''}
+        <button class="btn-icon" onclick="event.stopPropagation();deleteFile('${e.path}','${e.name}')" title="Delete">🗑</button>
+      </div>
+    `;
+  });
+  list.innerHTML = html;
+}
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {jpg:'🖼',jpeg:'🖼',png:'🖼',gif:'🖼',mp4:'🎬',mp3:'🎵',pdf:'📄',zip:'📦',apk:'📱',txt:'📝',json:'📋',html:'🌐',py:'🐍',js:'📜'};
+  return map[ext] || '📄';
+}
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(1) + ' GB';
+}
+async function uploadFile(file) {
+  if (!file) return;
+  toast(`Uploading ${file.name}...`, 'info');
+  const form = new FormData();
+  form.append('file', file);
+  form.append('remote_path', state.currentFileDir);
+  try {
+    await fetch('/api/file/upload', {method: 'POST', body: form});
+    toast(`Uploaded ${file.name}`, 'success');
+    browseDir(state.currentFileDir);
+  } catch (e) {
+    toast(`Upload failed: ${e.message}`, 'error');
+  }
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('active');
+  const files = e.dataTransfer.files;
+  if (files.length) uploadFile(files[0]);
+}
+function downloadFile(path) {
+  window.open(`/api/file/download?path=${encodeURIComponent(path)}`, '_blank');
+}
+async function deleteFile(path, name) {
+  if (!confirm(`Delete "${name}"?`)) return;
+  await apiPost('/api/file/delete', {path});
+  toast(`Deleted ${name}`);
+  browseDir(state.currentFileDir);
+}
+function showNewFolderDialog() {
+  const name = prompt('New folder name:');
+  if (!name) return;
+  apiPost('/api/file/mkdir', {path: state.currentFileDir + name}).then(() => {
+    toast(`Created folder: ${name}`);
+    browseDir(state.currentFileDir);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AUTOMATION / MACROS
+// ══════════════════════════════════════════════════════════════════
+async function loadMacros() {
+  try {
+    state.macros = await api('/api/macros');
+    renderMacros();
+  } catch (e) { toast('Error loading macros', 'error'); }
+}
+function renderMacros() {
+  const list = document.getElementById('macros-list');
+  if (!state.macros.length) {
+    list.innerHTML = '<div class="empty-state"><div class="icon">📝</div><p>No macros saved</p></div>';
+    return;
+  }
+  list.innerHTML = state.macros.map(m => `
+    <div class="list-item">
+      <div class="icon">📝</div>
+      <div class="info">
+        <div class="name">${m.name}</div>
+        <div class="meta">${m.description || ''} · ${m.actions?.length || 0} actions</div>
+      </div>
+      <div class="actions" style="opacity:1">
+        <button class="btn btn-sm btn-success" onclick="runMacro(${m.id})">▶</button>
+        <button class="btn btn-sm btn-secondary" onclick="editMacro(${m.id})">✏️</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteMacro(${m.id})">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+async function runMacro(id) {
+  await apiPost(`/api/macros/${id}/run`, {});
+  toast('Macro running...');
+}
+async function deleteMacro(id) {
+  if (!confirm('Delete this macro?')) return;
+  await api(`/api/macros/${id}`, {method: 'DELETE'});
+  loadMacros();
+}
+function editMacro(id) {
+  const m = state.macros.find(x => x.id === id);
+  if (!m) return;
+  state.builderActions = [...(m.actions || [])];
+  document.getElementById('macro-name').value = m.name;
+  document.getElementById('macro-desc').value = m.description || '';
+  renderBuilder();
+}
+function addBuilderAction(type) {
+  const action = {type};
+  if (type === 'tap') {
+    const x = prompt('X coordinate:', '540'); const y = prompt('Y coordinate:', '1200');
+    if (x === null || y === null) return;
+    action.x = parseInt(x); action.y = parseInt(y);
+  } else if (type === 'swipe') {
+    const x1 = prompt('X1:', '540'); const y1 = prompt('Y1:', '1800');
+    const x2 = prompt('X2:', '540'); const y2 = prompt('Y2:', '600');
+    if (x1 === null) return;
+    action.x1 = parseInt(x1); action.y1 = parseInt(y1);
+    action.x2 = parseInt(x2); action.y2 = parseInt(y2);
+  } else if (type === 'text') {
+    const v = prompt('Text:'); if (!v) return;
+    action.value = v;
+  } else if (type === 'key') {
+    const v = prompt('Key name (home/back/recents/power/volume_up/volume_down):'); if (!v) return;
+    action.value = v;
+  } else if (type === 'wait') {
+    const ms = prompt('Wait (ms):', '1000'); if (ms === null) return;
+    action.ms = parseInt(ms);
+  } else if (type === 'open_app') {
+    const pkg = prompt('Package name:'); if (!pkg) return;
+    action.package = pkg;
+  }
+  state.builderActions.push(action);
+  renderBuilder();
+}
+function renderBuilder() {
+  const el = document.getElementById('builder-actions');
+  if (!state.builderActions.length) {
+    el.innerHTML = '<div style="color:var(--fg3);font-size:12px;text-align:center;padding:12px">No actions added</div>';
+    return;
+  }
+  el.innerHTML = state.builderActions.map((a, i) => {
+    let detail = '';
+    switch (a.type) {
+      case 'tap': detail = `(${a.x}, ${a.y})`; break;
+      case 'swipe': detail = `(${a.x1},${a.y1}) → (${a.x2},${a.y2})`; break;
+      case 'text': detail = `"${a.value}"`; break;
+      case 'key': detail = a.value; break;
+      case 'wait': detail = `${a.ms}ms`; break;
+      case 'open_app': detail = a.package; break;
+    }
+    return `<div class="action-row">
+      <span class="action-type">${a.type}</span>
+      <span class="action-detail">${detail}</span>
+      <span class="action-remove" onclick="removeBuilderAction(${i})">✕</span>
+    </div>`;
+  }).join('');
+}
+function removeBuilderAction(i) {
+  state.builderActions.splice(i, 1);
+  renderBuilder();
+}
+function clearBuilder() {
+  state.builderActions = [];
+  document.getElementById('macro-name').value = '';
+  document.getElementById('macro-desc').value = '';
+  renderBuilder();
+}
+async function saveMacro() {
+  const name = document.getElementById('macro-name').value;
+  if (!name) { toast('Enter a macro name', 'warning'); return; }
+  if (!state.builderActions.length) { toast('Add at least one action', 'warning'); return; }
+  await apiPost('/api/macros', {
+    name, description: document.getElementById('macro-desc').value,
+    actions: state.builderActions, delay_ms: 500,
+  });
+  toast('Macro saved!', 'success');
+  clearBuilder();
+  loadMacros();
+}
+async function runBuilderSequence() {
+  if (!state.builderActions.length) { toast('No actions to run', 'warning'); return; }
+  await apiPost('/api/sequence/run', {actions: state.builderActions, delay_ms: 500});
+  toast('Sequence running...', 'info');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VISUAL BUILDER
+// ══════════════════════════════════════════════════════════════════
+async function refreshUITree() {
+  try {
+    const [elements, screenUrl] = await Promise.all([
+      api('/api/ui-tree'),
+      takeScreenshotUrl()
+    ]);
+    state.uiElements = elements;
+    document.getElementById('ui-screen-img').src = screenUrl;
+    renderUIElements();
+    drawUIOverlay();
+  } catch (e) {
+    toast('Error loading UI tree', 'error');
+  }
+}
+function takeScreenshotUrl() {
+  return '/api/screen?' + Date.now();
+}
+function renderUIElements() {
+  const list = document.getElementById('ui-elements-list');
+  const q = (document.getElementById('ui-search')?.value || '').toLowerCase();
+  const filtered = state.uiElements.filter(e =>
+    !q || (e.label || '').toLowerCase().includes(q) || (e.text || '').toLowerCase().includes(q) ||
+    (e.resource_id || '').toLowerCase().includes(q)
+  );
+  if (!filtered.length) {
+    list.innerHTML = '<div class="empty-state" style="padding:20px"><p>No elements found</p></div>';
+    return;
+  }
+  list.innerHTML = filtered.slice(0, 100).map((e, i) => `
+    <div class="list-item" style="cursor:pointer;padding:8px" onclick="tapUIElement(${state.uiElements.indexOf(e)})">
+      <div class="info">
+        <div class="name">${e.label || e.class?.split('.').pop() || 'Element'}</div>
+        <div class="meta">${e.text ? `"${e.text.substring(0, 40)}"` : ''} ${e.clickable ? '👆' : ''} (${e.center_x}, ${e.center_y})</div>
+      </div>
+      ${e.clickable ? '<span class="tag tag-blue">tap</span>' : ''}
+    </div>
+  `).join('');
+}
+function filterUIElements() { renderUIElements(); }
+async function tapUIElement(index) {
+  const e = state.uiElements[index];
+  if (!e) return;
+  await apiPost('/api/tap-element', e);
+  toast(`Tapped: ${e.label || 'element'}`, 'success');
+}
+function drawUIOverlay() {
+  const img = document.getElementById('ui-screen-img');
+  const canvas = document.getElementById('ui-overlay');
+  if (!img.naturalWidth) { setTimeout(drawUIOverlay, 200); return; }
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  canvas.style.width = img.clientWidth + 'px';
+  canvas.style.height = img.clientHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Draw bounds
+  const scaleX = canvas.width / state.screenSize.width;
+  const scaleY = canvas.height / state.screenSize.height;
+  state.uiElements.forEach(e => {
+    if (!e.clickable) return;
+    ctx.strokeStyle = 'rgba(99,102,241,0.6)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(e.x1 * scaleX, e.y1 * scaleY, (e.x2 - e.x1) * scaleX, (e.y2 - e.y1) * scaleY);
+    // Label
+    ctx.fillStyle = 'rgba(99,102,241,0.8)';
+    const label = (e.label || '').substring(0, 20);
+    ctx.font = '14px sans-serif';
+    const tw = ctx.measureText(label).width;
+    ctx.fillRect(e.x1 * scaleX, e.y1 * scaleY - 18, tw + 8, 18);
+    ctx.fillStyle = 'white';
+    ctx.fillText(label, e.x1 * scaleX + 4, e.y1 * scaleY - 4);
+  });
+  // Click handler
+  canvas.onclick = function(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) / rect.width * state.screenSize.width;
+    const y = (ev.clientY - rect.top) / rect.height * state.screenSize.height;
+    // Find closest clickable element
+    const el = state.uiElements.find(e => e.clickable && x >= e.x1 && x <= e.x2 && y >= e.y1 && y <= e.y2);
+    if (el) {
+      tapUIElement(state.uiElements.indexOf(el));
+    } else {
+      apiPost('/api/tap', {x: Math.round(x), y: Math.round(y)});
+      toast(`Tap at (${Math.round(x)}, ${Math.round(y)})`);
+    }
+  };
+}
+function captureWithOverlay() { refreshUITree(); }
+
+// ══════════════════════════════════════════════════════════════════
+// PLUGINS
+// ══════════════════════════════════════════════════════════════════
+async function loadPlugins() {
+  try {
+    state.plugins = await api('/api/plugins');
+    document.getElementById('plugin-count').textContent = state.plugins.length;
+    renderPlugins();
+    renderPluginNav();
+  } catch (e) { toast('Error loading plugins', 'error'); }
+}
+function renderPlugins() {
+  const grid = document.getElementById('plugins-grid');
+  if (!state.plugins.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">🧩</div><p>No plugins installed yet</p></div>';
+    return;
+  }
+  grid.innerHTML = state.plugins.map(p => `
+    <div class="plugin-card">
+      <div class="plugin-header">
+        <div class="plugin-icon">${getPluginIcon(p.icon)}</div>
+        <div>
+          <div class="plugin-name">${p.name}</div>
+          <div class="plugin-version">v${p.version} · <span class="tag ${p.enabled ? 'tag-green' : 'tag-gray'}">${p.enabled ? 'Active' : 'Disabled'}</span></div>
+        </div>
+      </div>
+      <div class="plugin-desc">${p.description}</div>
+      <div class="plugin-footer">
+        <div class="plugin-author">by ${p.author || 'Unknown'}</div>
+        <div class="btn-group">
+          ${p.enabled
+            ? `<button class="btn btn-sm btn-secondary" onclick="togglePlugin('${p.id}', false)">Disable</button>
+               <button class="btn btn-sm btn-primary" onclick="navigateTo('${p.id}')">Open</button>`
+            : `<button class="btn btn-sm btn-success" onclick="togglePlugin('${p.id}', true)">Enable</button>`
+          }
+          <button class="btn btn-sm btn-secondary" onclick="reloadPlugin('${p.id}')">🔄</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+function renderPluginNav() {
+  const nav = document.getElementById('plugin-nav-items');
+  nav.innerHTML = state.plugins.filter(p => p.enabled).map(p => `
+    <div class="nav-item" data-page="${p.id}">
+      <span class="icon">${getPluginIcon(p.icon)}</span> ${p.name}
+    </div>
+  `).join('');
+  // Re-attach listeners
+  nav.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => navigateTo(item.dataset.page));
+  });
+}
+async function togglePlugin(id, enable) {
+  const action = enable ? 'enable' : 'disable';
+  await apiPost(`/api/plugins/${id}/${action}`, {});
+  toast(`Plugin ${action}d`);
+  loadPlugins();
+}
+async function reloadPlugin(id) {
+  await apiPost(`/api/plugins/${id}/reload`, {});
+  toast('Plugin reloaded');
+  loadPlugins();
+}
+async function installPlugin(file) {
+  if (!file) return;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/plugins/install', {method: 'POST', body: form});
+    const data = await res.json();
+    if (data.ok) toast(`Plugin "${data.plugin_id}" installed!`, 'success');
+    else toast('Install failed: ' + (data.error || 'Unknown'), 'error');
+    loadPlugins();
+  } catch (e) {
+    toast('Install error', 'error');
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BATTERY CARE PLUGIN UI
+// ══════════════════════════════════════════════════════════════════
+async function loadBatteryStatus() {
+  try {
+    const data = await api('/api/plugins/battery_care/status');
+    const bat = data.battery || {};
+    document.getElementById('bc-level').textContent = `${bat.level || '--'}%`;
+    document.getElementById('bc-level').className = `stat-value ${(bat.level||100) > 50 ? 'green' : (bat.level||100) > 20 ? 'orange' : 'red'}`;
+    const temp = bat.temperature || 0;
+    document.getElementById('bc-temp').textContent = `${temp}°C`;
+    document.getElementById('bc-temp').className = `stat-value ${temp > 38 ? 'red' : temp > 35 ? 'orange' : 'green'}`;
+    const drain = data.drain || {};
+    document.getElementById('bc-drain').textContent = drain.rate ? `${drain.rate} %/h` : '-- %/h';
+    document.getElementById('bc-remaining').textContent = drain.estimated_hours ? `~${drain.estimated_hours}h remaining` : '';
+    document.getElementById('bc-status').textContent = bat.status || '--';
+    document.getElementById('bc-monitoring').textContent = data.monitoring ? '🟢 Monitoring' : '⏸ Paused';
+    document.getElementById('bc-monitoring').style.color = data.monitoring ? 'var(--green)' : 'var(--fg3)';
+    // Load alerts
+    const alerts = await api('/api/plugins/battery_care/alerts');
+    renderBatteryAlerts(alerts);
+    // Load config
+    loadBatteryConfig();
+    // Load history chart
+    loadBatteryHistory(6);
+  } catch (e) {
+    // Plugin might not be loaded
+    document.getElementById('bc-level').textContent = 'N/A';
+    document.getElementById('bc-status').textContent = 'Plugin not loaded';
+  }
+}
+async function loadBatteryConfig() {
+  try {
+    const cfg = await api('/api/plugins/battery_care/config');
+    document.getElementById('cfg-overheat').value = cfg.alert_overheat_celsius || 38;
+    document.getElementById('cfg-low').value = cfg.alert_low_battery_pct || 15;
+    document.getElementById('cfg-autosave').value = cfg.auto_save_battery_at_pct || 20;
+    document.getElementById('cfg-charge').value = cfg.charge_complete_alert_pct || 80;
+    document.getElementById('cfg-interval').value = cfg.poll_interval_seconds || 30;
+  } catch (e) {}
+}
+async function saveBatteryConfig() {
+  await apiPost('/api/plugins/battery_care/config', {
+    alert_overheat_celsius: +document.getElementById('cfg-overheat').value,
+    alert_low_battery_pct: +document.getElementById('cfg-low').value,
+    auto_save_battery_at_pct: +document.getElementById('cfg-autosave').value,
+    charge_complete_alert_pct: +document.getElementById('cfg-charge').value,
+    poll_interval_seconds: +document.getElementById('cfg-interval').value,
+  });
+  toast('Config saved', 'success');
+}
+async function batteryAction(action) {
+  await apiPost(`/api/plugins/battery_care/${action}`, {});
+  toast(`Battery Care: ${action}`);
+  setTimeout(loadBatteryStatus, 1000);
+}
+function renderBatteryAlerts(alerts) {
+  const el = document.getElementById('bc-alerts');
+  if (!alerts?.length) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px"><p>No active alerts</p></div>';
+    return;
+  }
+  el.innerHTML = alerts.map(a => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <span class="alert-badge ${a.level}">${a.level}</span>
+      <span style="flex:1;font-size:13px">${a.message}</span>
+      <span style="font-size:11px;color:var(--fg3)">${new Date(a.timestamp).toLocaleTimeString()}</span>
+    </div>
+  `).join('');
+}
+async function clearBatteryAlerts() {
+  await apiPost('/api/plugins/battery_care/alerts/clear', {});
+  loadBatteryStatus();
+}
+async function loadBatteryHistory(hours = 6) {
+  try {
+    const data = await api(`/api/plugins/battery_care/history?hours=${hours}`);
+    renderBatteryChart(data);
+  } catch (e) {
+    document.getElementById('battery-chart').innerHTML = '<div class="empty-state" style="padding:40px"><p>No history data</p></div>';
+  }
+}
+function renderBatteryChart(data) {
+  const container = document.getElementById('battery-chart');
+  if (!data?.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:40px"><p>No data points yet. Enable monitoring to start collecting data.</p></div>';
+    return;
+  }
+  // Simple SVG chart
+  const w = container.clientWidth || 400;
+  const h = 200;
+  const pad = {top: 20, right: 10, bottom: 30, left: 40};
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  const minLevel = Math.min(...data.map(d => d.level));
+  const maxLevel = Math.max(...data.map(d => d.level));
+  const range = maxLevel - minLevel || 10;
+  const points = data.map((d, i) => {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    const y = pad.top + plotH - ((d.level - minLevel) / range) * plotH;
+    return `${x},${y}`;
+  });
+  const pathD = `M ${points.join(' L ')}`;
+  // Charging regions
+  const chargeSegments = [];
+  let inCharge = false;
+  let chargeStart = 0;
+  data.forEach((d, i) => {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    if (d.charging && !inCharge) { inCharge = true; chargeStart = x; }
+    if (!d.charging && inCharge) {
+      chargeSegments.push({x1: chargeStart, x2: x});
+      inCharge = false;
+    }
+  });
+  if (inCharge) chargeSegments.push({x1: chargeStart, x2: pad.left + plotW});
+  // Temperature line (secondary)
+  const temps = data.map(d => d.temperature);
+  const maxTemp = Math.max(...temps, 40);
+  const tempPoints = data.map((d, i) => {
+    const x = pad.left + (i / (data.length - 1)) * plotW;
+    const y = pad.top + plotH - (d.temperature / maxTemp) * plotH;
+    return `${x},${y}`;
+  });
+  const tempPath = `M ${tempPoints.join(' L ')}`;
+  // Y-axis labels
+  const yLabels = [minLevel, Math.round((minLevel + maxLevel) / 2), maxLevel];
+  container.innerHTML = `
+    <svg width="${w}" height="${h}" style="display:block">
+      <rect x="${pad.left}" y="${pad.top}" width="${plotW}" height="${plotH}" fill="var(--bg3)" rx="4"/>
+      ${chargeSegments.map(s => `<rect x="${s.x1}" y="${pad.top}" width="${s.x2 - s.x1}" height="${plotH}" fill="rgba(34,197,94,0.1)"/>`).join('')}
+      ${yLabels.map(v => {
+        const y = pad.top + plotH - ((v - minLevel) / range) * plotH;
+        return `<line x1="${pad.left}" y1="${y}" x2="${pad.left + plotW}" y2="${y}" stroke="var(--border)" stroke-dasharray="4"/>
+                <text x="${pad.left - 5}" y="${y + 4}" fill="var(--fg3)" font-size="10" text-anchor="end">${v}%</text>`;
+      }).join('')}
+      <path d="${pathD}" fill="none" stroke="var(--accent2)" stroke-width="2"/>
+      <path d="${tempPath}" fill="none" stroke="var(--orange)" stroke-width="1" stroke-dasharray="4" opacity="0.5"/>
+      <text x="${w/2}" y="${h - 5}" fill="var(--fg3)" font-size="10" text-anchor="middle">Time →</text>
+      <rect x="${pad.left + 10}" y="${pad.top + 5}" width="8" height="8" fill="var(--accent2)"/>
+      <text x="${pad.left + 22}" y="${pad.top + 13}" fill="var(--fg3)" font-size="9">Level</text>
+      <rect x="${pad.left + 60}" y="${pad.top + 5}" width="8" height="8" fill="var(--orange)" opacity="0.5"/>
+      <text x="${pad.left + 72}" y="${pad.top + 13}" fill="var(--fg3)" font-size="9">Temp</text>
+      <rect x="${pad.left + 105}" y="${pad.top + 5}" width="8" height="8" fill="rgba(34,197,94,0.3)"/>
+      <text x="${pad.left + 117}" y="${pad.top + 13}" fill="var(--fg3)" font-size="9">Charging</text>
+    </svg>
+  `;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SCREEN
+// ══════════════════════════════════════════════════════════════════
+async function takeScreenshot() {
+  const img = document.getElementById('screen-img');
+  if (img) img.src = '/api/screen?' + Date.now();
+}
+let autoRefreshInterval = null;
+function toggleAutoRefresh() {
+  const btn = document.getElementById('auto-refresh-btn');
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+    autoRefreshInterval = null;
+    btn.textContent = '🔄 Auto Refresh: OFF';
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-secondary');
+  } else {
+    autoRefreshInterval = setInterval(takeScreenshot, 2000);
+    btn.textContent = '🔄 Auto Refresh: ON';
+    btn.classList.remove('btn-secondary');
+    btn.classList.add('btn-primary');
+  }
+}
+
+// Screen click-to-tap
+document.addEventListener('click', function(e) {
+  const img = document.getElementById('screen-img');
+  if (!img || e.target !== img) return;
+  const rect = img.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left) / rect.width * state.screenSize.width);
+  const y = Math.round((e.clientY - rect.top) / rect.height * state.screenSize.height);
+  apiPost('/api/tap', {x, y});
+  toast(`Tap (${x}, ${y})`);
+});
+
+// ══════════════════════════════════════════════════════════════════
+// GLOBAL
+// ══════════════════════════════════════════════════════════════════
+function refreshAll() {
+  refreshDashboard();
+  const activePage = document.querySelector('.page.active')?.id?.replace('page-', '');
+  if (activePage) onNavigate(activePage);
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+// Auto-refresh dashboard every 30s
+setInterval(() => {
+  if (document.querySelector('#page-dashboard.active')) refreshDashboard();
+}, 30000);
+
+// Init
+refreshDashboard();
+loadPlugins();
+</script>
+</body>
+</html>

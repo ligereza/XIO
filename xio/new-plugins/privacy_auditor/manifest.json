@@ -1,0 +1,9 @@
+{
+  "name": "Privacy Auditor",
+  "version": "1.0.0",
+  "description": "Auditoría de privacidad sin root: permisos granulares vía appops, detección de acceso a cámara/micro/ubicación, alertas de apps sospechosas",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["apps", "system"]
+}

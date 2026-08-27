@@ -1,0 +1,9 @@
+{
+  "name": "Call Recorder Enabler",
+  "version": "1.0.0",
+  "description": "Activa grabacion nativa de llamadas en HyperOS Global: reemplaza Google Dialer con Xiaomi Dialer via ADB",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["apps", "system"]
+}

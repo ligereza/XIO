@@ -1,0 +1,18 @@
+# xio Xiaomi controller -- keep source, exclude heavy redistributables & generated data
+
+# Heavy redistributables -- fetch separately (Android platform-tools + APKs).
+# The server resolves adb from PATH when the bundled copy is absent, and uses the
+# rish backend on-device, so neither is required to run.
+actual/platform-tools/
+*.apk
+*.exe
+*.dll
+*.dex
+
+# Generated runtime data, caches, logs
+new/data/
+**/__pycache__/
+*.pyc
+*.log
+.rish_out
+_logs/

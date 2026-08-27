@@ -1,0 +1,9 @@
+{
+  "name": "WiFi Intelligence",
+  "version": "1.0.0",
+  "description": "Historial de redes WiFi, backup de passwords, auto-reconectar a mejor red, monitor de señal, alertas de seguridad.",
+  "author": "Arena Agent",
+  "icon": "network",
+  "category": "network",
+  "permissions": ["network", "system"]
+}

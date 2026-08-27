@@ -1,0 +1,9 @@
+{
+  "name": "Notification Manager",
+  "version": "1.0.0",
+  "description": "Leer, dismiss selectivo, historial, reglas de silenciamiento por horario/app, auto-dismiss de notificaciones persistentes.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system", "apps"]
+}

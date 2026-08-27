@@ -1,0 +1,9 @@
+{
+  "name": "DNS Privacy Shield",
+  "version": "1.0.0",
+  "description": "Firewall DNS sin root: Private DNS, bloqueo de tracking, log de consultas, listas de bloqueo preconfiguradas (ads, trackers, malware)",
+  "author": "Arena Agent",
+  "icon": "network",
+  "category": "network",
+  "permissions": ["network", "system"]
+}

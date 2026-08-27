@@ -1,0 +1,9 @@
+{
+  "name": "Clipboard Monitor",
+  "version": "1.0.0",
+  "description": "Monitor de clipboard: auto-clear tras N segundos, historial, filtro regex para passwords/tokens.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

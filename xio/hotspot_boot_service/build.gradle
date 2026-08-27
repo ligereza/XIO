@@ -1,0 +1,5 @@
+// Root build script. Ajustar la version del AGP a la que tenga tu Android Studio si hace
+// falta (8.x). El wrapper de Gradle se genera con `gradle wrapper` o al abrir en el IDE.
+plugins {
+    id 'com.android.application' version '8.5.0' apply false
+}

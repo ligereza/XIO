@@ -1,0 +1,9 @@
+{
+  "name": "Desktop / Freeform Mode",
+  "version": "1.0.0",
+  "description": "Ventanas flotantes y modo escritorio: freeform windows, redimensionar, multiples apps simultaneas, soporte mouse/teclado",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system", "input"]
+}

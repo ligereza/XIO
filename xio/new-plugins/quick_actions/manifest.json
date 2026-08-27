@@ -1,0 +1,9 @@
+{
+  "name": "Quick Actions Hub",
+  "version": "1.0.0",
+  "description": "Toggles rápidos: flashlight, auto-rotate, DND, data, hotspot, screen timeout, night mode, media controls, clipboard, airplane, battery saver.",
+  "author": "Arena Agent",
+  "icon": "automation",
+  "category": "system",
+  "permissions": ["system", "input"]
+}

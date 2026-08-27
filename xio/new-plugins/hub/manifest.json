@@ -1,0 +1,9 @@
+{
+  "name": "Hub flujo",
+  "version": "1.0.0",
+  "description": "Sirve el hub estatico de flujo (context/flujo_hub.html) desde el telefono",
+  "author": "Cauce",
+  "icon": "file",
+  "category": "file",
+  "permissions": ["files"]
+}

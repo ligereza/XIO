@@ -1,0 +1,9 @@
+{
+  "name": "Charge Control",
+  "version": "1.0.0",
+  "description": "Control de carga no-root via rol USB (dumpsys usb set-port-roles). Limiter de bateria (cap/floor con histeresis + hard-floor de seguridad que nunca deja morir la unica internet), charge on/off manual, modo power-bank (OTG source) y modo dock (sink+host para hub PD). Acciones guardadas por el safety guard del server (HTTP 423 sin confirm).",
+  "author": "Cauce",
+  "icon": "battery",
+  "category": "battery",
+  "permissions": ["system", "battery"]
+}

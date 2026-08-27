@@ -1,0 +1,9 @@
+{
+  "name": "HyperOS Unlocker",
+  "version": "1.0.0",
+  "description": "Desbloquea features flagship en cualquier Xiaomi: Advanced Textures, Blur, Liquid Glass, Stack Recents, CPU/GPU level override",
+  "author": "Arena Agent",
+  "icon": "cpu",
+  "category": "system",
+  "permissions": ["system"]
+}

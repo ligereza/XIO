@@ -1,0 +1,9 @@
+{
+  "name": "Display Profiles",
+  "version": "1.0.0",
+  "description": "Perfiles de pantalla (Gaming, Reading, Sleep, Battery) con auto-switch por trigger: batería, hora, WiFi, app abierta.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

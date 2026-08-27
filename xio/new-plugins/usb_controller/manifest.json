@@ -1,0 +1,9 @@
+{
+  "name": "USB Controller",
+  "version": "1.0.0",
+  "description": "Control avanzado del modo USB: MTP/PTP/Audio/MIDI, simular carga, bloquear datos en PCs publicas, monitor de transferencia",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

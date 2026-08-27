@@ -1,0 +1,9 @@
+{
+  "name": "System Logger",
+  "version": "1.0.0",
+  "description": "Monitor de logcat remoto: deteccion de crashes/ANRs, estadisticas por app, alertas, filtros, exportar logs",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["system"]
+}

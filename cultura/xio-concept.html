@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XIO · Mapa conceptual</title>
+<style>
+  :root{ --bg:#0c0d11; --panel:#14151b; --panel2:#1c1e26; --ink:#e9eaf0; --dim:#8a8d9a; --line:#2a2d38; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; overflow:hidden; }
+  #app{ position:fixed; inset:0; }
+  svg{ width:100%; height:100%; display:block; cursor:grab; }
+  svg.panning{ cursor:grabbing; }
+  .edge{ stroke:var(--line); stroke-width:1; }
+  .edge.cross{ stroke:#3a3f52; stroke-width:1.4; stroke-dasharray:4 4; }
+  .edge.hot{ stroke:#f2c14e; stroke-width:2; stroke-dasharray:none; opacity:1; }
+  .edge.faded{ opacity:.06; }
+  .elabel{ fill:#6f7180; font-size:9px; }
+  .node circle{ stroke:#0c0d11; stroke-width:1.5; cursor:pointer; transition:opacity .2s; }
+  .node.hub circle{ stroke-width:2; }
+  .node.faded{ opacity:.12; }
+  .node.hit circle{ stroke:#fff; stroke-width:2.5; }
+  .nlabel{ font-size:10px; fill:var(--ink); pointer-events:none; paint-order:stroke;
+    stroke:#0c0d11; stroke-width:3px; stroke-linejoin:round; }
+  .node.hub .nlabel{ font-size:12.5px; font-weight:700; }
+  .node.center .nlabel{ font-size:14px; font-weight:800; }
+  .nlabel.detail{ font-size:9.5px; fill:#c7cad6; opacity:0; transition:opacity .15s; }
+  .nlabel.detail.show{ opacity:1; }
+
+  /* HUD */
+  .hud{ position:fixed; z-index:5; }
+  #title{ top:14px; left:16px; max-width:340px; }
+  #title h1{ margin:0; font-size:17px; letter-spacing:.02em; }
+  #title p{ margin:4px 0 0; font-size:11.5px; color:var(--dim); line-height:1.45; }
+  #search{ top:14px; right:16px; display:flex; gap:8px; align-items:center; }
+  #search input{ background:var(--panel); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:7px 10px; font-size:12px; width:180px; outline:none; }
+  .btn{ background:var(--panel); border:1px solid var(--line); color:var(--ink);
+    border-radius:8px; padding:7px 10px; font-size:11.5px; cursor:pointer; }
+  .btn:hover{ background:var(--panel2); }
+
+  #legend{ bottom:14px; left:16px; max-width:min(46vw,560px); }
+  #legend .row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip{ display:inline-flex; align-items:center; gap:6px; background:var(--panel);
+    border:1px solid var(--line); border-radius:20px; padding:4px 9px; font-size:11px;
+    cursor:pointer; user-select:none; color:#d5d7e0; }
+  .chip .dot{ width:9px; height:9px; border-radius:50%; }
+  .chip.off{ opacity:.35; }
+  #legend .lbl{ font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin:0 0 5px; }
+  #principles{ margin-top:10px; }
+  .pchip{ border-style:dashed; }
+  .pchip.on{ border-color:#f2c14e; color:#f2c14e; }
+
+  /* Detail panel */
+  #panel{ position:fixed; z-index:6; top:0; right:0; height:100%; width:360px; max-width:88vw;
+    background:linear-gradient(180deg,#15161d,#101117); border-left:1px solid var(--line);
+    transform:translateX(102%); transition:transform .28s cubic-bezier(.4,0,.2,1);
+    display:flex; flex-direction:column; box-shadow:-20px 0 40px rgba(0,0,0,.4); }
+  #panel.open{ transform:none; }
+  #panel .top{ padding:20px 20px 14px; border-bottom:1px solid var(--line); }
+  #panel .cat{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; font-weight:700; }
+  #panel h2{ margin:8px 0 0; font-size:19px; line-height:1.25; }
+  #panel .body{ padding:16px 20px; overflow:auto; font-size:13.5px; line-height:1.6; color:#d7d9e3; }
+  #panel .sec{ font-size:10px; text-transform:uppercase; letter-spacing:.1em; color:var(--dim);
+    margin:18px 0 6px; }
+  #panel .refs li{ margin:0 0 6px; font-size:12px; color:#aab0c2; }
+  #panel .tags{ display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+  #panel .tags span{ font-size:10.5px; border:1px dashed #f2c14e55; color:#f2c14e; border-radius:14px; padding:2px 8px; }
+  #panel .close{ position:absolute; top:14px; right:14px; }
+  .hint{ font-size:10.5px; color:var(--dim); margin-top:10px; }
+  @media (max-width:640px){ #title{max-width:60vw;} #search input{width:110px;} #legend{max-width:92vw;} }
+</style>
+</head>
+<body>
+<div id="app">
+  <svg id="svg">
+    <defs>
+      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="viewport">
+      <g id="edges"></g>
+      <g id="nodes"></g>
+    </g>
+  </svg>
+</div>
+
+<div class="hud" id="title">
+  <h1>XIO — Mapa de la idea</h1>
+  <p>Del teléfono como instrumento al fundamento artístico. Arrastra nodos y fondo · rueda = zoom · clic en un nodo = detalle + citas. Filtra por tema abajo o resalta los <b>hilos transversales</b>.</p>
+</div>
+
+<div class="hud" id="search">
+  <input id="q" placeholder="Buscar concepto…" autocomplete="off"/>
+  <button class="btn" id="reset">Reencuadrar</button>
+</div>
+
+<div class="hud" id="legend">
+  <div class="lbl">Temas</div>
+  <div class="row" id="cats"></div>
+  <div id="principles">
+    <div class="lbl">Hilos transversales — resaltar</div>
+    <div class="row" id="prins"></div>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="top">
+    <button class="btn close" id="pclose">✕</button>
+    <div class="cat" id="pcat"></div>
+    <h2 id="ptitle"></h2>
+  </div>
+  <div class="body">
+    <div id="pdesc"></div>
+    <div id="prefsWrap"><div class="sec">Base académica / fuente</div><ul class="refs" id="prefs"></ul></div>
+    <div id="ptagsWrap"><div class="sec">Hilos que atraviesa</div><div class="tags" id="ptags"></div></div>
+  </div>
+</div>
+
+<script>
+/* ---------- CATEGORÍAS ---------- */
+const CATS = {
+  spine:{name:"Principio rector", color:"#f4f5fa"},
+  xio:{name:"XIO · el dispositivo", color:"#e6544a"},
+  muros:{name:"Teoría de muros", color:"#e8873a"},
+  lazo:{name:"Control en lazo cerrado", color:"#e8c53a"},
+  orq:{name:"XIO orquestador", color:"#8bc34a"},
+  fabric:{name:"Fabric de señales", color:"#3ec9a7"},
+  splat:{name:"Gaussian Splatting", color:"#3aa0e8"},
+  sonda:{name:"Sonda de campo de luz", color:"#6a7bff"},
+  rllm:{name:"Render ↔ LLM", color:"#a367e8"},
+  smuros:{name:"Muros semánticos", color:"#e864b8"},
+  obs:{name:"Observar antes de calcular", color:"#b9bcc9"},
+  arte:{name:"Fundamento artístico", color:"#d8b46a"},
+};
+/* ---------- HILOS TRANSVERSALES ---------- */
+const PRINS = {
+  p_loop:{name:"Lazo abierto → cerrado"},
+  p_fi:{name:"Forward / Inverse"},
+  p_rs:{name:"Resolutivo ↔ Semántico"},
+  p_meta:{name:"Metamerismo (físico→semántico)"},
+  p_canon:{name:"Formato canónico"},
+  p_obs:{name:"Observación comprime el cálculo"},
+};
+
+/* ---------- NODOS ---------- */
+// t: título, c: categoría, h:1 hub / 0 detalle, d: descripción, r:[refs], p:[hilos]
+const N = [
+  {id:"spine", t:"Medir antes de calcular · Observar antes de renderizar", c:"spine", h:2,
+   d:"El eje que recorre toda la conversación: cada buen resultado nació de medir/observar antes de actuar. El lazo cerrado en la batería, la sonda que mide antes de relightear, el importance sampling que observa antes de muestrear, la atención que pesa el contexto antes de generar.",
+   r:["Wiener, N. (1948) — Cybernetics (feedback).","Kajiya (1986) — importance sampling."], p:["p_loop","p_obs"]},
+
+  // XIO
+  {id:"xio", t:"XIO — el dispositivo", c:"xio", h:1,
+   d:"Xiaomi 11 Lite 5G: el instrumento central. No es músculo de cómputo pesado; es cerebro, sensor, nodo de red y front-end. Se reusa en cada proyecto del hilo.",
+   r:["Especificación Qualcomm Snapdragon 778G/780G."], p:[]},
+  {id:"xio_soc", t:"Snapdragon 778G · Adreno 642", c:"xio", h:0,
+   d:"CPU A78/A55, GPU Adreno 642 con Vulkan, NPU Hexagon. Sirve para inferencia (ncnn+Vulkan) y rasterización de splats; no para entrenar ni DSP masivo.", r:["Qualcomm datasheet."], p:[]},
+  {id:"xio_os", t:"HyperOS 2 · Android 14 · sin root", c:"xio", h:0,
+   d:"El envelope real de diseño es el de sin-root, porque el bootloader está bloqueado.", r:[], p:[]},
+  {id:"xio_otg", t:"USB-C OTG (host)", c:"xio", h:0,
+   d:"El puerto que adopta los periféricos que faltan en silicio: SDR, interfaz de audio, USB-Ethernet, USB-serial. Cruza el muro de hardware ausente SIN root (Android concede permiso USB a la app).",
+   r:["Android USB Host API; USB Audio Class (UAC)."], p:["p_canon"]},
+  {id:"xio_therm", t:"Techo térmico (throttling)", c:"xio", h:0,
+   d:"El 778G se estrangula sin refrigeración. El presupuesto térmico es el límite verdadero del proyecto '100% Xiaomi': eliges qué corre a bordo.", r:[], p:[]},
+
+  // MUROS
+  {id:"muros", t:"Teoría de muros", c:"muros", h:1,
+   d:"Marco resolutivo: 'qué puede/qué no' se reduce a preguntar contra qué muro choca. Root solo derriba uno.", r:[], p:["p_rs"]},
+  {id:"m_tax", t:"Taxonomía: 5 muros", c:"muros", h:0,
+   d:"1) hardware ausente · 2) firmware cerrado (baseband) · 3) kernel/driver · 4) sandbox de la OS · 5) solo software. Del más duro al más blando.", r:[], p:[]},
+  {id:"m_rf", t:"Muro 1 · RF de banda fija", c:"muros", h:0,
+   d:"Los radios tienen front-end cableado (filtros SAW, PA/LNA, antena) atados a su banda. No se retunean por software. Se rodea con SDR por USB.", r:[], p:[]},
+  {id:"m_fw", t:"Muro 2 · firmware firmado", c:"muros", h:0,
+   d:"El baseband es caja negra firmada; ni root controla el módem. Muro duro.", r:[], p:[]},
+  {id:"m_sandbox", t:"Muro 4 · sandbox (lo que root derriba)", c:"muros", h:0,
+   d:"Permisos, SELinux, segundo plano, no-root. Único muro que el root demuele de verdad.", r:[], p:[]},
+  {id:"m_root", t:"Root ⟵ bootloader bloqueado", c:"muros", h:0,
+   d:"Rootear exige bootloader abierto (Magisk parchea boot y se flashea). Xiaomi cerró las solicitudes el 30-dic-2025 → root inalcanzable en XIO hoy.",
+   r:["Xiaomi HyperOS — cierre del portal de desbloqueo (2025/26)."], p:[]},
+  {id:"m_rootadd", t:"Qué sumaría root", c:"muros", h:0,
+   d:"No sentidos nuevos, sino determinismo (SCHED_FIFO, ALSA), red real (nftables, monitor mode), autonomía de appliance (daemons inmatables, USB-gadget) y control de energía interno. Autoridad, no percepción.", r:[], p:[]},
+
+  // LAZO
+  {id:"lazo", t:"Control en lazo cerrado", c:"lazo", h:1,
+   d:"El teléfono sensa pero no actúa sobre su carga (sin root); el enchufe actúa pero no sensa. Un controlador externo cierra el lazo.", r:["Teoría de control — bang-bang/termostato."], p:["p_loop"]},
+  {id:"l_bang", t:"Bang-bang con histéresis", c:"lazo", h:0,
+   d:"Banda muerta [45–70%] evita el chattering del relé; misma razón por la que un termostato tiene histéresis.", r:["Control on-off con histéresis."], p:["p_loop"]},
+  {id:"l_sa", t:"Sensar ≠ actuar (desacople)", c:"lazo", h:0,
+   d:"ADB dumpsys battery lee; el enchufe Tapo/Kasa actúa; el controlador es el puente sense→actuate.", r:[], p:["p_loop"]},
+  {id:"l_li", t:"Degradación Li-ion", c:"lazo", h:0,
+   d:"Envejecimiento por calendario (SoC alto + calor, tipo Arrhenius) + por ciclo (profundidad de descarga). Oscilar en banda media minimiza el primero.",
+   r:["Arrhenius; Vetter et al. (2005) J. Power Sources — aging mechanisms."], p:[]},
+  {id:"l_hold", t:"Estado sostenido (DMX 44 Hz)", c:"lazo", h:0,
+   d:"La salida es estado que se refresca, no eventos: los nodos Art-Net expiran si dejas de emitir. Los fades solo mutan el buffer.", r:[], p:["p_loop"]},
+
+  // ORQUESTADOR
+  {id:"orq", t:"XIO orquestador", c:"orq", h:1,
+   d:"Show-controller de bolsillo, siempre encendido, sobre el backbone 5G/WiFi. La misma caja que es router y tiene la batería en lazo cerrado.", r:[], p:[]},
+  {id:"o_termux", t:"Termux + persistencia", c:"orq", h:0,
+   d:"Runtime Linux sin root. Termux:Boot + wake-lock + sin optimización de batería = autoarranque tras corte, clave en sala desatendida.", r:["Termux:Boot / termux-services."], p:[]},
+  {id:"o_wol", t:"Wake-on-LAN verificado", c:"orq", h:0,
+   d:"Magic packet + ping hasta confirmar que el notebook levantó, y recién ahí dispara el show. Nada de 'despierta y reza'.", r:["Magic packet (AMD, 1995)."], p:["p_loop"]},
+  {id:"o_osc", t:"OSC → TD / Resolume / Max", c:"orq", h:0,
+   d:"Plano de control hacia visuales generativos.", r:["Wright & Freed (1997) — OpenSound Control."], p:["p_canon"]},
+  {id:"o_dmx", t:"Art-Net / DMX + fades", c:"orq", h:0,
+   d:"Paquete Art-Net crudo por UDP; fades = interpolación lineal del buffer.", r:["ANSI E1.11 DMX512-A; Art-Net (Artistic Licence)."], p:[]},
+  {id:"o_cue", t:"Motor de cues (3 disparos)", c:"orq", h:0,
+   d:"Un despachador único para OSC entrante, reloj y intervalo.", r:[], p:[]},
+
+  // FABRIC
+  {id:"fabric", t:"Fabric de señales", c:"fabric", h:1,
+   d:"Router de múltiples señales de evento. La física dice que todo se puede; los muros son regulación de TX y cifrado, rodeados tapando en la capa correcta.", r:[], p:["p_canon","p_fi"]},
+  {id:"f_canon", t:"Formato canónico · O(N+M)", c:"fabric", h:0,
+   d:"Estrella con lingua franca en vez de malla: N×M adaptadores → N+M. La clave que hace posible el router.", r:["Teoría de grafos; patrón hub-and-spoke."], p:["p_canon"]},
+  {id:"f_planes", t:"Dos planos: medios / control", c:"fabric", h:0,
+   d:"Media plane (muestras, reloj común) vs control/telemetría (freq, RSSI, IDs). Misma separación que SDN.", r:["McKeown et al. (2008) — OpenFlow/SDN; AES67; SMPTE ST 2110."], p:[]},
+  {id:"f_layers", t:"Modelo en capas (OSI de señales)", c:"fabric", h:0,
+   d:"RF → ingesta → bus canónico → transformación/ruteo → emisión → visualización.", r:["Zimmermann (1980) — modelo OSI."], p:["p_canon"]},
+  {id:"f_ingest", t:"Doble ingesta: SDR + tap line-out", c:"fabric", h:0,
+   d:"SDR para VER el espectro (no hace falta decodificar) + tap en la salida del receptor para TENER el audio (legal, ya demodulado). No se craquea el RF.", r:[], p:["p_fi"]},
+  {id:"f_stft", t:"Visualizador = espectrograma (STFT)", c:"fabric", h:0,
+   d:"Transformada de Fourier de ventana corta deslizante → cascada. Mapa RF etiquetado por bandas (micros/intercom/video).", r:["Gabor (1946); Allen & Rabiner (1977) — STFT."], p:[]},
+  {id:"f_alg", t:"Álgebra de transformación", c:"fabric", h:0,
+   d:"Operadores: ruteo, ganancia, mezcla, split, transcode, bridge de dominio, delay/align, gate/duck, semántico (STT/traducción), modulación cruzada (audio→DMX).", r:[], p:["p_rs"]},
+  {id:"f_matrix", t:"Matriz de crosspoints operador-valuados", c:"fabric", h:0,
+   d:"Generaliza la consola (salidas = M·entradas, M escalar) a M[i,j] = función de transformación. Ese es el 'router que transforma'.", r:[], p:[]},
+  {id:"f_sync", t:"Sincronía: reloj común (PTP)", c:"fabric", h:0,
+   d:"Cada dominio tiene su latencia; mezclar coherente exige reloj compartido + delay medido + líneas de retardo.", r:["IEEE 1588 (PTP)."], p:[]},
+
+  // SPLAT
+  {id:"splat", t:"Gaussian Splatting (.ply/.spz)", c:"splat", h:1,
+   d:"Radiance field EXPLÍCITO: nube de gaussianas 3D. Rasterizable en tiempo real y —clave para arte— editable/transformable.", r:["Kerbl, Kopanas, Leimkühler, Drettakis (2023) — 3DGS, SIGGRAPH."], p:["p_canon"]},
+  {id:"s_vs", t:"Explícito vs NeRF (implícito)", c:"splat", h:0,
+   d:"NeRF guarda el campo en una red (lento, ray-marching); 3DGS lo hace explícito → rápido y manipulable.", r:["Mildenhall et al. (2020) — NeRF."], p:["p_fi"]},
+  {id:"s_attr", t:"Atributos de la gaussiana", c:"splat", h:0,
+   d:"Posición, escala, quaternión de rotación, opacidad y color como armónicos esféricos (SH). ~59–62 floats.", r:["SH — Ramamoorthi & Hanrahan (2001)."], p:[]},
+  {id:"s_raster", t:"Rasterización: splat→sort→composite", c:"splat", h:0,
+   d:"Proyectar, ordenar por profundidad (el cuello de botella en móvil) y componer alfa por tiles.", r:["Zwicker et al. (2001) — EWA splatting."], p:[]},
+  {id:"s_fmt", t:"PLY maestro / SPZ entrega", c:"splat", h:0,
+   d:"PLY sin pérdida (negativo, ~1.4 GB/4M) vs SPZ ~10× (24-bit pos, 8-bit SH, lossy). Como RAW/JPEG. También SOG, KSplat.", r:["Niantic Labs — formato SPZ (open source)."], p:["p_canon"]},
+  {id:"s_gltf", t:"glTF absorbe 3DGS (2025)", c:"splat", h:0,
+   d:"El bus canónico del 3D adoptó los splats como extensión estándar → interoperabilidad.", r:["Khronos glTF — extensión 3DGS (2025)."], p:["p_canon"]},
+  {id:"s_pipe", t:"Pipeline: captura→entrena→render", c:"splat", h:0,
+   d:"Entrenar quiere GPU real (CUDA) → músculo al notebook/nube. Capturar y renderizar (Adreno, cuentas moderadas) → XIO.", r:["Qualcomm (2024) — 3DGS on-device."], p:["p_fi"]},
+
+  // SONDA
+  {id:"sonda", t:"Sonda de campo de luz", c:"sonda", h:1,
+   d:"Las cámaras como fotómetros direccionales: miden la luz incidente. La ecuación de render corre en ambos sentidos desde ahí.", r:["Kajiya (1986) — the rendering equation."], p:["p_fi","p_loop"]},
+  {id:"p_probe", t:"Front+rear+IMU = campo incidente", c:"sonda", h:0,
+   d:"Dos hemisferios opuestos muestrean el campo; el IMU los registra en el mundo. Análogo a la estimación de luz de AR.", r:["Google ARCore — Environmental HDR."], p:[]},
+  {id:"p_fwd", t:"Forward: relighting", c:"sonda", h:0,
+   d:"La luz medida (SH) alimenta el shader: el normal map 'cobra vida' porque el realce se evalúa contra las direcciones reales de la sala.", r:["Debevec (1998) — image-based lighting."], p:["p_fi"]},
+  {id:"p_inv", t:"Inverse: automapping DMX = m=T·d", c:"sonda", h:0,
+   d:"Identificación de sistema: el transporte es lineal en el DMX. Actúas una base de canales y estimas la matriz de transporte T columna a columna. T ES el layout, aprendido ópticamente.", r:["Sen et al. (2005) — dual photography / transport matrix."], p:["p_fi","p_obs"]},
+  {id:"p_mux", t:"Iluminación multiplexada (Hadamard)", c:"sonda", h:0,
+   d:"Encender muchos fixtures con códigos ortogonales y demultiplexar → mejor SNR que uno por uno.", r:["Schechner, Nayar & Belhumeur (2007) — multiplexed illumination."], p:["p_obs"]},
+  {id:"p_tri", t:"Triangulación 3D del rig", c:"sonda", h:0,
+   d:"Direcciones desde varias posiciones (IMU/odometría) → posición 3D de cada fixture sin layout previo.", r:["Hartley & Zisserman (2004) — MVG."], p:[]},
+  {id:"p_flick", t:"Flicker-ID por rolling shutter", c:"sonda", h:0,
+   d:"El obturador rodante decodifica el PWM de los LED como bandas. Códigos de parpadeo únicos e imperceptibles → ID de todos los fixtures a la vez. Defecto vuelto regalo.", r:["Comunicación por luz visible; rolling-shutter VLC."], p:["p_obs"]},
+  {id:"p_meta_rgb", t:"Metamerismo RGB (muro espectral)", c:"sonda", h:0,
+   d:"La cámara es RGB (3 bandas): dos espectros distintos colapsan al mismo color. Muro de resolución que se mitiga, no se elimina.", r:["Wyszecki & Stiles (1982) — Color Science."], p:["p_meta"]},
+  {id:"p_cal", t:"Calibración radiométrica", c:"sonda", h:0,
+   d:"Prerrequisito: RAW/DNG, fijar ISO/obturador/WB y linealizar el gamma para que el píxel sea proporcional a la radiancia. El 'sostener el estado' del instrumento.", r:["Debevec & Malik (1997) — HDR / respuesta de cámara."], p:["p_loop"]},
+  {id:"p_kal", t:"Lazo epistémico (Kalman / render inverso)", c:"sonda", h:0,
+   d:"Medir → inferir el rig → predecir la luz → relightear → comparar → refinar. Un estimador recursivo sobre el estado de iluminación.", r:["Kalman (1960); render inverso diferenciable."], p:["p_loop","p_fi"]},
+
+  // RENDER<->LLM
+  {id:"rllm", t:"Render ↔ LLM (isomorfismo)", c:"rllm", h:1,
+   d:"Ambos son muestreo condicional de una distribución de alta dimensión. La cámara y la palabra son coordenadas que condicionan el muestreo.", r:[], p:["p_fi","p_rs"]},
+  {id:"r_mc", t:"Monte Carlo: el ruido ES el cálculo", c:"rllm", h:0,
+   d:"El render es una esperanza E[f(X)] sobre caminos de luz aleatorios; el grano es una muestra de la media. Converge como 1/√N.", r:["Metropolis & Ulam (1949); Kajiya (1986)."], p:["p_obs"]},
+  {id:"r_dim", t:"Alta dimensión / maldición vencida", c:"rllm", h:0,
+   d:"El espacio de caminos es de dimensión no acotada; MC gana porque su error es casi independiente de la dimensión.", r:["Bellman (1957) — curse of dimensionality."], p:[]},
+  {id:"r_cam", t:"Cámara = query", c:"rllm", h:0,
+   d:"La cámara no es la que ve, es la que pregunta: parametriza qué rebanada del transporte de luz integras.", r:[], p:["p_rs"]},
+  {id:"r_samp", t:"LLM = muestreo condicional", c:"rllm", h:0,
+   d:"p(token|contexto); temperatura = azar; greedy = media/MAP. El prompt es la 'pose de cámara' del significado.", r:["Bengio et al. (2003) — modelos de lenguaje neuronales."], p:["p_rs"]},
+  {id:"r_att", t:"Atención re-renderiza el sentido", c:"rllm", h:0,
+   d:"El significado es contextual: la atención recomputa cada token a la luz de los demás. El contexto parametriza la query de significado.", r:["Vaswani et al. (2017) — Attention is All You Need."], p:["p_obs"]},
+  {id:"r_nf", t:"Campos neuronales = fusión literal", c:"rllm", h:0,
+   d:"Un NeRF es f(pose,dir)→radiancia: trazar rayos + evaluar una red de miles de dimensiones en cada muestra. La GPU que calcula 4000 dims y la que traza rayos son la misma.", r:["Mildenhall et al. (2020) — NeRF."], p:["p_fi"]},
+  {id:"r_novel", t:"Cámara que no existe = alucinación", c:"rllm", h:0,
+   d:"Una pose nunca capturada = novel view: el campo extrapola/alucina una imagen plausible. La cámara 'que tal vez no existe' es un query fuera del entrenamiento.", r:[], p:["p_rs"]},
+  {id:"r_diff", t:"Difusión: generar = denoise", c:"rllm", h:0,
+   d:"La difusión parte de ruido puro y se lo quita; el denoiser es primo del que limpia un render de pocas muestras. El azar es el sustrato de generar.", r:["Sohl-Dickstein et al. (2015); Ho, Jain & Abbeel (2020) — DDPM."], p:["p_obs"]},
+  {id:"r_loose", t:"Dónde afloja (física vs corpus)", c:"rllm", h:0,
+   d:"Kernels distintos (BVH/geometría vs matmul/atención); el render integra una función física, el LLM muestrea una estadística de corpus; baja-dim métrica vs alta-dim combinatoria.", r:[], p:["p_rs"]},
+
+  // MUROS SEMÁNTICOS
+  {id:"smuros", t:"Muros semánticos", c:"smuros", h:1,
+   d:"En el dominio del significado, los muros físicos se levantan pero aparece otra taxonomía. La libertad de la física es la pérdida de su verdad.", r:[], p:["p_rs","p_meta"]},
+  {id:"sm_ground", t:"Desanclaje (sin piso de verdad)", c:"smuros", h:0,
+   d:"Nada obliga al render semántico a obedecer la física; puede ser vívido, coherente y falso. La ausencia del muro físico es la presencia de este.", r:[], p:["p_rs"]},
+  {id:"sm_cov", t:"Cobertura / distribución", c:"smuros", h:0,
+   d:"Solo se renderiza desde el manifold entrenado; en el borde, se alucina. Análogo LLM de la 'novel view'.", r:[], p:[]},
+  {id:"sm_meta", t:"Metamerismo semántico", c:"smuros", h:0,
+   d:"El embedding, por más de 4000 dims, es proyección con pérdida: dos intenciones colapsan a un vector, y se resuelve con el prior cultural. Eco directo del metamerismo RGB.", r:[], p:["p_meta"]},
+  {id:"sm_one", t:"Realización única (1 spp)", c:"smuros", h:0,
+   d:"Recibes una muestra, no la distribución: una realización moldeada por temperatura y priors. Como un render a 1 muestra por píxel.", r:[], p:["p_rs"]},
+  {id:"sm_cult", t:"Cultura = centroide del corpus", c:"smuros", h:0,
+   d:"El vector de una palabra es el centroide de cómo la cultura la usó; se rellena lo subdeterminado con el promedio cultural.", r:["Firth (1957) — distributional semantics."], p:["p_meta"]},
+
+  // OBSERVAR
+  {id:"obs", t:"Observar antes de calcular", c:"obs", h:1,
+   d:"La observación no reemplaza el cálculo: lo comprime, y a veces revela que era el cálculo equivocado.", r:[], p:["p_obs"]},
+  {id:"ob_imp", t:"Importance sampling = observar antes de muestrear", c:"obs", h:0,
+   d:"El path tracing no dispara al azar uniforme: observa dónde está la luz y muestrea ahí. Misma integral, varianza colapsada.", r:["Kajiya (1986); Veach (1997) — tesis."], p:["p_obs"]},
+  {id:"ob_prune", t:"Atención sin poda prematura", c:"obs", h:0,
+   d:"El humano poda con priors ('ya lo revisé') y deja de mirar; la máquina re-observa donde nosotros cerramos la búsqueda.", r:[], p:["p_obs"]},
+  {id:"ob_sleep", t:"Big Sleep · SQLite", c:"obs", h:0,
+   d:"Agente LLM halló un buffer underflow explotable que el fuzzing y la revisión humana no vieron. Primer caso reclamado de vuln hallada por IA.", r:["Google Project Zero (2024) — From Naptime to Big Sleep."], p:["p_obs"]},
+  {id:"ob_curl", t:"curl · 100+ bugs / AI slop (espejo)", c:"obs", h:0,
+   d:"Tras años de fuzzers y auditorías, IA (bien usada) halló 100+ bugs reales. En paralelo, reportes-basura de IA hundieron el bug bounty: render sin analizar hecho crisis.", r:["Stenberg / The New Stack (2025) — curl & AI."], p:["p_obs","p_rs"]},
+  {id:"ob_at", t:"AlphaTensor", c:"obs", h:0,
+   d:"Multiplicación de matrices más rápida que Strassen (1969), tras ~50 años sin descubrirse.", r:["Fawzi et al. (2022) — Nature; Strassen (1969)."], p:["p_obs"]},
+  {id:"ob_ad", t:"AlphaDev → LLVM", c:"obs", h:0,
+   d:"Rutinas de ordenamiento más cortas, integradas a libc++; primera mejora en más de una década a un código dado por óptimo.", r:["Mankowitz et al. (2023) — Nature."], p:["p_obs"]},
+  {id:"ob_lbl", t:"Errores de etiqueta en benchmarks", c:"obs", h:0,
+   d:"Miles de etiquetas mal puestas en ImageNet/MMLU sobre las que la comunidad midió durante años. A la vista de todos; su ubicuidad las volvió invisibles.", r:["Northcutt, Athalye & Mueller (2021) — pervasive label errors."], p:["p_obs"]},
+
+  // ARTE
+  {id:"arte", t:"Fundamento artístico", c:"arte", h:1,
+   d:"La capa resolutiva legitima la libertad semántica: el proceso corre de verdad (índice), y solo se libera su interpretación (símbolo). Analizar-luego-renderizar-libre. No es slop.", r:[], p:["p_rs"]},
+  {id:"a_spine", t:"Espina resolutiva legitima lo semántico", c:"arte", h:0,
+   d:"El automapping realmente computa la sombra; por eso el juego estético flota libre pero se siente ganado. La confianza está ganada por el proceso de abajo, no fabricada.", r:[], p:["p_rs","p_obs"]},
+  {id:"a_bo", t:"Objeto frontera", c:"arte", h:0,
+   d:"Un mismo artefacto habita dos mundos (técnico y espectador) cumpliendo función distinta en cada uno, con identidad común. El automapping ES esto.", r:["Star & Griesemer (1989) — boundary objects."], p:["p_rs"]},
+  {id:"a_op", t:"Estética operacional", c:"arte", h:0,
+   d:"El placer de ver el mecanismo funcionar: el cálculo mismo como espectáculo. El automapping como tarea Y como obra.", r:["Neil Harris (1973) — Humbug; Jason Mittell (2006) — narrative complexity."], p:["p_rs"]},
+  {id:"a_veri", t:"Verosimilitud / diégesis", c:"arte", h:0,
+   d:"Se sostiene por coherencia interna y presentación sin titubeo, no por prueba externa. Régimen diegético, no demostrativo.", r:["Aristóteles — Poética (verosímil); Aarseth (1997) — cybertext."], p:["p_rs"]},
+  {id:"a_bs", t:"Bullshit de Frankfurt", c:"arte", h:0,
+   d:"Nombre filosófico —técnico, no insulto— del discurso indiferente a la verdad, orientado al efecto. Coincide con 'solo presentarse con seguridad intencional'. Cae del lado bueno porque se declara como obra.", r:["Frankfurt (1986/2005) — On Bullshit."], p:["p_rs"]},
+  {id:"a_peirce", t:"Índice / símbolo (Peirce)", c:"arte", h:0,
+   d:"La sombra es índice (efecto causal real de la luz) y símbolo (lectura cultural libre) a la vez. El arte vive en la coincidencia.", r:["Peirce — Collected Papers; semiótica."], p:["p_rs","p_fi"]},
+];
+
+/* ---------- ARISTAS ---------- */
+const hubs = {xio:"xio",muros:"muros",lazo:"lazo",orq:"orq",fabric:"fabric",splat:"splat",sonda:"sonda",rllm:"rllm",smuros:"smuros",obs:"obs",arte:"arte"};
+let E = [];
+// hub -> detalles de su categoría
+N.forEach(n=>{ if(n.h===0){ const hub=hubs[n.c]; if(hub) E.push({s:hub,t:n.id}); }});
+// spine -> hubs
+["lazo","sonda","rllm","obs","arte","fabric"].forEach(h=>E.push({s:"spine",t:h,cross:true}));
+// cross-links (hilos)
+const X=[
+  ["lazo","sonda","lazo epistémico"],["sonda","obs","observar/medir"],["lazo","orq","misma caja"],
+  ["p_meta_rgb","sm_meta","metamerismo"],["f_canon","s_gltf","canónico"],["xio_otg","f_ingest","USB puente"],
+  ["r_nf","splat","campo neuronal"],["rllm","arte","resolutivo/semántico"],["obs","arte","analizar→render"],
+  ["muros","smuros","muros mutan"],["p_inv","f_matrix","matriz T"],["sonda","rllm","ecuación en 2 sentidos"],
+  ["ob_imp","r_mc","importance sampling"],["fabric","orq","OSC/DMX"],["splat","sonda","relightable"],
+  ["m_root","o_termux","sin root"],["r_diff","r_mc","denoise"],
+];
+X.forEach(([s,t,l])=>E.push({s,t,label:l,cross:true}));
+
+/* ---------- LAYOUT SEMILLA (determinista) ---------- */
+const W=window.innerWidth, H=window.innerHeight;
+const byId={}; N.forEach(n=>byId[n.id]=n);
+const hubList=Object.keys(hubs);
+const R=Math.min(W,H)*0.34;
+byId.spine.x=W/2; byId.spine.y=H/2; byId.spine.fx=null;
+hubList.forEach((h,i)=>{ const a=-Math.PI/2 + i/hubList.length*2*Math.PI;
+  byId[h].x=W/2+Math.cos(a)*R; byId[h].y=H/2+Math.sin(a)*R; byId[h].a=a; });
+// detalles alrededor de su hub
+const childrenOf={}; hubList.forEach(h=>childrenOf[h]=[]);
+N.forEach(n=>{ if(n.h===0 && hubs[n.c]) childrenOf[hubs[n.c]].push(n); });
+hubList.forEach(h=>{ const hub=byId[h]; const ch=childrenOf[h]; const rr=70+ch.length*4;
+  ch.forEach((n,j)=>{ const a=hub.a + (-0.6 + 1.2*(ch.length>1?j/(ch.length-1):0.5));
+    n.x=hub.x+Math.cos(a)*rr; n.y=hub.y+Math.sin(a)*rr; }); });
+N.forEach(n=>{ if(n.x===undefined){n.x=W/2+(n.id.length%13-6)*30; n.y=H/2+(n.id.charCodeAt(1)%13-6)*30;} n.vx=0; n.vy=0; });
+
+/* ---------- FUERZAS ---------- */
+const adj={}; N.forEach(n=>adj[n.id]=[]);
+E.forEach(e=>{ if(byId[e.s]&&byId[e.t]){ adj[e.s].push(e.t); adj[e.t].push(e.s);} });
+let alpha=1;
+function tick(){
+  const REP=5200, DAMP=0.86;
+  for(let i=0;i<N.length;i++){ const a=N[i];
+    for(let j=i+1;j<N.length;j++){ const b=N[j];
+      let dx=a.x-b.x, dy=a.y-b.y, d2=dx*dx+dy*dy||0.01, d=Math.sqrt(d2);
+      const f=REP/d2; const fx=dx/d*f, fy=dy/d*f;
+      a.vx+=fx*alpha; a.vy+=fy*alpha; b.vx-=fx*alpha; b.vy-=fy*alpha;
+    }
+  }
+  E.forEach(e=>{ const a=byId[e.s], b=byId[e.t]; if(!a||!b)return;
+    const rest=e.cross?230:78; let dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||0.01;
+    const k=e.cross?0.008:0.02; const f=(d-rest)*k;
+    const fx=dx/d*f, fy=dy/d*f;
+    a.vx+=fx*alpha; a.vy+=fy*alpha; b.vx-=fx*alpha; b.vy-=fy*alpha;
+  });
+  N.forEach(n=>{ n.vx+=(W/2-n.x)*0.0016*alpha; n.vy+=(H/2-n.y)*0.0016*alpha;
+    if(n.fx!=null){n.x=n.fx;n.y=n.fy;n.vx=0;n.vy=0;return;}
+    n.vx*=DAMP; n.vy*=DAMP; n.x+=n.vx; n.y+=n.vy;
+  });
+  alpha*=0.992; if(alpha<0.02) alpha=0.02;
+}
+
+/* ---------- SVG ---------- */
+const NS="http://www.w3.org/2000/svg";
+const gEdges=document.getElementById("edges"), gNodes=document.getElementById("nodes");
+const edgeEls=[], labelEls=[];
+E.forEach(e=>{ const ln=document.createElementNS(NS,"line");
+  ln.setAttribute("class","edge"+(e.cross?" cross":"")); gEdges.appendChild(ln); e._el=ln; edgeEls.push(e);
+});
+const nodeEls={};
+N.forEach(n=>{ const g=document.createElementNS(NS,"g");
+  g.setAttribute("class","node "+(n.id==="spine"?"center":(n.h===1?"hub":"detail")));
+  const c=document.createElementNS(NS,"circle");
+  const r=n.id==="spine"?15:(n.h===1?20:8);
+  c.setAttribute("r",r); c.setAttribute("fill",CATS[n.c].color);
+  if(n.id==="spine"||n.h===1) c.setAttribute("filter","url(#glow)");
+  const t=document.createElementNS(NS,"text");
+  t.setAttribute("class","nlabel"+(n.h===0?" detail":"")); t.setAttribute("text-anchor","middle");
+  t.setAttribute("dy", n.id==="spine"? -22 : (n.h===1? -26 : 16));
+  // envolver título largo del spine
+  t.textContent = n.h===2 ? "Medir antes de calcular ·" : n.t;
+  if(n.h===2){ const t2=document.createElementNS(NS,"text"); t2.setAttribute("class","nlabel");
+    t2.setAttribute("text-anchor","middle"); t2.setAttribute("dy",-8); t2.textContent="Observar antes de renderizar";
+    g.appendChild(t2); n._t2=t2; }
+  g.appendChild(c); g.appendChild(t); gNodes.appendChild(g);
+  n._g=g; n._c=c; n._t=t; nodeEls[n.id]=g;
+  g.addEventListener("pointerdown",ev=>startDrag(ev,n));
+});
+function paint(){
+  edgeEls.forEach(e=>{ const a=byId[e.s], b=byId[e.t]; if(!a||!b)return;
+    e._el.setAttribute("x1",a.x); e._el.setAttribute("y1",a.y);
+    e._el.setAttribute("x2",b.x); e._el.setAttribute("y2",b.y); });
+  N.forEach(n=>{ n._g.setAttribute("transform",`translate(${n.x},${n.y})`); });
+}
+function loop(){ tick(); paint(); requestAnimationFrame(loop); } loop();
+
+/* ---------- ZOOM / PAN ---------- */
+const svg=document.getElementById("svg"), vp=document.getElementById("viewport");
+let view={x:0,y:0,k:1};
+function applyView(){ vp.setAttribute("transform",`translate(${view.x},${view.y}) scale(${view.k})`); }
+svg.addEventListener("wheel",ev=>{ ev.preventDefault();
+  const s=Math.exp(-ev.deltaY*0.0012); const nk=Math.min(3,Math.max(0.25,view.k*s));
+  const mx=ev.clientX, my=ev.clientY;
+  view.x=mx-(mx-view.x)*(nk/view.k); view.y=my-(my-view.y)*(nk/view.k); view.k=nk; applyView();
+},{passive:false});
+let panning=false, panStart=null;
+svg.addEventListener("pointerdown",ev=>{ if(ev.target.closest(".node"))return;
+  panning=true; panStart={x:ev.clientX-view.x,y:ev.clientY-view.y}; svg.classList.add("panning");
+  closePanel();
+});
+window.addEventListener("pointermove",ev=>{ if(panning){ view.x=ev.clientX-panStart.x; view.y=ev.clientY-panStart.y; applyView(); }});
+window.addEventListener("pointerup",()=>{ panning=false; svg.classList.remove("panning"); });
+
+/* ---------- DRAG NODOS ---------- */
+let drag=null;
+function toWorld(cx,cy){ return {x:(cx-view.x)/view.k, y:(cy-view.y)/view.k}; }
+function startDrag(ev,n){ ev.stopPropagation(); const p=toWorld(ev.clientX,ev.clientY);
+  drag={n, moved:0, offx:n.x-p.x, offy:n.y-p.y}; n.fx=n.x; n.fy=n.y; alpha=0.5; }
+window.addEventListener("pointermove",ev=>{ if(!drag)return; const p=toWorld(ev.clientX,ev.clientY);
+  drag.n.fx=p.x+drag.offx; drag.n.fy=p.y+drag.offy; drag.moved++; });
+window.addEventListener("pointerup",ev=>{ if(!drag)return;
+  if(drag.moved<4){ openPanel(drag.n); } drag.n.fx=null; drag.n.fy=null; drag=null; });
+
+/* ---------- HOVER: mostrar etiquetas de detalle ---------- */
+N.forEach(n=>{ if(n.h===0){
+  n._g.addEventListener("pointerenter",()=>n._t.classList.add("show"));
+  n._g.addEventListener("pointerleave",()=>{ if(!focusCat && !selected) n._t.classList.remove("show"); });
+}});
+
+/* ---------- PANEL ---------- */
+const panel=document.getElementById("panel");
+let selected=null;
+function openPanel(n){ selected=n;
+  document.getElementById("pcat").textContent=CATS[n.c].name;
+  document.getElementById("pcat").style.color=CATS[n.c].color;
+  document.getElementById("ptitle").textContent=n.t;
+  document.getElementById("pdesc").textContent=n.d;
+  const rw=document.getElementById("prefsWrap"), rl=document.getElementById("prefs");
+  rl.innerHTML=""; if(n.r&&n.r.length){ rw.style.display=""; n.r.forEach(x=>{const li=document.createElement("li");li.textContent=x;rl.appendChild(li);}); } else rw.style.display="none";
+  const tw=document.getElementById("ptagsWrap"), tg=document.getElementById("ptags");
+  tg.innerHTML=""; if(n.p&&n.p.length){ tw.style.display=""; n.p.forEach(x=>{const s=document.createElement("span");s.textContent=PRINS[x].name;tg.appendChild(s);}); } else tw.style.display="none";
+  panel.classList.add("open");
+  N.forEach(m=>m._g.classList.remove("hit")); n._g.classList.add("hit");
+  if(n.h===0) n._t.classList.add("show");
+}
+function closePanel(){ panel.classList.remove("open"); selected=null; N.forEach(m=>{m._g.classList.remove("hit"); if(m.h===0&&!focusCat)m._t.classList.remove("show");}); }
+document.getElementById("pclose").addEventListener("click",closePanel);
+
+/* ---------- LEYENDA / FILTROS ---------- */
+const catsWrap=document.getElementById("cats"); let focusCat=null;
+Object.entries(CATS).forEach(([k,v])=>{ if(k==="spine")return;
+  const c=document.createElement("div"); c.className="chip"; c.dataset.k=k;
+  c.innerHTML=`<span class="dot" style="background:${v.color}"></span>${v.name}`;
+  c.addEventListener("click",()=>{ focusCat = focusCat===k?null:k; updateFocus();
+    [...catsWrap.children].forEach(ch=>ch.classList.toggle("off", focusCat && ch.dataset.k!==focusCat)); });
+  catsWrap.appendChild(c);
+});
+function updateFocus(){
+  N.forEach(n=>{ const on = !focusCat || n.c===focusCat || n.id==="spine";
+    n._g.classList.toggle("faded", !on);
+    if(n.h===0) n._t.classList.toggle("show", !!focusCat && n.c===focusCat);
+  });
+  edgeEls.forEach(e=>{ const on=!focusCat || byId[e.s].c===focusCat || byId[e.t].c===focusCat;
+    e._el.classList.toggle("faded", !on && !e._el.classList.contains("hot")); });
+}
+
+/* ---------- HILOS TRANSVERSALES ---------- */
+const prinsWrap=document.getElementById("prins"); let activePrin=null;
+Object.entries(PRINS).forEach(([k,v])=>{ const c=document.createElement("div"); c.className="chip pchip"; c.dataset.p=k;
+  c.textContent=v.name;
+  c.addEventListener("click",()=>{ activePrin = activePrin===k?null:k;
+    [...prinsWrap.children].forEach(ch=>ch.classList.toggle("on", ch.dataset.p===activePrin));
+    highlightPrin(); });
+  prinsWrap.appendChild(c);
+});
+function highlightPrin(){
+  N.forEach(n=>{ const on=!activePrin || (n.p&&n.p.includes(activePrin));
+    n._g.classList.toggle("faded", !on);
+    if(n.h===0) n._t.classList.toggle("show", !!activePrin && on);
+  });
+  edgeEls.forEach(e=>{ const a=byId[e.s],b=byId[e.t];
+    const on=!activePrin || ((a.p&&a.p.includes(activePrin))&&(b.p&&b.p.includes(activePrin)));
+    e._el.classList.toggle("hot", !!activePrin && on && e.cross);
+    e._el.classList.toggle("faded", !!activePrin && !on);
+  });
+  if(activePrin) alpha=0.4;
+}
+
+/* ---------- BÚSQUEDA ---------- */
+document.getElementById("q").addEventListener("input",e=>{ const q=e.target.value.trim().toLowerCase();
+  if(!q){ N.forEach(n=>{n._g.classList.remove("faded"); if(n.h===0)n._t.classList.remove("show");}); edgeEls.forEach(x=>x._el.classList.remove("faded")); return; }
+  N.forEach(n=>{ const hit=(n.t+" "+n.d).toLowerCase().includes(q);
+    n._g.classList.toggle("faded",!hit); if(n.h===0)n._t.classList.toggle("show",hit); });
+  edgeEls.forEach(x=>x._el.classList.add("faded"));
+});
+
+/* ---------- RESET ---------- */
+document.getElementById("reset").addEventListener("click",()=>{ view={x:0,y:0,k:1}; applyView(); alpha=0.8; });
+applyView();
+</script>
+</body>
+</html>

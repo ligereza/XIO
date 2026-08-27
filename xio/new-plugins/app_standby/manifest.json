@@ -1,0 +1,9 @@
+{
+  "name": "App Standby Manager",
+  "version": "1.0.0",
+  "description": "Control de background: ver apps corriendo, forzar standby, restricción de batería por app, estadísticas de uso.",
+  "author": "Arena Agent",
+  "icon": "system",
+  "category": "system",
+  "permissions": ["apps", "system"]
+}

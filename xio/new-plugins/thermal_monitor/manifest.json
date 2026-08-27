@@ -1,0 +1,9 @@
+{
+  "name": "Thermal Monitor Pro",
+  "version": "1.0.0",
+  "description": "Monitoreo de temperatura por zonas (CPU, GPU, battery), histórico, alertas, profile-switch automático, log de throttling.",
+  "author": "Arena Agent",
+  "icon": "battery",
+  "category": "battery",
+  "permissions": ["system", "battery"]
+}
