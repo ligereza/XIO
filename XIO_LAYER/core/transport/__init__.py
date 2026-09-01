@@ -15,11 +15,14 @@ from .transport import (
     TransportPolicy,
 )
 from .protocols import ArtNetEnvelope, OscEnvelope
+from .connectivity import ConnectivityProbe, ConnectivityProbeError, probe_connectivity
 
 __all__ = [
     "ArtNetEnvelope",
     "ConnectionState",
     "ConnectionStatus",
+    "ConnectivityProbe",
+    "ConnectivityProbeError",
     "DeliveryReceipt",
     "DeliveryStatus",
     "Endpoint",
@@ -31,4 +34,5 @@ __all__ = [
     "Transport",
     "TransportMessage",
     "TransportPolicy",
+    "probe_connectivity",
 ]

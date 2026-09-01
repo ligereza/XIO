@@ -33,7 +33,7 @@ XIO_LAYER/
 │   ├── events/      log idempotente y replay por secuencia de ingestión
 │   ├── snapshots/   proyección, snapshots y checkpoints atómicos
 │   ├── audit/       permisos revocables y ledger hash-chained
-│   ├── transport/   política y transporte local/red inyectable
+│   ├── transport/   política, transporte y probe de conectividad inyectable
 │   └── sessions/    peers, handshake y fan-out dirigido
 ├── adapters/xio/    frontera de observación y ejecución explícita
 ├── adapters/        puentes de protocolo inyectables, incluido LUCIDA/MULTI

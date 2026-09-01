@@ -41,6 +41,7 @@ class ConnectionState(str, Enum):
     DEGRADED = "degraded"
     BLOCKED = "blocked"
     ERROR = "error"
+    UNKNOWN = "unknown"
 
 
 class DeliveryStatus(str, Enum):
@@ -202,13 +203,58 @@ class ConnectionStatus:
     packets_lost: int = 0
     last_sequence: int | None = None
     last_error: str | None = None
+    reason: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.state, ConnectionState):
+            raise ValueError("state must be a ConnectionState")
         object.__setattr__(self, "checked_at", require_utc(self.checked_at, "checked_at"))
         if self.latency_ms is not None and self.latency_ms < 0:
             raise ValueError("latency_ms cannot be negative")
         if min(self.packets_sent, self.packets_received, self.packets_lost) < 0:
             raise ValueError("packet counters cannot be negative")
+        if self.reason is not None and (not isinstance(self.reason, str) or not self.reason.strip()):
+            raise ValueError("reason must be a non-empty string when provided")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "endpoint": self.endpoint.to_dict(),
+            "state": self.state.value,
+            "checked_at": self.checked_at.isoformat(),
+            "latency_ms": self.latency_ms,
+            "packets_sent": self.packets_sent,
+            "packets_received": self.packets_received,
+            "packets_lost": self.packets_lost,
+            "last_sequence": self.last_sequence,
+            "last_error": self.last_error,
+            "reason": self.reason,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ConnectionStatus":
+        if not isinstance(data, Mapping):
+            raise ValueError("connection status must be a mapping")
+        endpoint_data = data.get("endpoint")
+        if not isinstance(endpoint_data, Mapping):
+            raise ValueError("connection status endpoint must be a mapping")
+        return cls(
+            endpoint=Endpoint(
+                scheme=str(endpoint_data["scheme"]),
+                address=str(endpoint_data["address"]),
+                medium=str(endpoint_data["medium"]),
+                scope=str(endpoint_data["scope"]),
+                port=endpoint_data.get("port"),
+            ),
+            state=ConnectionState(str(data["state"])),
+            checked_at=datetime.fromisoformat(str(data["checked_at"])),
+            latency_ms=data.get("latency_ms"),
+            packets_sent=int(data.get("packets_sent", 0)),
+            packets_received=int(data.get("packets_received", 0)),
+            packets_lost=int(data.get("packets_lost", 0)),
+            last_sequence=data.get("last_sequence"),
+            last_error=data.get("last_error"),
+            reason=data.get("reason"),
+        )
 
     @property
     def loss_ratio(self) -> float:

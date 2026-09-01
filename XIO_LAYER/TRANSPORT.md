@@ -13,6 +13,24 @@ DeliveryReceipt = accepted/duplicate/error + latency + sequence
 ConnectionStatus = state + latency + sent/received/lost + last_error
 ```
 
+`ConnectionStatus` also carries the host-supplied `reason` and serializes to a
+stable dictionary with the endpoint, state and `checked_at` timestamp.
+
+## Connectivity capability boundary
+
+`ConnectivityProbe` is an injected host interface. Its `probe(endpoint)` method
+returns the existing `ConnectionStatus` contract, so Ethernet, Wi-Fi, hotspot
+and router reports use the same `medium`, `scope`, `state`, optional latency and
+loss counters, timestamp and reason. `ConnectionState.UNKNOWN` means that the
+host has not established a known state; it is not a guessed measurement.
+
+`probe_connectivity` validates the returned status and endpoint, then returns
+the host report unchanged. It does not create fallback values, open sockets,
+scan, discover peers or turn an exception into a synthetic status. The host
+owns the measurement method, permissions and any network effects. `UNKNOWN`,
+`BLOCKED` and `ERROR` are valid explicit reports and should include a reason
+when the host has one.
+
 ### Medio y alcance son dimensiones diferentes
 
 | Campo | Valores | Uso |
