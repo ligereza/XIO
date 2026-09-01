@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any, Mapping
+import json
 import unittest
 
 from XIO_LAYER.adapters import (
@@ -62,6 +63,64 @@ def make_record() -> dict[str, Any]:
 
 
 class SourceAdapterRegistryTests(unittest.TestCase):
+    def test_empty_registry_has_empty_json_safe_snapshot(self):
+        snapshot = SourceAdapterRegistry().snapshot()
+
+        self.assertEqual(snapshot, [])
+        self.assertEqual(json.loads(json.dumps(snapshot, sort_keys=True)), [])
+
+    def test_snapshot_is_sorted_and_repeated_calls_are_identical(self):
+        registry = SourceAdapterRegistry()
+        registry.register(
+            TestSourceAdapter(
+                "resolume",
+                ("z.event", "a.event"),
+                ("z.capability", "a.capability"),
+            )
+        )
+        registry.register(
+            TestSourceAdapter(
+                "adobe",
+                ("timeline.frame", "timeline.cue"),
+                ("source.send", "source.observe"),
+            )
+        )
+
+        first = registry.snapshot()
+        second = registry.snapshot()
+
+        self.assertEqual(first, second)
+        self.assertEqual(
+            first,
+            [
+                {
+                    "source_app": "adobe",
+                    "supported_event_types": ["timeline.cue", "timeline.frame"],
+                    "capabilities": ["source.observe", "source.send"],
+                },
+                {
+                    "source_app": "resolume",
+                    "supported_event_types": ["a.event", "z.event"],
+                    "capabilities": ["a.capability", "z.capability"],
+                },
+            ],
+        )
+        self.assertEqual(json.loads(json.dumps(first, sort_keys=True)), first)
+
+    def test_snapshot_mutation_does_not_change_registry_or_expose_adapter(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter()
+        registry.register(adapter)
+        expected = registry.snapshot()
+        snapshot = registry.snapshot()
+        snapshot[0]["supported_event_types"].append("unregistered.event")
+        snapshot[0]["capabilities"].clear()
+        snapshot.append({"source_app": "leak", "supported_event_types": [], "capabilities": []})
+
+        self.assertEqual(registry.snapshot(), expected)
+        self.assertNotIn("adapter", json.dumps(snapshot))
+        self.assertNotIn("convert", json.dumps(snapshot))
+
     def test_register_retrieve_and_route_preserves_event_contract(self):
         registry = SourceAdapterRegistry()
         adapter = TestSourceAdapter()

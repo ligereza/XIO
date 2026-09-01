@@ -81,6 +81,21 @@ class SourceAdapterRegistry:
     def source_apps(self) -> tuple[str, ...]:
         return tuple(sorted(self._adapters))
 
+    def snapshot(self) -> list[dict[str, Any]]:
+        """Return a deterministic JSON-safe copy of public adapter declarations."""
+
+        return [
+            {
+                "source_app": registered.declaration.source_app,
+                "supported_event_types": sorted(registered.declaration.supported_event_types),
+                "capabilities": sorted(registered.declaration.capabilities),
+            }
+            for registered in sorted(
+                self._adapters.values(),
+                key=lambda item: item.declaration.source_app,
+            )
+        ]
+
     def route(
         self,
         source_app: str,
