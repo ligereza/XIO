@@ -31,6 +31,15 @@ owns the measurement method, permissions and any network effects. `UNKNOWN`,
 `BLOCKED` and `ERROR` are valid explicit reports and should include a reason
 when the host has one.
 
+`adapters/connectivity_events.py` converts this measured status to an
+`ApplicationEvent` with `event_type="connectivity.status"` and
+`channel="transport"`. The payload contains the serialized status plus the
+derived `loss_ratio`; provenance identifies the host probe and status contract.
+The event is suitable for LUCIDA/MULTI reducers or analysis, but it is an
+observation and never an order. The adapter requires the host to provide the
+received timestamp and sequence, so it does not invent timing or connectivity
+data.
+
 ### Medio y alcance son dimensiones diferentes
 
 | Campo | Valores | Uso |
