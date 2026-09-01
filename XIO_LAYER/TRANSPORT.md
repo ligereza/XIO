@@ -194,7 +194,10 @@ caller registers peer + endpoint
   connected peers when the caller explicitly asks for the connected set;
 - `fan_out(..., required_capability=...)` returns `capability_missing` for a
   connected peer that lacks the requested capability and does not send the
-  signal; omitting the argument preserves the existing fan-out behavior;
+  capability in the negotiated handshake snapshot; omitting the argument
+  preserves the existing fan-out behavior;
+- negotiated capabilities are replaced only by an accepted handshake and are
+  cleared on disconnect, revocation, handshake start or handshake failure;
 - revocation changes the peer to `blocked` and prevents later delivery;
 - disconnect changes the peer to `disconnected` and prevents later delivery;
 - replay, observation and fan-out never create an `ExplicitAction`.

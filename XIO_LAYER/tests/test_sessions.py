@@ -156,6 +156,63 @@ class FanOutTests(unittest.TestCase):
         self.assertEqual(ack.fingerprint, signal.fingerprint)
         self.assertEqual(len(self.transport.messages()), message_count)
 
+    def test_capability_gate_uses_negotiated_capabilities_not_stale_descriptor(self):
+        stale_bob = peer("bob")
+        stale_bob = PeerDescriptor(
+            peer_id=stale_bob.peer_id,
+            protocol_version=stale_bob.protocol_version,
+            endpoint=stale_bob.endpoint,
+            capabilities=frozenset({"signal.observe", "signal.send", "media.render"}),
+        )
+        actual_bob = peer("bob")
+        sender = PeerSessionManager(self.alice, self.transport, authorized_peers=[stale_bob])
+        receiver = PeerSessionManager(actual_bob, self.transport, authorized_peers=[self.alice])
+        attempt = sender.initiate_handshake("bob")
+        ack = receiver.accept_handshake(attempt.request)
+        self.assertTrue(sender.complete_handshake(ack))
+
+        signal = self.make_signal(1, "signal-capability-stale-descriptor")
+        message_count = len(self.transport.messages())
+        result = sender.fan_out(signal, ["bob"], required_capability="media.render")["bob"]
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.status, AckStatus.CAPABILITY_MISSING.value)
+        self.assertEqual(len(self.transport.messages()), message_count)
+
+    def test_reconnect_refreshes_negotiated_capabilities(self):
+        bob_with_render = PeerDescriptor(
+            peer_id="bob",
+            protocol_version="1.0",
+            endpoint=peer("bob").endpoint,
+            capabilities=frozenset({"signal.observe", "signal.send", "media.render"}),
+        )
+        sender = PeerSessionManager(self.alice, self.transport, authorized_peers=[bob_with_render])
+        first_receiver = PeerSessionManager(bob_with_render, self.transport, authorized_peers=[self.alice])
+        first_attempt = sender.initiate_handshake("bob")
+        first_ack = first_receiver.accept_handshake(first_attempt.request)
+        self.assertTrue(sender.complete_handshake(first_ack))
+        first_signal = self.make_signal(1, "signal-render-before-reconnect")
+        self.assertTrue(
+            sender.fan_out(first_signal, ["bob"], required_capability="media.render")["bob"].accepted
+        )
+
+        sender.disconnect("bob")
+        bob_without_render = peer("bob")
+        second_receiver = PeerSessionManager(bob_without_render, self.transport, authorized_peers=[self.alice])
+        second_attempt = sender.initiate_handshake("bob")
+        second_ack = second_receiver.accept_handshake(second_attempt.request)
+        self.assertTrue(sender.complete_handshake(second_ack))
+        second_signal = self.make_signal(2, "signal-render-after-reconnect")
+        result = sender.fan_out(
+            second_signal,
+            ["bob"],
+            required_capability="media.render",
+        )["bob"]
+
+        self.assertFalse(result.accepted)
+        self.assertEqual(result.status, AckStatus.CAPABILITY_MISSING.value)
+        self.assertEqual(result.error, AckStatus.CAPABILITY_MISSING.value)
+
     def test_fan_out_without_capability_requirement_keeps_existing_behavior(self):
         signal = self.make_signal(1, "signal-capability-optional")
         acks = self.sender.fan_out(signal, ["bob"])
