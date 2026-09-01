@@ -119,6 +119,23 @@ class SourceAdapterRegistry:
             and required.issubset(registered.declaration.capabilities)
         ]
 
+    def route_plan(
+        self,
+        event_type: str,
+        required_capabilities: frozenset[str] | set[str] | tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        """Return declarative routing metadata without selecting or executing an adapter."""
+
+        _validate_identifier(event_type, "event_type")
+        required = _read_query_identifiers(required_capabilities)
+        candidates = self.candidates(event_type, required)
+        return {
+            "status": "matched" if candidates else "no_match",
+            "event_type": event_type,
+            "required_capabilities": sorted(required),
+            "candidates": candidates,
+        }
+
     def route(
         self,
         source_app: str,

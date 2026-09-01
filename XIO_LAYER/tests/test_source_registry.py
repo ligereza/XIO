@@ -137,6 +137,34 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         self.assertEqual([item["source_app"] for item in render_candidates], ["resolume"])
         self.assertEqual(registry.candidates("timeline.cue", {"source.missing"}), [])
 
+    def test_route_plan_reports_match_without_executing_an_adapter(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter("resolume", ("timeline.cue",), ("source.observe", "source.render"))
+        registry.register(adapter)
+
+        plan = registry.route_plan("timeline.cue", {"source.render"})
+
+        self.assertEqual(plan["status"], "matched")
+        self.assertEqual(plan["event_type"], "timeline.cue")
+        self.assertEqual(plan["required_capabilities"], ["source.render"])
+        self.assertEqual([item["source_app"] for item in plan["candidates"]], ["resolume"])
+        self.assertEqual(adapter.calls, [])
+
+    def test_route_plan_reports_explicit_no_match(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("adobe", ("timeline.cue",), ("source.observe",)))
+
+        self.assertEqual(
+            registry.route_plan("timeline.cue", {"source.render"}),
+            {
+                "status": "no_match",
+                "event_type": "timeline.cue",
+                "required_capabilities": ["source.render"],
+                "candidates": [],
+            },
+        )
+        self.assertEqual(SourceAdapterRegistry().route_plan("timeline.cue")["status"], "no_match")
+
     def test_candidates_are_deterministic_sorted_and_copy_isolated(self):
         registry = SourceAdapterRegistry()
         registry.register(TestSourceAdapter("z-app", ("z.event", "a.event"), ("z.cap", "a.cap")))
@@ -152,6 +180,22 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         self.assertEqual([item["source_app"] for item in second], ["a-app", "z-app"])
         self.assertEqual(second[0]["supported_event_types"], ["a.event", "z.event"])
         self.assertEqual(second[0]["capabilities"], ["a.cap", "z.cap"])
+        self.assertEqual(json.loads(json.dumps(second, sort_keys=True)), second)
+
+    def test_route_plan_is_deterministic_and_copy_isolated(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("z-app", ("cue.event",), ("z.cap", "a.cap")))
+        registry.register(TestSourceAdapter("a-app", ("cue.event",), ("z.cap", "a.cap")))
+
+        first = registry.route_plan("cue.event", {"a.cap"})
+        second = registry.route_plan("cue.event", {"a.cap"})
+        first["required_capabilities"].append("leaked.cap")
+        first["candidates"][0]["capabilities"].clear()
+        first["candidates"].append({"source_app": "leaked", "supported_event_types": [], "capabilities": []})
+
+        self.assertEqual(second, registry.route_plan("cue.event", {"a.cap"}))
+        self.assertEqual([item["source_app"] for item in second["candidates"]], ["a-app", "z-app"])
+        self.assertEqual(second["candidates"][0]["capabilities"], ["a.cap", "z.cap"])
         self.assertEqual(json.loads(json.dumps(second, sort_keys=True)), second)
 
     def test_empty_and_no_match_candidates_are_explicit_empty_lists(self):
@@ -173,6 +217,10 @@ class SourceAdapterRegistryTests(unittest.TestCase):
             registry.candidates("timeline.cue", {"cap." + chr(0xE9)})
         with self.assertRaises(InvalidSourceAdapterError):
             registry.candidates("timeline.cue", "source.observe")
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.route_plan("evento." + chr(0xE9))
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.route_plan("timeline.cue", {"cap." + chr(0xE9)})
 
     def test_register_retrieve_and_route_preserves_event_contract(self):
         registry = SourceAdapterRegistry()

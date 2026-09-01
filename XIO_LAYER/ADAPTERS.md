@@ -59,3 +59,9 @@ sorted deterministically. An empty list is the explicit no-match result.
 as registration. Invalid queries are rejected before registry state is read for
 routing, and valid queries never expose records, paths, credentials, network
 state or callable objects.
+
+`SourceAdapterRegistry.route_plan(event_type, required_capabilities=())`
+returns the same candidate declarations together with the query and a status
+of `matched` or `no_match`. It is planning metadata only: it does not choose a
+winner, inspect an adapter or call `convert()`. LUCIDA/MULTI must make any
+source selection explicit before calling `route()`.
