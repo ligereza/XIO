@@ -89,6 +89,57 @@ descubrimiento indiscriminado, firmware, control remoto ni port forwarding.
 
 TRANSPORT no debe absorber esas responsabilidades.
 
+## Canonical application events
+
+`core/events/application.py` defines `ApplicationEvent`, an app-independent
+contract with these fields:
+
+```text
+source_app, event_type, channel, payload,
+source_timestamp, received_timestamp,
+session_id, peer_id, sequence, raw_hash, provenance
+```
+
+The contract also carries an `event_id` and `schema_version` for replay and
+migration. Source and received timestamps are timezone-aware UTC values. A
+source clock that is ahead of reception is preserved as evidence and does not
+change sequence ordering.
+
+`adapters/protocol_events.py` provides injected conversion from `OscEnvelope`
+and `ArtNetEnvelope`. It does not read a socket or discover an application:
+
+- OSC becomes `event_type="osc.message"` with its address, arguments and
+  timetag retained in `payload` and `provenance`;
+- Art-Net becomes `event_type="artnet.frame"` with opcode, universe, sequence,
+  physical and reversible base64 DMX bytes retained;
+- the protocol envelope is not flattened into the other protocol's shape;
+- `raw_hash` identifies the canonical reversible payload representation;
+- `source_app`, `session_id`, `peer_id`, timestamps and sequence are supplied
+  by the caller.
+
+`core/events/replay_jsonl.py` provides `ApplicationEventLog` and `replay_jsonl`.
+JSONL replay sorts by `sequence`, then received timestamp and event id, skips
+identical duplicate ids, and rejects a conflicting fingerprint. The reducer
+only returns state. No replay path creates or dispatches an action.
+
+### Consumo por LUCIDA/MULTI
+
+LUCIDA/MULTI can consume the canonical stream at the event boundary:
+
+```text
+OSC or Art-Net input
+        -> ProtocolEventAdapter
+        -> ApplicationEventLog / replay_jsonl
+        -> LUCIDA or MULTI reducer/analysis
+        -> optional human-readable proposal
+```
+
+They should depend on `ApplicationEvent`, not on Xiaomi, Android, ADB, router
+details or the original application protocol. `provenance` remains available
+for explanation and debugging, while `payload` remains available for exact
+protocol-aware consumers. This contract does not define pedagogy, inference,
+automation or execution authority.
+
 ## Sesiones multi-peer
 
 `core/sessions/peer_session.py` adds a session layer above `Transport` without
