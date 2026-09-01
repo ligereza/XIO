@@ -36,8 +36,37 @@ XIO_LAYER/
 │   ├── transport/   política y transporte local/red inyectable
 │   └── sessions/    peers, handshake y fan-out dirigido
 ├── adapters/xio/    frontera de observación y ejecución explícita
+├── adapters/        puentes de protocolo inyectables, incluido LUCIDA/MULTI
 └── tests/           pruebas unitarias e integración ligera
 ```
+
+## Contrato de consumo LUCIDA/MULTI
+
+LUCIDA y MULTI reciben un `ApplicationEvent` mediante un `TransportMessage`
+con dos marcas obligatorias: el canal `application-event` y el envelope
+`xio.application-event` con `schema_version` 1. El payload del transporte es
+el `ApplicationEvent.to_dict()` completo; por eso conserva `event_id`,
+`session_id`, `peer_id`, `sequence`, ambos timestamps, `raw_hash`,
+`provenance` y el payload codificado de forma reversible, incluidos bytes.
+
+El puente [lucida_bridge.py](adapters/lucida_bridge.py) sólo convierte y
+valida. No abre sockets, no descubre peers y no ejecuta acciones. El host
+decide el writer o transporte concreto, y LUCIDA/MULTI puede entregar el
+evento validado a `ApplicationEventLog` o a replay. La deduplicación de
+entrega usa `event_id` como `idempotency_key`; la secuencia del evento debe
+coincidir con la secuencia del transporte.
+
+Flujo de consumo:
+
+```text
+ApplicationEvent
+  -> application_event_to_transport
+  -> TransportMessage(application-event, xio.application-event)
+  -> transport_to_application_event
+  -> EventLog / snapshot replay
+```
+
+La conversión nunca crea una ruta `event -> action`.
 
 ## Ejecución
 
