@@ -96,6 +96,29 @@ class SourceAdapterRegistry:
             )
         ]
 
+    def candidates(
+        self,
+        event_type: str,
+        required_capabilities: frozenset[str] | set[str] | tuple[str, ...] = (),
+    ) -> list[dict[str, Any]]:
+        """Return declarations matching an event type and required capabilities."""
+
+        _validate_identifier(event_type, "event_type")
+        required = _read_query_identifiers(required_capabilities)
+        return [
+            {
+                "source_app": registered.declaration.source_app,
+                "supported_event_types": sorted(registered.declaration.supported_event_types),
+                "capabilities": sorted(registered.declaration.capabilities),
+            }
+            for registered in sorted(
+                self._adapters.values(),
+                key=lambda item: item.declaration.source_app,
+            )
+            if event_type in registered.declaration.supported_event_types
+            and required.issubset(registered.declaration.capabilities)
+        ]
+
     def route(
         self,
         source_app: str,
@@ -143,6 +166,20 @@ def _read_identifier_set(adapter: SourceAdapter, field_name: str, *, allow_empty
         raise InvalidSourceAdapterError(f"{field_name} cannot be empty")
     for value in normalized:
         _validate_identifier(value, field_name)
+    return normalized
+
+
+def _read_query_identifiers(values: frozenset[str] | set[str] | tuple[str, ...]) -> frozenset[str]:
+    if isinstance(values, str) or values is None:
+        raise InvalidSourceAdapterError("required_capabilities must be an iterable of identifiers")
+    try:
+        normalized = frozenset(values)
+    except TypeError as exc:
+        raise InvalidSourceAdapterError(
+            "required_capabilities must be an iterable of identifiers"
+        ) from exc
+    for value in normalized:
+        _validate_identifier(value, "required_capability")
     return normalized
 
 
