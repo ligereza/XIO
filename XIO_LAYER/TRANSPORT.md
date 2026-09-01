@@ -88,3 +88,38 @@ descubrimiento indiscriminado, firmware, control remoto ni port forwarding.
 - `GATEWAY`: reenvía mediante políticas explícitas.
 
 TRANSPORT no debe absorber esas responsabilidades.
+
+## Sesiones multi-peer
+
+`core/sessions/peer_session.py` adds a session layer above `Transport` without
+changing the transport boundary:
+
+```text
+caller registers peer + endpoint
+        -> explicit handshake request
+        -> explicit handshake ack
+        -> connected session
+        -> directed signal fan-out
+        -> delivery ack per peer
+```
+
+- `PeerDescriptor` contains `peer_id`, `protocol_version`, `capabilities` and
+  the caller-provided endpoint;
+- `HandshakeRequest` and `HandshakeAck` carry `session_id` and explicit status;
+- only authorized peers can connect; unknown peers are rejected;
+- major protocol version mismatch is rejected; minor versions may interoperate;
+- `SignalEnvelope` preserves `message_id`, `sequence`, source/session metadata
+  and the original OSC or Art-Net envelope;
+- `DeliveryAck` reports accepted, duplicate, sequence error, blocked,
+  disconnected or version/peer rejection;
+- fan-out is directed to the peer ids provided by the caller, or to already
+  connected peers when the caller explicitly asks for the connected set;
+- revocation changes the peer to `blocked` and prevents later delivery;
+- disconnect changes the peer to `disconnected` and prevents later delivery;
+- replay, observation and fan-out never create an `ExplicitAction`.
+
+The current implementation is an offline session state machine. It does not
+perform discovery, scan networks, open public sockets, authenticate identities,
+or guarantee delivery on a real network. A real host must provide the
+transport writer, identity/authentication policy, persistence and retry policy
+as separate layers.

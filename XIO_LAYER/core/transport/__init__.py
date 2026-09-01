@@ -10,6 +10,7 @@ from .transport import (
     JsonLineTransport,
     NetworkMedium,
     NetworkScope,
+    Transport,
     TransportMessage,
     TransportPolicy,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "NetworkMedium",
     "NetworkScope",
     "OscEnvelope",
+    "Transport",
     "TransportMessage",
     "TransportPolicy",
 ]

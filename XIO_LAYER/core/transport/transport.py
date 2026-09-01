@@ -99,6 +99,15 @@ class Endpoint:
     def key(self) -> str:
         return f"{self.scheme}|{self.address}|{self.port or ''}|{self.scope.value}"
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scheme": self.scheme,
+            "address": self.address,
+            "medium": self.medium.value,
+            "scope": self.scope.value,
+            "port": self.port,
+        }
+
 
 @dataclass(frozen=True, slots=True)
 class TransportMessage:
@@ -254,7 +263,7 @@ class InMemoryTransport:
         self.clock = clock
         self.enforce_sequence = enforce_sequence
         self._messages: list[TransportMessage] = []
-        self._seen: dict[str, str] = {}
+        self._seen: dict[tuple[str, str], str] = {}
         self._accepted_sequences: dict[tuple[str, str], int] = {}
         self._statuses: dict[str, ConnectionStatus] = {}
         self._lock = RLock()
@@ -296,7 +305,12 @@ class InMemoryTransport:
 
         with self._lock:
             fingerprint = message.fingerprint
-            duplicate_keys = [key for key in (message.message_id, message.dedupe_key) if key in self._seen]
+            endpoint_key = message.destination.key()
+            duplicate_keys = [
+                (endpoint_key, key)
+                for key in (message.message_id, message.dedupe_key)
+                if (endpoint_key, key) in self._seen
+            ]
             if duplicate_keys:
                 if any(self._seen[key] != fingerprint for key in duplicate_keys):
                     self._set_status(message.destination, ConnectionState.ERROR, error=DeliveryStatus.IDEMPOTENCY_CONFLICT.value)
@@ -340,8 +354,8 @@ class InMemoryTransport:
 
             delivered_at = self.clock()
             latency_ms = max(0.0, (delivered_at - message.sent_at).total_seconds() * 1000)
-            self._seen[message.message_id] = fingerprint
-            self._seen[message.dedupe_key] = fingerprint
+            self._seen[(endpoint_key, message.message_id)] = fingerprint
+            self._seen[(endpoint_key, message.dedupe_key)] = fingerprint
             self._messages.append(message)
             if message.sequence is not None:
                 self._accepted_sequences[sequence_key] = message.sequence
