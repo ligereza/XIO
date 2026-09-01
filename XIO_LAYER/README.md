@@ -60,3 +60,12 @@ No hay dependencias de Flask, ADB, Termux, Android o servicios externos.
 - el transporte no abre sockets ni elige destinos por sí solo;
 - XIO aporta observación y ejecución, pero XIO Layer no le entrega decisión
   automática.
+
+## Technical language rule
+
+Code and machine-readable contracts use English ASCII only. This includes
+identifiers, file and directory names, imports, branch-facing technical names,
+event keys, fixtures, tests, and parseable logs. Do not place accented letters,
+non-ASCII punctuation, or locale-specific characters in those elements. User
+interface text and explanatory documentation may be localized, but must stay
+separate from technical identifiers and contracts.
