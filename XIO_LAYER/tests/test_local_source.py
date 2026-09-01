@@ -15,7 +15,7 @@ from XIO_LAYER.adapters import (
     prepare_adapter_handoff,
     transport_to_application_event,
 )
-from XIO_LAYER.core.audit import AuditLedger
+from XIO_LAYER.core.audit import AuditLedger, JsonLineAuditLedger
 from XIO_LAYER.core.events import ApplicationEventLog
 from XIO_LAYER.core.transport import Endpoint
 
@@ -63,20 +63,20 @@ class LocalEventSourceTests(unittest.TestCase):
             selected_at=T0,
             selection_id="fixture-selection",
         )
-        audit = AuditLedger()
-        handoffs = LocalAdapterEventSource(FIXTURE_PATH).prepare_handoffs(
-            registry,
-            selection,
-            source="xio-layer",
-            destination=DESTINATION,
-            audit=audit,
-            privacy_policy=PrivacyPolicy(
-                allowed_payload_keys=frozenset({"cue"}),
-                allowed_provenance_keys=frozenset({"origin"}),
-            ),
-        )
-        events = tuple(transport_to_application_event(item.message) for item in handoffs)
         with tempfile.TemporaryDirectory() as directory:
+            audit = JsonLineAuditLedger(Path(directory) / "handoff-audit.jsonl")
+            handoffs = LocalAdapterEventSource(FIXTURE_PATH).prepare_handoffs(
+                registry,
+                selection,
+                source="xio-layer",
+                destination=DESTINATION,
+                audit=audit,
+                privacy_policy=PrivacyPolicy(
+                    allowed_payload_keys=frozenset({"cue"}),
+                    allowed_provenance_keys=frozenset({"origin"}),
+                ),
+            )
+            events = tuple(transport_to_application_event(item.message) for item in handoffs)
             log = ApplicationEventLog(Path(directory) / "lucida-events.jsonl")
             for event in events:
                 self.assertTrue(log.append(event))
@@ -86,6 +86,7 @@ class LocalEventSourceTests(unittest.TestCase):
                     "last_cue": event.payload["cue"],
                 }
             )
+            persisted_audit = JsonLineAuditLedger(Path(directory) / "handoff-audit.jsonl")
 
         self.assertEqual(len(handoffs), 2)
         self.assertEqual([event.sequence for event in events], [1, 2])
@@ -93,8 +94,8 @@ class LocalEventSourceTests(unittest.TestCase):
         self.assertNotIn("private_note", json.dumps([event.to_dict() for event in events], sort_keys=True))
         self.assertEqual(len(adapter.calls), 2)
         self.assertEqual(replay.state, {"count": 2, "last_cue": "outro"})
-        self.assertEqual(len(audit.entries()), 2)
-        self.assertTrue(audit.verify())
+        self.assertEqual(len(persisted_audit.entries()), 2)
+        self.assertTrue(persisted_audit.verify())
 
     def test_source_refuses_records_outside_the_caller_selected_route(self):
         registry = SourceAdapterRegistry()

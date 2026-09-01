@@ -285,6 +285,38 @@ class AuditEntry:
         data["entry_hash"] = self.entry_hash
         return data
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "AuditEntry":
+        if not isinstance(data, Mapping):
+            raise ValueError("audit entry must be a mapping")
+        required = {
+            "audit_id",
+            "recorded_at",
+            "event_type",
+            "subject_id",
+            "actor_id",
+            "outcome",
+            "details",
+            "previous_hash",
+            "entry_hash",
+        }
+        if set(data) != required:
+            raise ValueError("audit entry fields do not match the contract")
+        details = data["details"]
+        if not isinstance(details, Mapping):
+            raise ValueError("audit entry details must be a mapping")
+        return cls(
+            audit_id=str(data["audit_id"]),
+            recorded_at=datetime.fromisoformat(str(data["recorded_at"])),
+            event_type=str(data["event_type"]),
+            subject_id=str(data["subject_id"]),
+            actor_id=None if data["actor_id"] is None else str(data["actor_id"]),
+            outcome=str(data["outcome"]),
+            details=details,
+            previous_hash=str(data["previous_hash"]),
+            entry_hash=str(data["entry_hash"]),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class Checkpoint:

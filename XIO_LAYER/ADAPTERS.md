@@ -93,6 +93,11 @@ The projected event remains a normal `ApplicationEvent`: it can be appended to
 it cannot select another adapter or execute an action. Successful and rejected
 handoffs are hash-chained in `AuditLedger`.
 
+`JsonLineAuditLedger` is the restart-safe local implementation of that port:
+it writes one JSONL entry at a time, fsyncs before exposing the entry in memory,
+revalidates the full hash chain on startup, and rejects malformed or tampered
+files.
+
 ## Replayable local source
 
 `LocalAdapterEventSource` reads a caller-owned JSONL file as a read-only source.
