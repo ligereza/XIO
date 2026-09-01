@@ -192,6 +192,9 @@ caller registers peer + endpoint
   disconnected or version/peer rejection;
 - fan-out is directed to the peer ids provided by the caller, or to already
   connected peers when the caller explicitly asks for the connected set;
+- `fan_out(..., required_capability=...)` returns `capability_missing` for a
+  connected peer that lacks the requested capability and does not send the
+  signal; omitting the argument preserves the existing fan-out behavior;
 - revocation changes the peer to `blocked` and prevents later delivery;
 - disconnect changes the peer to `disconnected` and prevents later delivery;
 - replay, observation and fan-out never create an `ExplicitAction`.

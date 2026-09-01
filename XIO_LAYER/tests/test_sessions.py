@@ -128,6 +128,41 @@ class FanOutTests(unittest.TestCase):
         self.assertTrue(self.bob_receiver.receive_signal(signal, "alice").accepted)
         self.assertTrue(self.carol_receiver.receive_signal(signal, "alice").accepted)
 
+    def test_capability_gate_allows_a_connected_peer_with_capability(self):
+        signal = self.make_signal(1, "signal-capability-allowed")
+        acks = self.sender.fan_out(
+            signal,
+            ["bob"],
+            required_capability="signal.send",
+        )
+
+        self.assertTrue(acks["bob"].accepted)
+        self.assertEqual(acks["bob"].status, AckStatus.ACCEPTED.value)
+        self.assertTrue(self.bob_receiver.receive_signal(signal, "alice").accepted)
+
+    def test_capability_gate_denies_a_connected_peer_without_capability(self):
+        signal = self.make_signal(1, "signal-capability-denied")
+        message_count = len(self.transport.messages())
+        ack = self.sender.fan_out(
+            signal,
+            ["bob"],
+            required_capability="media.render",
+        )["bob"]
+
+        self.assertFalse(ack.accepted)
+        self.assertEqual(ack.status, AckStatus.CAPABILITY_MISSING.value)
+        self.assertEqual(ack.error, AckStatus.CAPABILITY_MISSING.value)
+        self.assertEqual(ack.sequence, signal.sequence)
+        self.assertEqual(ack.fingerprint, signal.fingerprint)
+        self.assertEqual(len(self.transport.messages()), message_count)
+
+    def test_fan_out_without_capability_requirement_keeps_existing_behavior(self):
+        signal = self.make_signal(1, "signal-capability-optional")
+        acks = self.sender.fan_out(signal, ["bob"])
+
+        self.assertTrue(acks["bob"].accepted)
+        self.assertEqual(acks["bob"].status, AckStatus.ACCEPTED.value)
+
     def test_unknown_peer_and_revoked_peer_are_blocked(self):
         signal = self.make_signal(1, "signal-blocked")
         unknown = self.sender.fan_out(signal, ["ghost"])

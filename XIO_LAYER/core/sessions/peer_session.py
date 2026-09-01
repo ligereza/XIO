@@ -54,6 +54,7 @@ class AckStatus(str, Enum):
     VERSION_INCOMPATIBLE = "version_incompatible"
     DISCONNECTED = "disconnected"
     BLOCKED = "blocked"
+    CAPABILITY_MISSING = "capability_missing"
     ERROR = "error"
 
 
@@ -421,9 +422,13 @@ class PeerSessionManager:
         self,
         signal: SignalEnvelope,
         peer_ids: Iterable[str] | None = None,
+        *,
+        required_capability: str | None = None,
     ) -> dict[str, DeliveryAck]:
         if signal.source_peer_id != self.local_peer.peer_id:
             raise ValueError("signal source_peer_id must match local peer")
+        if required_capability is not None and not required_capability.strip():
+            raise ValueError("required_capability cannot be empty")
         targets = list(peer_ids) if peer_ids is not None else [
             peer_id for peer_id, session in self._sessions.items()
             if session.state is PeerSessionState.CONNECTED and peer_id not in self._revoked
@@ -441,6 +446,13 @@ class PeerSessionManager:
                 acks[peer_id] = DeliveryAck(
                     peer_id, signal.message_id, False, AckStatus.DISCONNECTED.value,
                     sequence=signal.sequence, error=AckStatus.DISCONNECTED.value,
+                )
+                continue
+            if required_capability is not None and required_capability not in session.peer.capabilities:
+                acks[peer_id] = DeliveryAck(
+                    peer_id, signal.message_id, False, AckStatus.CAPABILITY_MISSING.value,
+                    sequence=signal.sequence, fingerprint=signal.fingerprint,
+                    error=AckStatus.CAPABILITY_MISSING.value,
                 )
                 continue
 
