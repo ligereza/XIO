@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import json
+import tempfile
 from unittest.mock import patch
 import unittest
 
@@ -11,7 +12,8 @@ from XIO_LAYER.adapters import (
     ConnectivityEventError,
     connectivity_status_to_event,
 )
-from XIO_LAYER.core.events import ApplicationEvent
+from XIO_LAYER.core.events import ApplicationEvent, ApplicationEventLog
+from XIO_LAYER.core.events.replay_jsonl import replay_events as replay_application_events
 from XIO_LAYER.core.transport import (
     ConnectionState,
     ConnectionStatus,
@@ -102,6 +104,39 @@ class ConnectivityEventTests(unittest.TestCase):
         self.assertIsNone(blocked.payload["latency_ms"])
         self.assertEqual(blocked.payload["reason"], "policy_denied")
 
+    def test_stale_status_keeps_source_time_separate_from_received_time(self):
+        stale_status = ConnectionStatus(
+            endpoint=Endpoint(
+                "memory",
+                "wifi-host",
+                medium=NetworkMedium.WIFI,
+                scope=NetworkScope.LAN,
+            ),
+            state=ConnectionState.DEGRADED,
+            checked_at=T0 - timedelta(minutes=5),
+            latency_ms=None,
+            packets_sent=10,
+            packets_received=6,
+            packets_lost=4,
+            reason="stale_measurement",
+        )
+
+        event = connectivity_status_to_event(
+            stale_status,
+            source_app="host-monitor",
+            session_id="session-1",
+            peer_id="peer-1",
+            sequence=4,
+            received_timestamp=T0,
+        )
+
+        self.assertEqual(event.source_timestamp, T0 - timedelta(minutes=5))
+        self.assertEqual(event.received_timestamp, T0)
+        self.assertFalse(event.source_clock_is_ahead)
+        self.assertEqual(event.payload["state"], "degraded")
+        self.assertEqual(event.payload["loss_ratio"], 0.4)
+        self.assertEqual(event.payload["reason"], "stale_measurement")
+
     def test_event_round_trip_keeps_timezone_provenance_and_stable_hash(self):
         status = make_status(NetworkMedium.ETHERNET)
         event = connectivity_status_to_event(
@@ -142,6 +177,57 @@ class ConnectivityEventTests(unittest.TestCase):
 
         self.assertEqual(event.payload["state"], "connected")
         self.assertEqual(socket_factory.call_count, 0)
+
+    def test_identical_status_events_are_idempotent_in_log_and_replay(self):
+        status = make_status(NetworkMedium.ETHERNET)
+        first = connectivity_status_to_event(
+            status,
+            source_app="host-monitor",
+            session_id="session-1",
+            peer_id="peer-1",
+            sequence=1,
+            received_timestamp=T0,
+        )
+        duplicate = connectivity_status_to_event(
+            status,
+            source_app="host-monitor",
+            session_id="session-1",
+            peer_id="peer-1",
+            sequence=1,
+            received_timestamp=T0,
+        )
+
+        def reducer(state, event):
+            next_state = dict(state)
+            next_state["count"] = next_state.get("count", 0) + 1
+            return next_state
+
+        replayed = replay_application_events((first, duplicate), reducer)
+        self.assertEqual(first.event_id, duplicate.event_id)
+        self.assertEqual(first.fingerprint, duplicate.fingerprint)
+        self.assertEqual(replayed.applied_events, 1)
+        self.assertEqual(replayed.duplicate_events, 1)
+        self.assertEqual(replayed.state, {"count": 1})
+
+        with tempfile.TemporaryDirectory() as directory:
+            log = ApplicationEventLog(f"{directory}/connectivity.jsonl")
+            self.assertTrue(log.append(first))
+            self.assertFalse(log.append(duplicate))
+            self.assertEqual(len(log.events()), 1)
+
+    def test_malformed_status_is_rejected_by_the_adapter(self):
+        malformed = make_status(NetworkMedium.ROUTER)
+        object.__setattr__(malformed, "latency_ms", -1.0)
+
+        with self.assertRaises(ConnectivityEventError):
+            connectivity_status_to_event(
+                malformed,
+                source_app="host-monitor",
+                session_id="session-1",
+                peer_id="peer-1",
+                sequence=1,
+                received_timestamp=T0,
+            )
 
     def test_invalid_input_is_rejected_without_inventing_status(self):
         with self.assertRaises(ConnectivityEventError):

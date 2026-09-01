@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from typing import Any, Mapping
 
 from ..core.contracts import content_hash
@@ -33,7 +34,16 @@ def connectivity_status_to_event(
     if not isinstance(status, ConnectionStatus):
         raise ConnectivityEventError("adapter accepts ConnectionStatus only")
 
-    status_payload = status.to_dict()
+    try:
+        status_payload = status.to_dict()
+        normalized_status = ConnectionStatus.from_dict(status_payload)
+        if normalized_status.to_dict() != status_payload:
+            raise ValueError("status normalization changed the payload")
+        json.dumps(status_payload, ensure_ascii=True, allow_nan=False)
+    except Exception as exc:
+        raise ConnectivityEventError(f"invalid ConnectionStatus: {exc}") from exc
+
+    status_payload = dict(status_payload)
     status_payload["loss_ratio"] = status.loss_ratio
     stable_identity = {
         "source_app": source_app,
