@@ -40,6 +40,14 @@ XIO_LAYER/
 └── tests/           pruebas unitarias e integración ligera
 ```
 
+`adapters/handoff.py` adds the explicit caller-selected adapter boundary. The
+caller obtains a deterministic route plan, selects one declared candidate,
+then prepares a privacy-projected LUCIDA/MULTI message. Preparation is not
+delivery: no transport `send`, socket, discovery or action execution occurs.
+The default allowlist exports no payload or provenance keys and anonymizes
+session and peer ids. `AuditLedger` receives only safe selection and fingerprint
+metadata; the resulting event remains replayable through `ApplicationEventLog`.
+
 ## Contrato de consumo LUCIDA/MULTI
 
 LUCIDA y MULTI reciben un `ApplicationEvent` mediante un `TransportMessage`

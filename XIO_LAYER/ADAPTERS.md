@@ -65,3 +65,30 @@ returns the same candidate declarations together with the query and a status
 of `matched` or `no_match`. It is planning metadata only: it does not choose a
 winner, inspect an adapter or call `convert()`. LUCIDA/MULTI must make any
 source selection explicit before calling `route()`.
+
+## Explicit selection and handoff
+
+`SourceAdapterRegistry.select_candidate(...)` records the caller's exact
+choice as an `AdapterSelection`. The selection contains the caller id, event
+type, required capabilities and a fingerprint of the route plan. If a supplied
+plan is changed, stale, has no candidates, or names a non-candidate source, the
+selection is rejected. No adapter is called during planning or selection.
+
+`prepare_adapter_handoff(...)` revalidates that selection immediately before
+calling only the selected adapter's `convert()` method. It creates a
+`TransportMessage` for the existing LUCIDA/MULTI application-event bridge but
+does not call `send()`, open sockets, discover peers or invoke an XIO executor.
+The caller retains the explicit decision to deliver the prepared message.
+
+The default `PrivacyPolicy` exports no payload or source provenance keys and
+replaces session and peer identifiers with opaque hashes. A caller must
+explicitly allow top-level payload/provenance keys to export them. The handoff
+adds only safe provenance markers (`xio_handoff_id`, selection id, privacy
+policy and an original event fingerprint). The audit ledger records route and
+fingerprint metadata, never the source record, payload, credentials or network
+address.
+
+The projected event remains a normal `ApplicationEvent`: it can be appended to
+`ApplicationEventLog` and replayed by sequence. Replay reconstructs state only;
+it cannot select another adapter or execute an action. Successful and rejected
+handoffs are hash-chained in `AuditLedger`.

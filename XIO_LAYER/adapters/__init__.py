@@ -15,14 +15,25 @@ from .lucida_bridge import (
     application_event_to_transport,
     transport_to_application_event,
 )
+from .handoff import (
+    AdapterHandoff,
+    AdapterHandoffError,
+    PrivacyPolicy,
+    PrivacyPolicyError,
+    prepare_adapter_handoff,
+)
 from .protocol_events import ProtocolEventAdapter
 from .source_registry import (
+    AdapterSelection,
+    CandidateNotAvailableError,
     DuplicateSourceAdapterError,
     InvalidSourceAdapterError,
+    NoRouteMatchError,
     SourceAdapter,
     SourceAdapterDeclaration,
     SourceAdapterRegistry,
     SourceAdapterRegistryError,
+    StaleRoutePlanError,
     UndeclaredEventTypeError,
     UnknownSourceAdapterError,
 )
@@ -33,8 +44,15 @@ __all__ = [
     "APPLICATION_EVENT_CHANNEL",
     "APPLICATION_EVENT_ENVELOPE_TYPE",
     "APPLICATION_EVENT_SCHEMA_VERSION",
+    "AdapterHandoff",
+    "AdapterHandoffError",
+    "AdapterSelection",
+    "CandidateNotAvailableError",
     "LucidaApplicationEnvelope",
     "LucidaBridgeError",
+    "NoRouteMatchError",
+    "PrivacyPolicy",
+    "PrivacyPolicyError",
     "ProtocolEventAdapter",
     "application_event_to_transport",
     "ConnectivityEventError",
@@ -45,7 +63,9 @@ __all__ = [
     "SourceAdapterDeclaration",
     "SourceAdapterRegistry",
     "SourceAdapterRegistryError",
+    "StaleRoutePlanError",
     "transport_to_application_event",
     "UndeclaredEventTypeError",
     "UnknownSourceAdapterError",
+    "prepare_adapter_handoff",
 ]

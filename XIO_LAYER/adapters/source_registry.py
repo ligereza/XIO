@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Mapping, Protocol
 
+from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
 
 
@@ -28,6 +30,18 @@ class UndeclaredEventTypeError(SourceAdapterRegistryError):
     """Raised when a source adapter did not declare an event type."""
 
 
+class StaleRoutePlanError(SourceAdapterRegistryError):
+    """Raised when a caller selects from a route plan that is no longer current."""
+
+
+class CandidateNotAvailableError(SourceAdapterRegistryError):
+    """Raised when the caller selects a source that is not a current candidate."""
+
+
+class NoRouteMatchError(SourceAdapterRegistryError):
+    """Raised when a valid route query has no adapter candidate."""
+
+
 class SourceAdapter(Protocol):
     """Adapter contract for already validated source records."""
 
@@ -45,6 +59,43 @@ class SourceAdapterDeclaration:
     source_app: str
     supported_event_types: frozenset[str]
     capabilities: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterSelection:
+    """Caller-owned selection; it grants no execution authority."""
+
+    selection_id: str
+    source_app: str
+    event_type: str
+    required_capabilities: tuple[str, ...]
+    plan_fingerprint: str
+    caller_id: str
+    selected_at: datetime
+
+    def __post_init__(self) -> None:
+        _validate_identifier(self.selection_id, "selection_id")
+        _validate_identifier(self.source_app, "source_app")
+        _validate_identifier(self.event_type, "event_type")
+        _validate_identifier(self.caller_id, "caller_id")
+        if not isinstance(self.plan_fingerprint, str) or not self.plan_fingerprint.strip():
+            raise InvalidSourceAdapterError("plan_fingerprint must be a non-empty string")
+        normalized = tuple(sorted(set(self.required_capabilities)))
+        for value in normalized:
+            _validate_identifier(value, "required_capability")
+        object.__setattr__(self, "required_capabilities", normalized)
+        object.__setattr__(self, "selected_at", require_utc(self.selected_at, "selected_at"))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "selection_id": self.selection_id,
+            "source_app": self.source_app,
+            "event_type": self.event_type,
+            "required_capabilities": list(self.required_capabilities),
+            "plan_fingerprint": self.plan_fingerprint,
+            "caller_id": self.caller_id,
+            "selected_at": self.selected_at.isoformat(),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +187,60 @@ class SourceAdapterRegistry:
             "candidates": candidates,
         }
 
+    def select_candidate(
+        self,
+        *,
+        source_app: str,
+        event_type: str,
+        caller_id: str,
+        required_capabilities: frozenset[str] | set[str] | tuple[str, ...] = (),
+        plan: Mapping[str, Any] | None = None,
+        selected_at: datetime | None = None,
+        selection_id: str | None = None,
+    ) -> AdapterSelection:
+        """Validate one caller choice against the current declarative plan."""
+
+        _validate_identifier(source_app, "source_app")
+        _validate_identifier(caller_id, "caller_id")
+        required = _read_query_identifiers(required_capabilities)
+        current_plan = self.route_plan(event_type, required)
+        if plan is not None and dict(plan) != current_plan:
+            raise StaleRoutePlanError("route plan is stale or was modified")
+        if current_plan["status"] == "no_match":
+            raise NoRouteMatchError(
+                f"no adapter matches event_type={event_type!r} and required capabilities"
+            )
+        if source_app not in {item["source_app"] for item in current_plan["candidates"]}:
+            raise CandidateNotAvailableError(
+                f"source adapter is not a current candidate: {source_app}"
+            )
+        return AdapterSelection(
+            selection_id=selection_id or str(uuid4()),
+            source_app=source_app,
+            event_type=event_type,
+            required_capabilities=tuple(sorted(required)),
+            plan_fingerprint=content_hash(current_plan),
+            caller_id=caller_id,
+            selected_at=selected_at or utc_now(),
+        )
+
+    def validate_selection(self, selection: AdapterSelection) -> None:
+        """Reject a selection if its candidate or route plan is no longer valid."""
+
+        if not isinstance(selection, AdapterSelection):
+            raise TypeError("selection must be an AdapterSelection")
+        current_plan = self.route_plan(selection.event_type, selection.required_capabilities)
+        if current_plan["status"] == "no_match":
+            raise NoRouteMatchError(
+                f"no adapter matches event_type={selection.event_type!r} and required capabilities"
+            )
+        if content_hash(current_plan) != selection.plan_fingerprint:
+            raise StaleRoutePlanError("selected route plan is no longer current")
+        if selection.source_app not in {item["source_app"] for item in current_plan["candidates"]}:
+            raise CandidateNotAvailableError(
+                f"source adapter is not a current candidate: {selection.source_app}"
+            )
+
     def route(
         self,
         source_app: str,
@@ -208,12 +313,16 @@ def _validate_identifier(value: Any, field_name: str) -> None:
 
 
 __all__ = [
+    "AdapterSelection",
+    "CandidateNotAvailableError",
     "DuplicateSourceAdapterError",
     "InvalidSourceAdapterError",
+    "NoRouteMatchError",
     "SourceAdapter",
     "SourceAdapterDeclaration",
     "SourceAdapterRegistry",
     "SourceAdapterRegistryError",
+    "StaleRoutePlanError",
     "UndeclaredEventTypeError",
     "UnknownSourceAdapterError",
 ]
