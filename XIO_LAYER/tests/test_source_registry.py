@@ -1,0 +1,172 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Mapping
+import unittest
+
+from XIO_LAYER.adapters import (
+    DuplicateSourceAdapterError,
+    InvalidSourceAdapterError,
+    ProtocolEventAdapter,
+    SourceAdapterRegistry,
+    UndeclaredEventTypeError,
+    UnknownSourceAdapterError,
+)
+from XIO_LAYER.core.contracts import content_hash
+from XIO_LAYER.core.events import ApplicationEvent
+from XIO_LAYER.core.transport import ArtNetEnvelope, OscEnvelope
+
+
+T0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+
+
+class TestSourceAdapter:
+    def __init__(self, source_app="adobe", event_types=("timeline.cue",), capabilities=("source.observe",)):
+        self.source_app = source_app
+        self.supported_event_types = set(event_types)
+        self.capabilities = set(capabilities)
+        self.calls = []
+
+    def convert(self, record: Mapping[str, Any], event_type: str) -> ApplicationEvent:
+        self.calls.append((record, event_type))
+        return ApplicationEvent(
+            event_id=record["event_id"],
+            source_app=self.source_app,
+            event_type=event_type,
+            channel=record["channel"],
+            payload=record["payload"],
+            source_timestamp=record["source_timestamp"],
+            received_timestamp=record["received_timestamp"],
+            session_id=record["session_id"],
+            peer_id=record["peer_id"],
+            sequence=record["sequence"],
+            raw_hash=record["raw_hash"],
+            provenance=record["provenance"],
+        )
+
+
+def make_record() -> dict[str, Any]:
+    payload = {"cue": "intro", "value": 7}
+    return {
+        "event_id": "source-event-1",
+        "channel": "timeline",
+        "payload": payload,
+        "source_timestamp": T0,
+        "received_timestamp": T0,
+        "session_id": "session-1",
+        "peer_id": "peer-1",
+        "sequence": 1,
+        "raw_hash": content_hash(payload),
+        "provenance": {"origin": "test-source"},
+    }
+
+
+class SourceAdapterRegistryTests(unittest.TestCase):
+    def test_register_retrieve_and_route_preserves_event_contract(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter()
+        declaration = registry.register(adapter)
+        record = make_record()
+
+        event = registry.route("adobe", "timeline.cue", record)
+
+        self.assertIs(registry.get_adapter("adobe"), adapter)
+        self.assertEqual(declaration.source_app, "adobe")
+        self.assertEqual(declaration.supported_event_types, frozenset({"timeline.cue"}))
+        self.assertEqual(declaration.capabilities, frozenset({"source.observe"}))
+        self.assertEqual(event.event_id, record["event_id"])
+        self.assertEqual(event.sequence, record["sequence"])
+        self.assertEqual(event.source_timestamp, T0)
+        self.assertEqual(event.received_timestamp, T0)
+        self.assertEqual(event.raw_hash, record["raw_hash"])
+        self.assertEqual(event.provenance, record["provenance"])
+        self.assertEqual(adapter.calls, [(record, "timeline.cue")])
+
+    def test_duplicate_and_non_ascii_declarations_do_not_mutate_registry(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("adobe"))
+        before = registry.source_apps()
+
+        with self.assertRaises(DuplicateSourceAdapterError):
+            registry.register(TestSourceAdapter("adobe", ("other.event",)))
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.register(TestSourceAdapter("resolume" + chr(0xE9)))
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.register(TestSourceAdapter("valid-app", ("evento." + chr(0xE9),)))
+
+        self.assertEqual(registry.source_apps(), before)
+
+    def test_unknown_source_and_undeclared_event_do_not_call_adapter_or_mutate_state(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter()
+        registry.register(adapter)
+        record = make_record()
+        before = registry.source_apps()
+
+        with self.assertRaises(UnknownSourceAdapterError):
+            registry.route("resolume", "timeline.cue", record)
+        with self.assertRaises(UndeclaredEventTypeError):
+            registry.route("adobe", "timeline.frame", record)
+
+        self.assertEqual(adapter.calls, [])
+        self.assertEqual(registry.source_apps(), before)
+        self.assertEqual(record["sequence"], 1)
+
+    def test_registered_declaration_is_immutable_after_adapter_metadata_changes(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter()
+        registry.register(adapter)
+        adapter.supported_event_types.add("timeline.frame")
+        adapter.capabilities.add("source.execute")
+
+        declaration = registry.declaration("adobe")
+
+        self.assertEqual(declaration.supported_event_types, frozenset({"timeline.cue"}))
+        self.assertEqual(declaration.capabilities, frozenset({"source.observe"}))
+        with self.assertRaises(UndeclaredEventTypeError):
+            registry.route("adobe", "timeline.frame", make_record())
+
+    def test_invalid_adapter_shape_is_rejected(self):
+        class InvalidAdapter:
+            source_app = "valid-app"
+            supported_event_types = ()
+            capabilities = ()
+
+        with self.assertRaises(InvalidSourceAdapterError):
+            SourceAdapterRegistry().register(InvalidAdapter())
+
+    def test_protocol_adapter_routes_declared_osc_and_artnet_types(self):
+        registry = SourceAdapterRegistry()
+        adapter = ProtocolEventAdapter("resolume", "session-1", "peer-1")
+        registry.register(adapter)
+
+        osc_event = registry.route(
+            "resolume",
+            "osc.message",
+            {
+                "envelope": OscEnvelope("/cue", ("intro",)),
+                "channel": "signals",
+                "sequence": 1,
+                "source_timestamp": T0,
+                "received_timestamp": T0,
+            },
+        )
+        artnet_event = registry.route(
+            "resolume",
+            "artnet.frame",
+            {
+                "envelope": ArtNetEnvelope(universe=2, data=b"\x01\x02"),
+                "channel": "dmx",
+                "sequence": 2,
+                "source_timestamp": T0,
+                "received_timestamp": T0,
+            },
+        )
+
+        self.assertEqual(osc_event.event_type, "osc.message")
+        self.assertEqual(artnet_event.event_type, "artnet.frame")
+        self.assertEqual(artnet_event.payload["data_base64"], "AQI=")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -17,6 +17,43 @@ class ProtocolEventAdapter:
     session_id: str
     peer_id: str
 
+    @property
+    def supported_event_types(self) -> frozenset[str]:
+        return frozenset({"osc.message", "artnet.frame"})
+
+    @property
+    def capabilities(self) -> frozenset[str]:
+        return frozenset({"protocol.osc", "protocol.artnet"})
+
+    def convert(self, record: Mapping[str, Any], event_type: str) -> ApplicationEvent:
+        if not isinstance(record, Mapping):
+            raise ValueError("protocol source record must be a mapping")
+        if event_type == "osc.message":
+            envelope = record["envelope"]
+            if not isinstance(envelope, OscEnvelope):
+                raise TypeError("osc source record requires OscEnvelope")
+            return self.from_osc(
+                envelope,
+                channel=record["channel"],
+                sequence=record["sequence"],
+                source_timestamp=record.get("source_timestamp"),
+                received_timestamp=record.get("received_timestamp"),
+                provenance=record.get("provenance"),
+            )
+        if event_type == "artnet.frame":
+            envelope = record["envelope"]
+            if not isinstance(envelope, ArtNetEnvelope):
+                raise TypeError("artnet source record requires ArtNetEnvelope")
+            return self.from_artnet(
+                envelope,
+                channel=record["channel"],
+                sequence=record["sequence"],
+                source_timestamp=record["source_timestamp"],
+                received_timestamp=record.get("received_timestamp"),
+                provenance=record.get("provenance"),
+            )
+        raise ValueError(f"unsupported protocol event type: {event_type}")
+
     def from_osc(
         self,
         envelope: OscEnvelope,
