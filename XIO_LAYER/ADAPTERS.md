@@ -92,3 +92,15 @@ The projected event remains a normal `ApplicationEvent`: it can be appended to
 `ApplicationEventLog` and replayed by sequence. Replay reconstructs state only;
 it cannot select another adapter or execute an action. Successful and rejected
 handoffs are hash-chained in `AuditLedger`.
+
+## Replayable local source
+
+`LocalAdapterEventSource` reads a caller-owned JSONL file as a read-only source.
+It validates timestamps, ids, payload/provenance JSON safety and exact fields,
+deduplicates identical event ids, rejects conflicting duplicates, and returns
+records ordered by ingestion `sequence`. `prepare_handoffs(...)` requires an
+already-created `AdapterSelection` and rejects records belonging to another
+source or event type. It prepares one handoff per record and never delivers or
+executes them. The fixture
+`tests/fixtures/lucida_handoff_records.jsonl` covers source replay, redaction,
+the LUCIDA/MULTI envelope, audit and application-event replay together.

@@ -47,6 +47,9 @@ delivery: no transport `send`, socket, discovery or action execution occurs.
 The default allowlist exports no payload or provenance keys and anonymizes
 session and peer ids. `AuditLedger` receives only safe selection and fingerprint
 metadata; the resulting event remains replayable through `ApplicationEventLog`.
+`adapters/local_source.py` supplies a read-only JSONL source that deduplicates
+and replays records by ingestion sequence before handing them to that selected
+route. It does not choose a route or send a message.
 
 ## Contrato de consumo LUCIDA/MULTI
 

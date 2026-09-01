@@ -22,6 +22,12 @@ from .handoff import (
     PrivacyPolicyError,
     prepare_adapter_handoff,
 )
+from .local_source import (
+    DuplicateLocalEventError,
+    LocalAdapterEventSource,
+    LocalEventRecord,
+    LocalEventSourceError,
+)
 from .protocol_events import ProtocolEventAdapter
 from .source_registry import (
     AdapterSelection,
@@ -48,8 +54,12 @@ __all__ = [
     "AdapterHandoffError",
     "AdapterSelection",
     "CandidateNotAvailableError",
+    "DuplicateLocalEventError",
     "LucidaApplicationEnvelope",
     "LucidaBridgeError",
+    "LocalAdapterEventSource",
+    "LocalEventRecord",
+    "LocalEventSourceError",
     "NoRouteMatchError",
     "PrivacyPolicy",
     "PrivacyPolicyError",
