@@ -1,4 +1,4 @@
-"""Small protocols that keep LIMEN independent of any device or framework."""
+"""Small protocols that keep XIO Layer independent of any device or framework."""
 
 from __future__ import annotations
 

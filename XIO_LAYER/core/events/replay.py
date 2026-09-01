@@ -26,7 +26,7 @@ def replay_events(
 
     Replay has no action dispatcher and cannot create or execute an action.
     ``occurred_at`` is intentionally not used for ordering: source clocks can
-    drift, while the event-log sequence represents what LIMEN actually saw.
+    drift, while the event-log sequence represents what XIO Layer actually saw.
     """
 
     state = dict(initial_state or {})

@@ -1,9 +1,9 @@
-# LIMEN
+# XIO Layer
 
 Infraestructura reutilizable para una capa adaptativa entre usuario,
 dispositivos y aplicaciones.
 
-LIMEN extrae de XIO sólo la infraestructura transversal: eventos, tiempo,
+XIO Layer extrae de XIO sólo la infraestructura transversal: eventos, tiempo,
 snapshots, transporte, permisos, auditoría, replay y recuperación. No contiene
 lógica de Android ni decide acciones pedagógicas o de dispositivo.
 
@@ -27,7 +27,7 @@ ejecutar.
 ## Estructura
 
 ```text
-LIMEN/
+XIO_LAYER/
 ├── core/
 │   ├── contracts/   modelos y protocolos estables
 │   ├── events/      log idempotente y replay por secuencia de ingestión
@@ -43,7 +43,7 @@ LIMEN/
 Desde la raíz del repositorio:
 
 ```text
-python -m unittest discover -s LIMEN/tests -v
+python -m unittest discover -s XIO_LAYER/tests -v
 ```
 
 No hay dependencias de Flask, ADB, Termux, Android o servicios externos.
@@ -58,5 +58,5 @@ No hay dependencias de Flask, ADB, Termux, Android o servicios externos.
 - un checkpoint corrupto no bloquea la recuperación: se informa y se reconstruye
   desde eventos;
 - el transporte no abre sockets ni elige destinos por sí solo;
-- XIO aporta observación y ejecución, pero LIMEN no le entrega decisión
+- XIO aporta observación y ejecución, pero XIO Layer no le entrega decisión
   automática.

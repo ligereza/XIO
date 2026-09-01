@@ -1,4 +1,4 @@
-"""Explicit contracts shared by LIMEN components."""
+"""Explicit contracts shared by XIO Layer components."""
 
 from .models import (
     ActionResult,

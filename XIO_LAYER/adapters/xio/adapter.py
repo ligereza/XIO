@@ -1,6 +1,6 @@
 """XIO boundary without Android, Termux, ADB, rish or MAK logic.
 
-The concrete XIO implementation remains outside LIMEN. This module only makes
+The concrete XIO implementation remains outside XIO Layer. This module only makes
 the two allowed directions explicit: observe events and execute an already
 confirmed action supplied by the core gate.
 """

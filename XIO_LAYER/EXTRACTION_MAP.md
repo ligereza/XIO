@@ -11,21 +11,21 @@ credenciales, bases de datos ni lógica específica de MAK.
 
 | Clasificación | Regla | Destino |
 |---|---|---|
-| Núcleo reutilizable | Puede operar sin saber que existe Xiaomi, Android, un show o MAK. | `LIMEN/core/` |
-| Adaptador específico de XIO | Traduce observación/ejecución entre LIMEN y el runtime de XIO. | `LIMEN/adapters/xio/` como frontera; la implementación concreta queda en XIO. |
+| Núcleo reutilizable | Puede operar sin saber que existe Xiaomi, Android, un show o MAK. | `XIO_LAYER/core/` |
+| Adaptador específico de XIO | Traduce observación/ejecución entre XIO Layer y el runtime de XIO. | `XIO_LAYER/adapters/xio/` como frontera; la implementación concreta queda en XIO. |
 | No verificado/experimental | Requiere hardware, permisos, dependencias o validación que no está garantizada. | Se documenta, no se ejecuta en el núcleo. |
 
 ## 1. Núcleo reutilizable
 
-| Capacidad documentada en XIO | Extracción LIMEN | Decisión |
+| Capacidad documentada en XIO | Extracción XIO Layer | Decisión |
 |---|---|---|
 | Estado de batería, temperatura, red y dispositivo | `Event` con payload tipado por el host; `Snapshot` materializa estado. | Se conserva observación, no comandos ni nombres Xiaomi. |
-| Captura de pantalla, jerarquía y lecturas de sensores | Eventos de observación; el contenido concreto pertenece al adaptador. | LIMEN no captura ni interpreta por sí mismo. |
+| Captura de pantalla, jerarquía y lecturas de sensores | Eventos de observación; el contenido concreto pertenece al adaptador. | XIO Layer no captura ni interpreta por sí mismo. |
 | Historial, logs, alertas y estadísticas | `EventLog` y `AuditLedger`. | Auditoría separada del log de diagnóstico. |
 | Macros y automatización | No se extrae la automatización. Sólo se extraen secuencias, propuestas y resultados explícitos. | No existe `event → action`. |
 | Descubrimiento/carga de plugins | No se copia el registro de plugins. Se extraen contratos de permisos, lifecycle y auditoría. | El plugin manager sigue siendo específico de XIO. |
 | Guardas para red, USB, hotspot, energía y ADB | `PermissionRegistry` + `ActionGate`. | La política se evalúa al ejecutar y puede revocarse antes. |
-| Denylist y allowlist de hosts | `TransportPolicy`. | El host suministra destinos; LIMEN no abre sockets ni inventa peers. |
+| Denylist y allowlist de hosts | `TransportPolicy`. | El host suministra destinos; XIO Layer no abre sockets ni inventa peers. |
 | Puente local o de red | `Endpoint`, `TransportMessage`, `DeliveryReceipt` y `JsonLineTransport`. | Transporte desacoplado de decisiones y dispositivos. |
 | Observación → diagnóstico | `Event` → reducer puro → `Snapshot`. | Un snapshot describe; no ordena actuar. |
 | Propuestas operativas | `Proposal`. | Es explicable y no tiene autoridad de ejecución. |
@@ -70,7 +70,7 @@ adaptador o del runtime existente de XIO:
 | Hub | Servir la interfaz estática de flujo y rutas Flask. |
 | Android recovery | `HotspotAccessibilityService` y `BootReceiver`. |
 
-`LIMEN/adapters/xio/adapter.py` sólo define dependencias inyectadas para
+`XIO_LAYER/adapters/xio/adapter.py` sólo define dependencias inyectadas para
 observar eventos y entregar una acción ya autorizada. No importa ADB, rish,
 Flask, Android, plugins ni MAK.
 
@@ -81,9 +81,9 @@ Flask, Android, plugins ni MAK.
 | Instalación real en el Xiaomi | La auditoría local no tuvo un dispositivo ADB conectado. |
 | Android 14 / HyperOS 2 y Mi 11 Lite 5G NE | Son configuración objetivo documentada, no prueba actual del dispositivo. |
 | Termux, Shizuku, rish y Termux:Boot en vivo | Código/setup presente, pero la instalación y persistencia post-reboot deben probarse en el teléfono. |
-| Flask en el runtime del teléfono | Está declarado en requirements, pero no es dependencia de LIMEN y no se verificó en esta extracción. |
+| Flask en el runtime del teléfono | Está declarado en requirements, pero no es dependencia de XIO Layer y no se verificó en esta extracción. |
 | Monitor de radio y correlación Claro | Código y plan presentes; faltan campaña sostenida, datos de campo y atribución estadística. |
-| Selección automática 4G/5G o antena | Es una recomendación experimental; LIMEN no decide ni cambia red. |
+| Selección automática 4G/5G o antena | Es una recomendación experimental; XIO Layer no decide ni cambia red. |
 | M1: batería en lazo cerrado | Tiene piezas XIO, pero el lazo con enchufe/energía requiere integración y failsafe. |
 | M2: orquestador | Parcialmente cubierto por XIO showcontrol; depende de red, timecode y hardware de show. |
 | M3: fabric de señales | Requiere SDR, audio USB multicanal y validación térmica. |

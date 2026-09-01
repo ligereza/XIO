@@ -54,9 +54,9 @@ def content_hash(value: Any) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Event:
-    """An observation entering LIMEN.
+    """An observation entering XIO Layer.
 
-    ``occurred_at`` is the source/device time and ``received_at`` is the LIMEN
+    ``occurred_at`` is the source/device time and ``received_at`` is the XIO Layer
     ingestion time. Source clocks may be wrong or out of order; ingestion
     sequence, assigned by :class:`EventLog`, is the replay order.
     """

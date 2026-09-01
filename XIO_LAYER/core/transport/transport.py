@@ -106,7 +106,7 @@ class InMemoryTransport:
 class JsonLineTransport:
     """Adapt the contract to a caller-owned local or network writer.
 
-    The writer is injected by the host, so LIMEN never decides which sockets,
+    The writer is injected by the host, so XIO Layer never decides which sockets,
     credentials or interfaces are used.
     """
 

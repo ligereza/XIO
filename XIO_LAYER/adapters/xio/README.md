@@ -9,7 +9,7 @@ Esta carpeta define una frontera, no una copia del runtime de XIO.
 - conectar más adelante una implementación concreta mediante dependencias
   inyectadas.
 
-## Fuera de LIMEN
+## Fuera de XIO Layer
 
 - Android, HyperOS, Termux, Termux:Boot y Termux:API;
 - ADB, Shizuku y rish;

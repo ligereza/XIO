@@ -5,12 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from LIMEN.adapters.xio import XioAdapter
-from LIMEN.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from LIMEN.core.contracts import Event, ExplicitAction, Proposal, TimestampError
-from LIMEN.core.events import DuplicateEventError, EventLog, replay_events
-from LIMEN.core.snapshots import CheckpointStore, RecoveryManager, SnapshotProjector
-from LIMEN.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
+from XIO_LAYER.adapters.xio import XioAdapter
+from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
+from XIO_LAYER.core.contracts import Event, ExplicitAction, Proposal, TimestampError
+from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
+from XIO_LAYER.core.snapshots import CheckpointStore, RecoveryManager, SnapshotProjector
+from XIO_LAYER.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
 
 
 UTC = timezone.utc
@@ -141,7 +141,7 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
     def test_local_transport_is_idempotent_and_network_policy_is_explicit(self):
         local = InMemoryTransport()
         message = TransportMessage(
-            source="limen",
+            source="xio-layer",
             destination=Endpoint("memory", "local-queue"),
             channel="events",
             payload={"kind": "sample"},
@@ -154,7 +154,7 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
 
         network_disabled = InMemoryTransport(TransportPolicy(allow_network=False))
         network_message = TransportMessage(
-            source="limen",
+            source="xio-layer",
             destination=Endpoint("tcp", "127.0.0.1:9000"),
             channel="events",
             payload={},
