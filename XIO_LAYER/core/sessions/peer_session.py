@@ -220,6 +220,10 @@ class HandshakeAck:
             _require_text(getattr(self, field_name), field_name)
         if not isinstance(self.accepted, bool):
             raise ValueError("accepted must be a boolean")
+        if self.accepted and self.status != AckStatus.ACCEPTED.value:
+            raise ValueError("accepted handshake must use accepted status")
+        if not self.accepted and self.status == AckStatus.ACCEPTED.value:
+            raise ValueError("rejected handshake cannot use accepted status")
         if self.reason is not None and not isinstance(self.reason, str):
             raise ValueError("reason must be a string or null")
         object.__setattr__(self, "responded_at", require_utc(self.responded_at, "responded_at"))

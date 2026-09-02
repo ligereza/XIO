@@ -35,6 +35,8 @@ completed:
     evidence: TransportMessage, AdapterSelection and AdapterHandoff now require ISO string timestamp fields before parsing; focused restoration tests and the full suite pass. Documentation is synchronized.
   - item: Revocation and explicit disconnect invalidate stale pending handshakes.
     evidence: revoke_peer and disconnect now remove pending requests for the affected peer before changing trust state; focused handshake regressions and the complete XIO_LAYER suite pass (168 tests).
+  - item: Handshake ACK status and acceptance are semantically consistent.
+    evidence: HandshakeAck rejects accepted=True with a non-accepted status and accepted=False with accepted status before construction/restoration; contract regressions and the complete XIO_LAYER suite pass (168 tests).
 
 current_state:
   files_or_resources:
@@ -43,10 +45,10 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/critique.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 168 tests; focused stale-handshake regressions pass; adapter/handoff integration subset passes 40 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key, selection-identity, adapter-isolation and strict-restoration regressions pass; compileall, technical ASCII and diff checks pass.
+  tests_and_checks: XIO_LAYER suite passes 168 tests; focused stale-handshake and handshake-contract regressions pass; adapter/handoff integration subset passes 40 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key, selection-identity, adapter-isolation and strict-restoration regressions pass; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.
   blockers: []
-  next_action: Reassess the next XIO signal, transport or input-contract boundary after publishing this bounded session fix; preserve unrelated root changes and never reopen the archived extraction.
+  next_action: Reassess the next XIO signal, transport or input-contract boundary after publishing this bounded handshake-contract fix; preserve unrelated root changes and never reopen the archived extraction.
   next_checkpoint_trigger: before resuming autonomous work or publishing any XIO code change

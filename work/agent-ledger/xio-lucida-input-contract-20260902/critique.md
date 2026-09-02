@@ -368,3 +368,57 @@ next_checkpoint: Run focused handshake tests, then the complete XIO_LAYER suite 
 previous_action: audit session checkpoint and trust-state transitions
 decision_delta: change from observed stale pending state to fail-closed invalidation on revoke and disconnect
 verification_signal: stale ACK completion raises because its request is no longer pending; the disconnected peer can still perform a newly initiated handshake.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Handshake acceptance and status fields must be semantically consistent before any state transition.
+current_state: Stale pending handshakes are invalidated on revocation and disconnect. HandshakeAck validates scalar types but permits accepted=True with a rejection status.
+verified_evidence: A directly constructed HandshakeAck with accepted=True and status=blocked was accepted by the dataclass; complete_handshake branches on accepted and could connect it.
+assumptions: The explicit status enum is part of the handshake result contract; accepted is the only success status and a rejected ACK must not claim success.
+strongest_failure_mode: A malformed or tampered ACK can declare rejection while causing the initiator to enter CONNECTED.
+highest_consequence_error: Session state contradicts the audited/wire result and may grant capabilities that the ACK status says were denied.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Reject inconsistent accepted/status pairs in HandshakeAck construction and restoration, with focused regressions.
+    reversibility: high
+    evidence_needed: Both inconsistent directions must fail while existing accepted and rejection statuses round-trip.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the contradiction is directly observable in the local state machine.
+    reversibility: high
+    evidence_needed: External guidance would not supersede the local explicit status contract.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve a malformed ACK path that can grant connected state.
+    reversibility: high
+    evidence_needed: Acceptance that status may contradict the boolean result.
+
+search_gap:
+  uncertainty: Whether future protocol versions may define custom rejection statuses.
+  consequence: Low; this fix only rejects the success/rejection contradiction and leaves non-success statuses available for rejected ACKs.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The invariant is local and the compatibility-preserving rule is minimal.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run handshake-contract and complete-suite tests, then publish only the scoped contract, docs and ledger changes.
+previous_action: audit handshake freshness and trust-state invalidation
+decision_delta: extend fail-closed handshake validation from stale requests to semantic status/boolean consistency
+verification_signal: accepted=True/status=blocked and accepted=False/status=accepted are rejected before a manager can transition state.

@@ -208,6 +208,9 @@ caller registers peer + endpoint
 - `PeerDescriptor` contains `peer_id`, `protocol_version`, `capabilities` and
   the caller-provided endpoint;
 - `HandshakeRequest` and `HandshakeAck` carry `session_id` and explicit status;
+- an accepted `HandshakeAck` must declare `accepted`, and a rejected ACK must
+  not declare that status; inconsistent status/boolean pairs are rejected
+  before any session transition;
 - an ACK must match the pending request's peer and `session_id`; an invalid
   responder or cross-session ACK fails closed without consuming that pending
   handshake, so a later valid ACK can still complete it;

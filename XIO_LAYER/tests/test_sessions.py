@@ -167,6 +167,24 @@ class SessionContractTests(unittest.TestCase):
                 accepted=1,
             )
         with self.assertRaises(ValueError):
+            HandshakeAck(
+                request_id="request-1",
+                session_id="session-1",
+                responder_peer_id="bob",
+                protocol_version="1.0",
+                accepted=True,
+                status=AckStatus.BLOCKED.value,
+            )
+        with self.assertRaises(ValueError):
+            HandshakeAck(
+                request_id="request-1",
+                session_id="session-1",
+                responder_peer_id="bob",
+                protocol_version="1.0",
+                accepted=False,
+                status=AckStatus.ACCEPTED.value,
+            )
+        with self.assertRaises(ValueError):
             SignalEnvelope(
                 source_peer_id="alice",
                 session_id="session-1",
