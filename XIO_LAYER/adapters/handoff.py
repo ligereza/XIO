@@ -359,26 +359,30 @@ def deliver_adapter_handoff(
         raise ValueError("required_permission cannot be empty")
 
     attempted_at = utc_now()
-    if not permissions.allows(handoff.selection.caller_id, required_permission):
-        audit.append(
-            "adapter.handoff.delivery_rejected",
-            handoff.handoff_id,
-            "rejected",
-            {
-                **_delivery_audit_metadata(handoff, error="permission_missing_or_revoked"),
-                "permission": required_permission,
-            },
-            handoff.selection.caller_id,
-        )
-        return AdapterHandoffDelivery(
-            handoff_id=handoff.handoff_id,
-            status="rejected",
-            receipt=None,
-            attempted_at=attempted_at,
-            error="permission_missing_or_revoked",
-        )
     try:
-        receipt = transport.send(handoff.message)
+        allowed, receipt = permissions.run_if_allowed(
+            handoff.selection.caller_id,
+            required_permission,
+            lambda: transport.send(handoff.message),
+        )
+        if not allowed:
+            audit.append(
+                "adapter.handoff.delivery_rejected",
+                handoff.handoff_id,
+                "rejected",
+                {
+                    **_delivery_audit_metadata(handoff, error="permission_missing_or_revoked"),
+                    "permission": required_permission,
+                },
+                handoff.selection.caller_id,
+            )
+            return AdapterHandoffDelivery(
+                handoff_id=handoff.handoff_id,
+                status="rejected",
+                receipt=None,
+                attempted_at=attempted_at,
+                error="permission_missing_or_revoked",
+            )
         if not isinstance(receipt, DeliveryReceipt):
             raise AdapterHandoffError("transport returned an invalid delivery receipt")
         status = (

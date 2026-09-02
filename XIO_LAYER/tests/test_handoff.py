@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import threading
 import tempfile
 import unittest
 from typing import Any, Mapping
@@ -25,7 +26,7 @@ from XIO_LAYER.adapters import (
 )
 from XIO_LAYER.core.audit import AuditLedger, PermissionRegistry
 from XIO_LAYER.core.events import ApplicationEvent, ApplicationEventLog
-from XIO_LAYER.core.transport import Endpoint, InMemoryTransport
+from XIO_LAYER.core.transport import DeliveryReceipt, Endpoint, InMemoryTransport
 
 
 T0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
@@ -345,6 +346,73 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertEqual(result.error, "permission_missing_or_revoked")
         self.assertEqual(transport.calls, 0)
         self.assertEqual(audit.entries()[-1].outcome, "rejected")
+        self.assertTrue(audit.verify())
+
+    def test_delivery_holds_permission_through_transport_send(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-atomic",
+            selected_at=T0,
+        )
+        audit = AuditLedger()
+        handoff = prepare_adapter_handoff(
+            registry,
+            selection,
+            make_record(),
+            source="xio-layer",
+            destination=DESTINATION,
+            audit=audit,
+            handoff_id="handoff-atomic",
+        )
+        permissions = PermissionRegistry()
+        permissions.grant("operator-1", "handoff.deliver")
+        send_started = threading.Event()
+        release_send = threading.Event()
+        revoke_finished = threading.Event()
+
+        class BlockingTransport:
+            def send(self, message):
+                send_started.set()
+                self.assert_message(message)
+                self.release.wait(1.0)
+                return DeliveryReceipt(message.message_id, accepted=True)
+
+            def assert_message(self, message):
+                self.message_id = message.message_id
+
+            @property
+            def release(self):
+                return release_send
+
+        transport = BlockingTransport()
+        delivery_result = []
+        delivery_thread = threading.Thread(
+            target=lambda: delivery_result.append(
+                deliver_adapter_handoff(handoff, transport, audit, permissions=permissions)
+            )
+        )
+        delivery_thread.start()
+        self.assertTrue(send_started.wait(1.0))
+
+        def revoke():
+            permissions.revoke("operator-1", "handoff.deliver")
+            revoke_finished.set()
+
+        revoke_thread = threading.Thread(target=revoke)
+        revoke_thread.start()
+        self.assertFalse(revoke_finished.wait(0.05))
+        release_send.set()
+        delivery_thread.join(1.0)
+        revoke_thread.join(1.0)
+
+        self.assertFalse(delivery_thread.is_alive())
+        self.assertTrue(revoke_finished.is_set())
+        self.assertEqual(len(delivery_result), 1)
+        self.assertEqual(delivery_result[0].status, "accepted")
         self.assertTrue(audit.verify())
 
     def test_idempotency_conflict_is_terminal_and_not_retried(self):
