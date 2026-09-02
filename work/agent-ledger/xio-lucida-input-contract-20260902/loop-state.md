@@ -17,6 +17,8 @@ completed:
     evidence: The superseded state is marked complete and names this canonical state.
   - item: The historical LIMEN worktree was moved to an archive branch and is not an active XIO worktree.
     evidence: The archive operation preserves commit a5a94ba without retaining the LIMEN branch name.
+  - item: Local event input restoration rejects coercive field types.
+    evidence: Commit 0efe36c is published on codex/xio-lucida-input-contract; LocalEventRecord rejects non-string identifiers and timestamps before constructing a record, with a focused regression.
 
 current_state:
   files_or_resources:
@@ -24,10 +26,10 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/loop-state.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: The current XIO_LAYER test command passed before this iteration; local source strict-restore regression is in progress.
+  tests_and_checks: XIO_LAYER suite passes 159 tests; focused local-source suite passes 5 tests; compileall, technical ASCII and diff checks pass; commit 0efe36c is published and local/remote HEADs match.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.
   blockers: []
-  next_action: Verify and publish the strict LocalEventRecord restore fix on the current XIO branch; never reopen the archived extraction.
+  next_action: Reassess the next XIO signal, transport or input-contract boundary before another code change; preserve unrelated root changes and never reopen the archived extraction.
   next_checkpoint_trigger: before resuming autonomous work or publishing any XIO code change
