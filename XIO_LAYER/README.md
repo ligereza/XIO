@@ -155,8 +155,9 @@ Signal payload, metadata and protocol-envelope representations are validated
 as strict JSON before they can participate in fingerprinting or replay.
 Session checkpoints preserve authorization evidence and delivery history for a
 caller-controlled restart while intentionally requiring a fresh handshake.
-Replacing a peer authorization also invalidates stale endpoint and handshake
-state while retaining explicit delivery history.
+Replacing a peer authorization, explicit revocation or disconnect also
+invalidates stale endpoint and pending-handshake state while retaining explicit
+delivery history.
 Public session operations reject malformed record types and peer identifiers
 before mutating state or calling the injected transport.
 

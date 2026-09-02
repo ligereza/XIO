@@ -836,6 +836,11 @@ class PeerSessionManager:
         if peer_id not in self._peers:
             raise UnknownPeerError(peer_id)
         self._revoked.add(peer_id)
+        self._pending = {
+            request_id: pending_peer_id
+            for request_id, pending_peer_id in self._pending.items()
+            if pending_peer_id[0] != peer_id
+        }
         session = self._sessions[peer_id]
         session.state = PeerSessionState.BLOCKED
         session.negotiated_capabilities = frozenset()
@@ -843,6 +848,11 @@ class PeerSessionManager:
     @_synchronized
     def disconnect(self, peer_id: str) -> None:
         session = self._require_peer(peer_id)
+        self._pending = {
+            request_id: pending_peer_id
+            for request_id, pending_peer_id in self._pending.items()
+            if pending_peer_id[0] != peer_id
+        }
         session.state = PeerSessionState.DISCONNECTED
         session.negotiated_capabilities = frozenset()
 

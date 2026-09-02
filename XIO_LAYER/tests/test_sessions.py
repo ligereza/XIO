@@ -384,6 +384,46 @@ class SessionCheckpointTests(unittest.TestCase):
 
 
 class HandshakeTests(unittest.TestCase):
+    def test_revocation_invalidates_pending_handshake(self):
+        alice = peer("alice")
+        bob = peer("bob")
+        sender = PeerSessionManager(alice, InMemoryTransport(), authorized_peers=[bob])
+
+        attempt = sender.initiate_handshake("bob")
+        sender.revoke_peer("bob")
+
+        self.assertEqual(sender.state("bob"), PeerSessionState.BLOCKED)
+        with self.assertRaisesRegex(ValueError, "not pending"):
+            sender.complete_handshake(
+                HandshakeAck(
+                    request_id=attempt.request.request_id,
+                    session_id=attempt.request.session_id,
+                    responder_peer_id="bob",
+                    protocol_version=bob.protocol_version,
+                    accepted=True,
+                )
+            )
+
+    def test_disconnect_invalidates_pending_handshake(self):
+        alice = peer("alice")
+        bob = peer("bob")
+        sender = PeerSessionManager(alice, InMemoryTransport(), authorized_peers=[bob])
+
+        attempt = sender.initiate_handshake("bob")
+        sender.disconnect("bob")
+
+        self.assertEqual(sender.state("bob"), PeerSessionState.DISCONNECTED)
+        with self.assertRaisesRegex(ValueError, "not pending"):
+            sender.complete_handshake(
+                HandshakeAck(
+                    request_id=attempt.request.request_id,
+                    session_id=attempt.request.session_id,
+                    responder_peer_id="bob",
+                    protocol_version=bob.protocol_version,
+                    accepted=True,
+                )
+            )
+
     def test_reauthorization_refreshes_endpoint_and_invalidates_pending_handshake(self):
         alice = peer("alice")
         old_bob = peer("bob", port=1001)

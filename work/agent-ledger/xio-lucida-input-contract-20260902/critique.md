@@ -314,3 +314,57 @@ previous_action: audit timestamp restoration boundaries
 decision_delta: change from coercive restoration to strict wire typing
 verification_signal: Non-string sent_at, selected_at and prepared_at values must raise before reconstruction.
 verification_note_2: Focused restoration regressions and the complete XIO_LAYER suite pass; ISO strings remain accepted and direct datetime values are rejected.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Revocation and explicit disconnect must prevent stale handshakes from restoring a connected session.
+current_state: Wire timestamp restoration is published. PeerSessionManager clears pending handshakes during reauthorization but not during revoke_peer or disconnect.
+verified_evidence: initiate_handshake stores request state; revoke_peer and disconnect changed session state without removing that request; complete_handshake only checked the pending entry and could later set a revoked or disconnected peer to CONNECTED.
+assumptions: A revocation or explicit disconnect is a trust-state boundary; any handshake initiated before it is stale and must require a new initiate_handshake call.
+strongest_failure_mode: An old accepted ACK can reactivate a revoked peer, bypassing the intended blocked state and enabling delivery.
+highest_consequence_error: Revoked authorization is not fail-closed across an in-flight handshake.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Remove pending requests for the affected peer on revoke and disconnect, with direct regressions.
+    reversibility: high
+    evidence_needed: Stale ACKs must be rejected and a fresh handshake must remain possible after disconnect.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the invariant is local to the session state machine and directly reproducible.
+    reversibility: high
+    evidence_needed: External guidance would not change the explicit local trust boundary.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve a security gap in stale-session recovery.
+    reversibility: high
+    evidence_needed: Acceptance that a stale ACK may reconnect a revoked/disconnected peer.
+
+search_gap:
+  uncertainty: Whether any caller intentionally completes a handshake after explicit disconnect.
+  consequence: Low; requiring a fresh handshake is consistent with reconnect tests and does not affect an already-connected session.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The state transition itself is the contract boundary; focused tests can verify it precisely.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run focused handshake tests, then the complete XIO_LAYER suite and publish only the scoped session/doc/ledger changes.
+previous_action: audit session checkpoint and trust-state transitions
+decision_delta: change from observed stale pending state to fail-closed invalidation on revoke and disconnect
+verification_signal: stale ACK completion raises because its request is no longer pending; the disconnected peer can still perform a newly initiated handshake.
