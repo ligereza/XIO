@@ -39,6 +39,8 @@ class JsonLineHandoffStore:
         self._lock = RLock()
 
     def append(self, handoff: AdapterHandoff) -> bool:
+        if not isinstance(handoff, AdapterHandoff):
+            raise TypeError("handoff must be an AdapterHandoff")
         with self._lock:
             with exclusive_file_lock(self.path.with_name(self.path.name + ".lock")):
                 return self._append_unlocked(handoff)

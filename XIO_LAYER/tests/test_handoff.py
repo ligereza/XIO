@@ -181,6 +181,7 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertNotEqual(handoff.event.peer_id, "private-peer")
         self.assertEqual(transport.messages(), ())
         self.assertTrue(audit.verify())
+
         self.assertEqual(audit.entries()[-1].event_type, "adapter.handoff.prepared")
         self.assertNotIn("do-not-export", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("private-note", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
@@ -218,6 +219,48 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertEqual(duplicate_delivery.status, "duplicate")
         self.assertEqual(len(transport.messages()), 1)
         self.assertTrue(audit.verify())
+
+    def test_direct_handoff_constructor_rejects_invalid_contracts(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-direct",
+            selected_at=T0,
+        )
+        audit = AuditLedger()
+        handoff = prepare_adapter_handoff(
+            registry,
+            selection,
+            make_record(),
+            source="xio-layer",
+            destination=DESTINATION,
+            audit=audit,
+            handoff_id="handoff-direct",
+        )
+
+        with self.assertRaisesRegex(TypeError, "AdapterSelection"):
+            replace(handoff, selection=object())
+        with self.assertRaisesRegex(TypeError, "TransportMessage"):
+            replace(handoff, message=object())
+        mismatched_event = ApplicationEvent(
+            event_id=handoff.event.event_id,
+            schema_version=handoff.event.schema_version,
+            source_app=handoff.event.source_app,
+            event_type=handoff.event.event_type,
+            channel=handoff.event.channel,
+            payload={"safe": "different"},
+            source_timestamp=handoff.event.source_timestamp,
+            received_timestamp=handoff.event.received_timestamp,
+            session_id=handoff.event.session_id,
+            peer_id=handoff.event.peer_id,
+            sequence=handoff.event.sequence,
+            provenance=handoff.event.provenance,
+        )
+        with self.assertRaisesRegex(AdapterHandoffError, "do not match"):
+            replace(handoff, event=mismatched_event)
 
     def test_blocked_delivery_is_rejected_and_audited_without_retry_or_fallback(self):
         registry, _, _ = self.make_registry()

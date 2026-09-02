@@ -101,6 +101,9 @@ caller must re-inject its identity before any permission-checked delivery.
 with a versioned hash chain, idempotent same-content writes and rejection of
 same-id content changes or tampered/reordered records. Calls sharing one store
 instance and separate processes are serialized through a sidecar lock file.
+Its append boundary rejects non-handoff values before acquiring the sidecar
+lock; direct `AdapterHandoff` construction also validates types, route identity
+and bridge coherence.
 `TransportMessage.from_dict()` is the shared strict wire parser used by both
 transport and handoff restoration.
 `core/file_lock.py` provides the same portable sidecar locking primitive to

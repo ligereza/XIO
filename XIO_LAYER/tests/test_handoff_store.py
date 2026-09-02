@@ -50,6 +50,17 @@ def prepared_handoffs():
 
 
 class JsonLineHandoffStoreTests(unittest.TestCase):
+    def test_append_rejects_wrong_type_before_lock_or_file_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoffs.jsonl"
+            store = JsonLineHandoffStore(path)
+
+            with self.assertRaisesRegex(TypeError, "AdapterHandoff"):
+                store.append(object())
+
+            self.assertFalse(path.exists())
+            self.assertFalse(path.with_name(path.name + ".lock").exists())
+
     def test_concurrent_same_content_append_is_serialized_and_idempotent(self):
         handoff = prepared_handoffs()[0]
         with tempfile.TemporaryDirectory() as directory:

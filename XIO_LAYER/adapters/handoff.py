@@ -123,8 +123,24 @@ class AdapterHandoff:
     privacy_policy: PrivacyPolicy
 
     def __post_init__(self) -> None:
+        if not isinstance(self.selection, AdapterSelection):
+            raise TypeError("selection must be an AdapterSelection")
+        if not isinstance(self.event, ApplicationEvent):
+            raise TypeError("event must be an ApplicationEvent")
+        if not isinstance(self.message, TransportMessage):
+            raise TypeError("message must be a TransportMessage")
+        if not isinstance(self.privacy_policy, PrivacyPolicy):
+            raise TypeError("privacy_policy must be a PrivacyPolicy")
         if not handoff_id_is_valid(self.handoff_id):
             raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
+        if self.event.source_app != self.selection.source_app or self.event.event_type != self.selection.event_type:
+            raise AdapterHandoffError("event does not match selected route")
+        try:
+            bridged_event = transport_to_application_event(self.message)
+        except Exception as exc:
+            raise AdapterHandoffError("message failed bridge validation") from exc
+        if bridged_event.to_dict() != self.event.to_dict():
+            raise AdapterHandoffError("event and transport message do not match")
         object.__setattr__(self, "prepared_at", require_utc(self.prepared_at, "prepared_at"))
 
     def to_dict(self, *, include_caller: bool = False) -> dict[str, Any]:
