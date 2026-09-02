@@ -229,6 +229,10 @@ caller registers peer + endpoint
   cleared on disconnect, revocation, handshake start or handshake failure;
 - revocation changes the peer to `blocked` and prevents later delivery;
 - disconnect changes the peer to `disconnected` and prevents later delivery;
+- `PeerSessionManager.export_checkpoint()` captures authorized peers,
+  revocations, delivery fingerprints and sequence counters without writing or
+  sending; `from_checkpoint()` restores that evidence but requires a fresh
+  handshake and never restores negotiated trust automatically;
 - replay, observation and fan-out never create an `ExplicitAction`.
 
 The current implementation is an offline session state machine. It does not

@@ -498,6 +498,200 @@ class HandshakeAttempt:
     receipt: DeliveryReceipt
 
 
+@dataclass(frozen=True, slots=True)
+class PeerDeliveryRecord:
+    """Durable idempotency evidence for one peer/message pair."""
+
+    peer_id: str
+    message_id: str
+    fingerprint: str
+
+    def __post_init__(self) -> None:
+        _require_text(self.peer_id, "peer_id")
+        _require_text(self.message_id, "message_id")
+        _require_text(self.fingerprint, "fingerprint")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "peer_id": self.peer_id,
+            "message_id": self.message_id,
+            "fingerprint": self.fingerprint,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PeerDeliveryRecord":
+        required = {"peer_id", "message_id", "fingerprint"}
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("peer delivery record fields do not match the contract")
+        for field_name in required:
+            _require_text(data[field_name], field_name)
+        return cls(
+            peer_id=data["peer_id"],
+            message_id=data["message_id"],
+            fingerprint=data["fingerprint"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PeerSequenceRecord:
+    """Durable last-sequence evidence for one peer and direction."""
+
+    peer_id: str
+    sequence: int
+
+    def __post_init__(self) -> None:
+        _require_text(self.peer_id, "peer_id")
+        if isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 0:
+            raise ValueError("sequence must be a non-negative integer")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"peer_id": self.peer_id, "sequence": self.sequence}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PeerSequenceRecord":
+        required = {"peer_id", "sequence"}
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("peer sequence record fields do not match the contract")
+        _require_text(data["peer_id"], "peer_id")
+        if isinstance(data["sequence"], bool) or not isinstance(data["sequence"], int) or data["sequence"] < 0:
+            raise ValueError("sequence must be a non-negative integer")
+        return cls(peer_id=data["peer_id"], sequence=data["sequence"])
+
+
+@dataclass(frozen=True, slots=True)
+class PeerSessionCheckpoint:
+    """Caller-controlled restart checkpoint for peer authorization evidence.
+
+    Connected state and negotiated capabilities are intentionally not restored;
+    a host must perform a fresh handshake after restart.
+    """
+
+    local_peer: PeerDescriptor
+    authorized_peers: tuple[PeerDescriptor, ...]
+    revoked_peer_ids: tuple[str, ...] = ()
+    sent_deliveries: tuple[PeerDeliveryRecord, ...] = ()
+    received_deliveries: tuple[PeerDeliveryRecord, ...] = ()
+    last_sent_sequences: tuple[PeerSequenceRecord, ...] = ()
+    last_received_sequences: tuple[PeerSequenceRecord, ...] = ()
+    schema_version: int = 1
+
+    def __post_init__(self) -> None:
+        if isinstance(self.schema_version, bool) or not isinstance(self.schema_version, int) or self.schema_version != 1:
+            raise ValueError("unsupported peer session checkpoint schema")
+        if not isinstance(self.local_peer, PeerDescriptor):
+            raise ValueError("local_peer must be a PeerDescriptor")
+        authorized = tuple(self.authorized_peers)
+        if any(not isinstance(peer, PeerDescriptor) for peer in authorized):
+            raise ValueError("authorized_peers must contain PeerDescriptor values")
+        peer_ids = [peer.peer_id for peer in authorized]
+        if len(peer_ids) != len(set(peer_ids)):
+            raise ValueError("authorized_peers cannot contain duplicate peer ids")
+        if self.local_peer.peer_id in peer_ids:
+            raise ValueError("local peer cannot appear in authorized_peers")
+
+        revoked = tuple(self.revoked_peer_ids)
+        if any(not isinstance(peer_id, str) or not peer_id.strip() for peer_id in revoked):
+            raise ValueError("revoked_peer_ids must contain non-empty strings")
+        if len(revoked) != len(set(revoked)) or not set(revoked).issubset(peer_ids):
+            raise ValueError("revoked_peer_ids must be unique authorized peer ids")
+
+        sent = tuple(self.sent_deliveries)
+        received = tuple(self.received_deliveries)
+        for name, records in (("sent_deliveries", sent), ("received_deliveries", received)):
+            if any(not isinstance(record, PeerDeliveryRecord) for record in records):
+                raise ValueError(f"{name} must contain PeerDeliveryRecord values")
+            keys = [(record.peer_id, record.message_id) for record in records]
+            if len(keys) != len(set(keys)):
+                raise ValueError(f"{name} cannot contain duplicate peer/message pairs")
+            if any(record.peer_id not in peer_ids for record in records):
+                raise ValueError(f"{name} references an unauthorized peer")
+
+        sent_sequences = tuple(self.last_sent_sequences)
+        received_sequences = tuple(self.last_received_sequences)
+        for name, records in (("last_sent_sequences", sent_sequences), ("last_received_sequences", received_sequences)):
+            if any(not isinstance(record, PeerSequenceRecord) for record in records):
+                raise ValueError(f"{name} must contain PeerSequenceRecord values")
+            ids = [record.peer_id for record in records]
+            if len(ids) != len(set(ids)):
+                raise ValueError(f"{name} cannot contain duplicate peer ids")
+            if any(record.peer_id not in peer_ids for record in records):
+                raise ValueError(f"{name} references an unauthorized peer")
+
+        object.__setattr__(self, "authorized_peers", authorized)
+        object.__setattr__(self, "revoked_peer_ids", revoked)
+        object.__setattr__(self, "sent_deliveries", sent)
+        object.__setattr__(self, "received_deliveries", received)
+        object.__setattr__(self, "last_sent_sequences", sent_sequences)
+        object.__setattr__(self, "last_received_sequences", received_sequences)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.schema_version,
+            "local_peer": self.local_peer.to_dict(),
+            "authorized_peers": [
+                peer.to_dict() for peer in sorted(self.authorized_peers, key=lambda item: item.peer_id)
+            ],
+            "revoked_peer_ids": sorted(self.revoked_peer_ids),
+            "sent_deliveries": [
+                record.to_dict()
+                for record in sorted(self.sent_deliveries, key=lambda item: (item.peer_id, item.message_id))
+            ],
+            "received_deliveries": [
+                record.to_dict()
+                for record in sorted(self.received_deliveries, key=lambda item: (item.peer_id, item.message_id))
+            ],
+            "last_sent_sequences": [
+                record.to_dict() for record in sorted(self.last_sent_sequences, key=lambda item: item.peer_id)
+            ],
+            "last_received_sequences": [
+                record.to_dict() for record in sorted(self.last_received_sequences, key=lambda item: item.peer_id)
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "PeerSessionCheckpoint":
+        required = {
+            "schema_version",
+            "local_peer",
+            "authorized_peers",
+            "revoked_peer_ids",
+            "sent_deliveries",
+            "received_deliveries",
+            "last_sent_sequences",
+            "last_received_sequences",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("peer session checkpoint fields do not match the contract")
+        if not isinstance(data["schema_version"], int) or isinstance(data["schema_version"], bool):
+            raise ValueError("schema_version must be an integer")
+        if not isinstance(data["local_peer"], Mapping):
+            raise ValueError("local_peer must be a mapping")
+        for field_name in (
+            "authorized_peers",
+            "revoked_peer_ids",
+            "sent_deliveries",
+            "received_deliveries",
+            "last_sent_sequences",
+            "last_received_sequences",
+        ):
+            if not isinstance(data[field_name], list):
+                raise ValueError(f"{field_name} must be a list")
+        if any(not isinstance(item, Mapping) for item in data["authorized_peers"]):
+            raise ValueError("authorized_peers must contain mappings")
+        return cls(
+            schema_version=data["schema_version"],
+            local_peer=PeerDescriptor.from_dict(data["local_peer"]),
+            authorized_peers=tuple(PeerDescriptor.from_dict(item) for item in data["authorized_peers"]),
+            revoked_peer_ids=tuple(data["revoked_peer_ids"]),
+            sent_deliveries=tuple(PeerDeliveryRecord.from_dict(item) for item in data["sent_deliveries"]),
+            received_deliveries=tuple(PeerDeliveryRecord.from_dict(item) for item in data["received_deliveries"]),
+            last_sent_sequences=tuple(PeerSequenceRecord.from_dict(item) for item in data["last_sent_sequences"]),
+            last_received_sequences=tuple(
+                PeerSequenceRecord.from_dict(item) for item in data["last_received_sequences"]
+            ),
+        )
+
+
 @dataclass(slots=True)
 class _PeerSession:
     peer: PeerDescriptor
@@ -533,6 +727,10 @@ class PeerSessionManager:
         policy: TransportPolicy | None = None,
         authorized_peers: Iterable[PeerDescriptor] = (),
     ) -> None:
+        if not isinstance(local_peer, PeerDescriptor):
+            raise ValueError("local_peer must be a PeerDescriptor")
+        if not callable(getattr(transport, "send", None)):
+            raise ValueError("transport must provide a callable send method")
         self._lock = RLock()
         self.local_peer = local_peer
         self.transport = transport
@@ -545,6 +743,70 @@ class PeerSessionManager:
         self._sent: dict[tuple[str, str], str] = {}
         for peer in authorized_peers:
             self.authorize_peer(peer)
+
+    @_synchronized
+    def export_checkpoint(self) -> PeerSessionCheckpoint:
+        """Export restart evidence without persisting or changing manager state."""
+
+        return PeerSessionCheckpoint(
+            local_peer=self.local_peer,
+            authorized_peers=tuple(self._peers.values()),
+            revoked_peer_ids=tuple(sorted(self._revoked)),
+            sent_deliveries=tuple(
+                PeerDeliveryRecord(peer_id=peer_id, message_id=message_id, fingerprint=fingerprint)
+                for (peer_id, message_id), fingerprint in self._sent.items()
+            ),
+            received_deliveries=tuple(
+                PeerDeliveryRecord(peer_id=peer_id, message_id=message_id, fingerprint=fingerprint)
+                for (peer_id, message_id), fingerprint in self._received.items()
+            ),
+            last_sent_sequences=tuple(
+                PeerSequenceRecord(peer_id=peer_id, sequence=session.last_sent_sequence)
+                for peer_id, session in self._sessions.items()
+            ),
+            last_received_sequences=tuple(
+                PeerSequenceRecord(peer_id=peer_id, sequence=session.last_received_sequence)
+                for peer_id, session in self._sessions.items()
+            ),
+        )
+
+    def snapshot(self) -> PeerSessionCheckpoint:
+        """Alias for callers that use snapshot terminology."""
+
+        return self.export_checkpoint()
+
+    @classmethod
+    def from_checkpoint(
+        cls,
+        checkpoint: PeerSessionCheckpoint,
+        transport: Transport,
+        policy: TransportPolicy | None = None,
+    ) -> "PeerSessionManager":
+        """Restore explicit evidence while requiring a fresh handshake."""
+
+        if not isinstance(checkpoint, PeerSessionCheckpoint):
+            raise ValueError("checkpoint must be a PeerSessionCheckpoint")
+        manager = cls(
+            local_peer=checkpoint.local_peer,
+            transport=transport,
+            policy=policy,
+            authorized_peers=checkpoint.authorized_peers,
+        )
+        with manager._lock:
+            for record in checkpoint.sent_deliveries:
+                manager._sent[(record.peer_id, record.message_id)] = record.fingerprint
+            for record in checkpoint.received_deliveries:
+                manager._received[(record.peer_id, record.message_id)] = record.fingerprint
+            for record in checkpoint.last_sent_sequences:
+                manager._sessions[record.peer_id].last_sent_sequence = record.sequence
+            for record in checkpoint.last_received_sequences:
+                manager._sessions[record.peer_id].last_received_sequence = record.sequence
+            for peer_id in checkpoint.revoked_peer_ids:
+                manager._revoked.add(peer_id)
+                session = manager._sessions[peer_id]
+                session.state = PeerSessionState.BLOCKED
+                session.negotiated_capabilities = frozenset()
+        return manager
 
     @_synchronized
     def authorize_peer(self, peer: PeerDescriptor) -> None:

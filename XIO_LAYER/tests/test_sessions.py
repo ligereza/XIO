@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import threading
 import unittest
 
@@ -9,6 +10,7 @@ from XIO_LAYER.core.sessions import (
     DeliveryAck,
     HandshakeAck,
     HandshakeRequest,
+    PeerSessionCheckpoint,
     PeerDescriptor,
     PeerSessionManager,
     PeerSessionState,
@@ -195,6 +197,86 @@ class SessionContractTests(unittest.TestCase):
                 arguments.update(overrides)
                 with self.assertRaises(ValueError):
                     SignalEnvelope(**arguments)
+
+
+class SessionCheckpointTests(unittest.TestCase):
+    def test_checkpoint_round_trip_preserves_idempotency_and_requires_handshake(self):
+        sender, receiver, _, ack, _ = connected_pair()
+        self.assertTrue(sender.complete_handshake(ack))
+        signal = SignalEnvelope(
+            source_peer_id="alice",
+            session_id="application-session",
+            channel="signals",
+            sequence=1,
+            payload={"value": 7},
+            created_at=T0,
+            message_id="signal-persisted",
+        )
+        self.assertEqual(sender.fan_out(signal, ["bob"])["bob"].status, AckStatus.ACCEPTED.value)
+        self.assertTrue(receiver.receive_signal(signal, "alice").accepted)
+
+        checkpoint = sender.export_checkpoint()
+        wire = checkpoint.to_dict()
+        json_wire = json.loads(json.dumps(wire, ensure_ascii=False, allow_nan=False))
+        restored_checkpoint = PeerSessionCheckpoint.from_dict(json_wire)
+        self.assertEqual(restored_checkpoint.to_dict(), wire)
+
+        fresh_transport = InMemoryTransport()
+        restored = PeerSessionManager.from_checkpoint(restored_checkpoint, fresh_transport)
+        self.assertEqual(restored.state("bob"), PeerSessionState.DISCONNECTED)
+        attempt = restored.initiate_handshake("bob")
+        ack = receiver.accept_handshake(attempt.request)
+        self.assertTrue(restored.complete_handshake(ack))
+
+        duplicate = restored.fan_out(signal, ["bob"])["bob"]
+        self.assertEqual(duplicate.status, AckStatus.DUPLICATE.value)
+        self.assertEqual(
+            [message.channel for message in fresh_transport.messages()],
+            ["xio.handshake"],
+        )
+
+    def test_revocation_survives_checkpoint_restore_without_restoring_connection(self):
+        sender, _, _, _, _ = connected_pair()
+        sender.revoke_peer("bob")
+        checkpoint = sender.export_checkpoint()
+
+        restored = PeerSessionManager.from_checkpoint(checkpoint, InMemoryTransport())
+
+        self.assertEqual(restored.state("bob"), PeerSessionState.BLOCKED)
+        with self.assertRaises(PermissionError):
+            restored.initiate_handshake("bob")
+
+    def test_checkpoint_restore_rejects_malformed_or_inconsistent_records(self):
+        sender, _, _, _, _ = connected_pair()
+        wire = sender.export_checkpoint().to_dict()
+        cases = []
+
+        missing = dict(wire)
+        missing.pop("authorized_peers")
+        cases.append(missing)
+
+        extra = dict(wire)
+        extra["unexpected"] = True
+        cases.append(extra)
+
+        wrong_schema = dict(wire)
+        wrong_schema["schema_version"] = True
+        cases.append(wrong_schema)
+
+        wrong_list = dict(wire)
+        wrong_list["revoked_peer_ids"] = "bob"
+        cases.append(wrong_list)
+
+        unknown_record = dict(wire)
+        unknown_record["sent_deliveries"] = [
+            {"peer_id": "ghost", "message_id": "message-1", "fingerprint": "hash"}
+        ]
+        cases.append(unknown_record)
+
+        for invalid in cases:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    PeerSessionCheckpoint.from_dict(invalid)
 
 
 class HandshakeTests(unittest.TestCase):

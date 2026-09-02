@@ -107,6 +107,8 @@ The session manager also serializes its in-memory state transitions, so
 per-peer idempotency is preserved when callers fan out concurrently.
 Signal payload, metadata and protocol-envelope representations are validated
 as strict JSON before they can participate in fingerprinting or replay.
+Session checkpoints preserve authorization evidence and delivery history for a
+caller-controlled restart while intentionally requiring a fresh handshake.
 
 ## Contrato de consumo LUCIDA/MULTI
 
