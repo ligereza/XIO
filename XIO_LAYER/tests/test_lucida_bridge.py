@@ -122,6 +122,17 @@ class LucidaBridgeTests(unittest.TestCase):
                 sent_at=datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc),
             )
 
+    def test_bridge_rejects_explicit_empty_message_id(self):
+        event = transport_to_application_event(fixture_messages()[0])
+
+        with self.assertRaises(ValueError):
+            application_event_to_transport(
+                event,
+                source="lucida",
+                destination=DESTINATION,
+                message_id="",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

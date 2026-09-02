@@ -305,7 +305,7 @@ def prepare_adapter_handoff(
     if not isinstance(source, str) or not source.strip():
         raise AdapterHandoffError("source cannot be empty")
 
-    resolved_handoff_id = handoff_id or str(uuid4())
+    resolved_handoff_id = str(uuid4()) if handoff_id is None else handoff_id
     if not handoff_id_is_valid(resolved_handoff_id):
         raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
     privacy = privacy_policy or PrivacyPolicy()

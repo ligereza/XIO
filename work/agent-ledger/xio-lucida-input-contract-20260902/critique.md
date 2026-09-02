@@ -476,3 +476,57 @@ next_checkpoint: Run application-event and complete-suite tests, then publish on
 previous_action: audit transport and event identity boundaries
 decision_delta: extend explicit identity preservation from adapter selection to the canonical ApplicationEvent constructor
 verification_signal: event_id="" and event_id=0 raise before an event is created; omitted event_id still produces a valid UUID.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Optional correlation IDs must be generated only when omitted; explicit invalid IDs must fail rather than be silently replaced.
+current_state: ApplicationEvent identity is strict. prepare_adapter_handoff uses handoff_id or uuid4(), and application_event_to_transport uses message_id or event.event_id.
+verified_evidence: An explicit empty handoff_id is replaced by a generated ID; an explicit empty message_id is replaced by the event ID, bypassing TransportMessage's empty-ID rejection.
+assumptions: Handoff and transport message IDs are caller-visible correlation/idempotency keys, so empty supplied values are invalid input and None is the omission marker.
+strongest_failure_mode: Audit, retry or deduplication references a generated key instead of the key supplied by the caller.
+highest_consequence_error: A caller can believe it created or retried one handoff/message while XIO records and delivers another identity.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Replace truthiness fallbacks with explicit None checks and cover both bridge and handoff boundaries.
+    reversibility: high
+    evidence_needed: None still generates/defaults; empty and non-string supplied IDs fail before successful preparation.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the drift is directly observable from local constructors and tests.
+    reversibility: high
+    evidence_needed: External guidance would not change the correlation contract.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve two silent identity replacement paths at adapter boundaries.
+    reversibility: high
+    evidence_needed: Acceptance that explicit IDs may be ignored.
+
+search_gap:
+  uncertainty: Whether callers intentionally pass empty IDs to request generation.
+  consequence: Low; None remains the explicit omission value and existing default behavior is preserved.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: Local identity constructors and the prior ApplicationEvent fix establish the same fail-closed rule.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run focused handoff/bridge identity tests and the complete XIO_LAYER suite, then publish only the scoped adapter, regression and ledger changes.
+previous_action: audit optional identity generation across XIO_LAYER
+decision_delta: extend strict None-only generation from ApplicationEvent to handoff and bridge message IDs
+verification_signal: explicit empty handoff_id and message_id raise; omitted values retain generated/default identities.
