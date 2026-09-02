@@ -53,6 +53,7 @@ class EventLog:
             except Exception as exc:
                 raise EventLogPersistenceError(f"invalid event log line {line_number}: {exc}") from exc
             self._insert_loaded(record)
+        self._validate_loaded_sequences()
 
     def _reload_locked(self) -> None:
         self._records.clear()
@@ -61,16 +62,35 @@ class EventLog:
             self._load()
 
     def _insert_loaded(self, record: EventRecord) -> None:
+        same_sequence = next((item for item in self._records if item.sequence == record.sequence), None)
+        if same_sequence is not None:
+            if (
+                same_sequence.event.event_id == record.event.event_id
+                and same_sequence.event.fingerprint == record.event.fingerprint
+            ):
+                return
+            raise EventLogPersistenceError(f"duplicate event sequence {record.sequence}")
         existing = self._by_id.get(record.event.event_id)
         if existing is not None:
             if existing.event.fingerprint != record.event.fingerprint:
                 raise DuplicateEventError(record.event.event_id)
+            if existing.sequence != record.sequence:
+                raise EventLogPersistenceError(
+                    f"event id {record.event.event_id} appears at multiple sequences"
+                )
             return
-        if any(item.sequence == record.sequence for item in self._records):
-            raise ValueError(f"duplicate event sequence {record.sequence}")
         self._records.append(record)
         self._by_id[record.event.event_id] = record
         self._records.sort(key=lambda item: item.sequence)
+
+    def _validate_loaded_sequences(self) -> None:
+        expected = 1
+        for record in self._records:
+            if record.sequence != expected:
+                raise EventLogPersistenceError(
+                    f"event log sequence gap: expected {expected}, found {record.sequence}"
+                )
+            expected += 1
 
     def append(self, event: Event) -> EventRecord:
         if not isinstance(event, Event):

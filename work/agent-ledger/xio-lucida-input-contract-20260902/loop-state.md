@@ -21,14 +21,17 @@ completed:
     evidence: Commit 0efe36c is published on codex/xio-lucida-input-contract; LocalEventRecord rejects non-string identifiers and timestamps before constructing a record, with a focused regression.
   - item: Transport messages reject non-JSON payloads and envelopes.
     evidence: Transport-focused tests pass (11 tests); the complete XIO_LAYER suite passes 159 tests, and the JSONL writer rejects non-JSON numeric values.
+  - item: Persistent EventLog fails closed on missing or reused ingestion sequences.
+    evidence: A temporary 1,3 JSONL previously loaded and appended as 4; it now raises EventLogPersistenceError, as does the same event id at sequences 1 and 2. The focused regressions and full suite pass.
 
 current_state:
   files_or_resources:
     - XIO_LAYER
     - work/agent-ledger/xio-lucida-input-contract-20260902/loop-state.md
+    - work/agent-ledger/xio-lucida-input-contract-20260902/critique.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 159 tests; transport-focused suite passes 11 tests; compileall, technical ASCII and diff checks pass.
+  tests_and_checks: XIO_LAYER suite passes 161 tests; transport-focused suite passes 11 tests; event-log corruption regressions pass; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.

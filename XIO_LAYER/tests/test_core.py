@@ -13,7 +13,7 @@ import unittest
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
 from XIO_LAYER.core.contracts import ActionResult, Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
-from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
+from XIO_LAYER.core.events import DuplicateEventError, EventLog, EventLogPersistenceError, replay_events
 from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
     CheckpointStore,
@@ -213,6 +213,31 @@ class EventAndReplayTests(unittest.TestCase):
         self.assertEqual(sorted(sequences), [1, 2, 3, 4])
         self.assertEqual([record.sequence for record in loaded_records], [1, 2, 3, 4])
         self.assertEqual(loaded_length, 4)
+
+    def test_persistent_event_log_rejects_sequence_gaps_before_replay_or_append(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            records = [
+                {"sequence": sequence, "event": make_event(f"event-{sequence}", sequence).to_dict()}
+                for sequence in (1, 3)
+            ]
+            path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(EventLogPersistenceError, "sequence gap"):
+                EventLog(path)
+
+    def test_persistent_event_log_rejects_same_event_at_multiple_sequences(self):
+        event = make_event("event-repeated", 1)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            records = [
+                {"sequence": 1, "event": event.to_dict()},
+                {"sequence": 2, "event": event.to_dict()},
+            ]
+            path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(EventLogPersistenceError, "multiple sequences"):
+                EventLog(path)
 
     def test_duplicate_identical_event_is_idempotent_and_conflict_is_rejected(self):
         log = EventLog()
