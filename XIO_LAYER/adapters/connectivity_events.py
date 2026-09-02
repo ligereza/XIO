@@ -33,6 +33,8 @@ def connectivity_status_to_event(
 
     if not isinstance(status, ConnectionStatus):
         raise ConnectivityEventError("adapter accepts ConnectionStatus only")
+    if provenance is not None and not isinstance(provenance, Mapping):
+        raise ConnectivityEventError("provenance must be a mapping or None")
 
     try:
         status_payload = status.to_dict()
@@ -59,7 +61,7 @@ def connectivity_status_to_event(
         "origin": "host_probe",
         "status_contract": "ConnectionStatus",
         "status_hash": content_hash(status_payload),
-        **dict(provenance or {}),
+        **(dict(provenance) if provenance is not None else {}),
     }
     return ApplicationEvent(
         event_id=event_id,

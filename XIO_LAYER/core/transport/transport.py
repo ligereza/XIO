@@ -504,7 +504,9 @@ class InMemoryTransport:
         clock: Callable[[], datetime] = utc_now,
         enforce_sequence: bool = True,
     ):
-        self.policy = policy or TransportPolicy(allow_network=False)
+        if policy is not None and not isinstance(policy, TransportPolicy):
+            raise TypeError("policy must be a TransportPolicy or None")
+        self.policy = TransportPolicy(allow_network=False) if policy is None else policy
         self.clock = clock
         self.enforce_sequence = enforce_sequence
         self._messages: list[TransportMessage] = []
@@ -645,8 +647,10 @@ class JsonLineTransport:
     """
 
     def __init__(self, writer: Callable[[bytes], None], policy: TransportPolicy | None = None):
+        if policy is not None and not isinstance(policy, TransportPolicy):
+            raise TypeError("policy must be a TransportPolicy or None")
         self.writer = writer
-        self.policy = policy or TransportPolicy()
+        self.policy = TransportPolicy() if policy is None else policy
 
     def send(self, message: TransportMessage) -> DeliveryReceipt:
         self.policy.validate(message.destination)

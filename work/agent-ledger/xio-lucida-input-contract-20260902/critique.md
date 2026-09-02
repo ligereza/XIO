@@ -584,3 +584,57 @@ next_checkpoint: Add focused optional-field regressions, run the complete XIO_LA
 previous_action: audit optional identity generation across XIO_LAYER
 decision_delta: broaden strict None-only handling from correlation IDs to optional temporal and provenance inputs
 verification_signal: selected_at=0, sent_at=0, protocol received_timestamp=0 and provenance=0 are rejected instead of replaced.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Injected policies and provenance must reject invalid false-like values instead of silently selecting defaults.
+current_state: Optional timestamps and IDs use None-only defaults. Transport, session, handoff and local-source policy parameters, plus connectivity provenance, still used truthiness fallback.
+verified_evidence: policy=0 selected a default TransportPolicy; privacy_policy=0 selected a default PrivacyPolicy; provenance=0 became an empty mapping and was accepted.
+assumptions: Explicit non-None dependency values are caller input and must be type-checked before state changes or data projection.
+strongest_failure_mode: A caller's intended policy or provenance is ignored while the operation continues under an unrequested default.
+highest_consequence_error: Privacy or network behavior can differ from the declared configuration without an observable rejection.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: medium
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Use explicit None checks and type validation for injected policies and connectivity provenance.
+    reversibility: high
+    evidence_needed: None retains defaults; valid objects are preserved; false-like invalid values raise.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the bypass is locally reproducible and the contract is explicit.
+    reversibility: high
+    evidence_needed: External guidance would not change the dependency type boundary.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve silent policy/provenance substitution.
+    reversibility: high
+    evidence_needed: Acceptance that explicit invalid dependencies may be ignored.
+
+search_gap:
+  uncertainty: Whether any caller intentionally passes false-like values to request defaults.
+  consequence: Low; None is the documented omission value and valid configurations remain unchanged.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The None-only rule is already established across the adjacent event and handoff contracts.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run complete XIO_LAYER tests and publish the policy/provenance validation with its durable checkpoint.
+previous_action: audit remaining truthiness fallbacks after strict ID/timestamp fixes
+decision_delta: extend the strict optional-input rule to injected policies and connectivity provenance
+verification_signal: policy=0, privacy_policy=0 and provenance=0 fail before defaulting or projection.

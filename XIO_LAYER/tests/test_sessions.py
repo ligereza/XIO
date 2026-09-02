@@ -224,6 +224,8 @@ class SessionContractTests(unittest.TestCase):
                     SignalEnvelope(**arguments)
 
     def test_session_manager_rejects_invalid_public_inputs_before_mutation(self):
+        with self.assertRaises(TypeError):
+            PeerSessionManager(peer("alice"), InMemoryTransport(), policy=0)
         sender = PeerSessionManager(peer("alice"), InMemoryTransport(), authorized_peers=[peer("bob")])
 
         with self.assertRaises(TypeError):

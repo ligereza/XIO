@@ -308,7 +308,9 @@ def prepare_adapter_handoff(
     resolved_handoff_id = str(uuid4()) if handoff_id is None else handoff_id
     if not handoff_id_is_valid(resolved_handoff_id):
         raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
-    privacy = privacy_policy or PrivacyPolicy()
+    if privacy_policy is not None and not isinstance(privacy_policy, PrivacyPolicy):
+        raise TypeError("privacy_policy must be a PrivacyPolicy or None")
+    privacy = PrivacyPolicy() if privacy_policy is None else privacy_policy
     prepared_at = utc_now()
 
     try:

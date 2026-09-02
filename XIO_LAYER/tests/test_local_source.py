@@ -30,6 +30,30 @@ DESTINATION = Endpoint("memory", "lucida-fixture")
 
 
 class LocalEventSourceTests(unittest.TestCase):
+    def test_prepare_handoffs_rejects_false_like_privacy_policy(self):
+        source = LocalAdapterEventSource(FIXTURE_PATH)
+        registry = SourceAdapterRegistry()
+        registry.register(CountingAdapter("fixture-app"))
+        selection = registry.select_candidate(
+            source_app="fixture-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event", {"source.observe"}),
+            required_capabilities={"source.observe"},
+            selected_at=T0,
+            selection_id="selection-invalid-policy",
+        )
+
+        with self.assertRaises(TypeError):
+            source.prepare_handoffs(
+                registry,
+                selection,
+                source="xio-layer",
+                destination=DESTINATION,
+                audit=AuditLedger(),
+                privacy_policy=0,
+            )
+
     def test_fixture_replay_deduplicates_and_orders_by_ingestion_sequence(self):
         records = LocalAdapterEventSource(FIXTURE_PATH).replay()
 

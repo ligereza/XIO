@@ -282,6 +282,28 @@ class AdapterHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(PrivacyPolicyError, "allowed_payload_keys"):
             PrivacyPolicy(allowed_payload_keys=["safe", 7])
 
+    def test_prepare_handoff_rejects_false_like_privacy_policy(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-invalid-policy",
+            selected_at=T0,
+        )
+
+        with self.assertRaises(TypeError):
+            prepare_adapter_handoff(
+                registry,
+                selection,
+                make_record(),
+                source="xio-layer",
+                destination=DESTINATION,
+                audit=AuditLedger(),
+                privacy_policy=0,
+            )
+
     def test_prepare_handoff_rejects_explicit_empty_handoff_id(self):
         registry, _, _ = self.make_registry()
         selection = registry.select_candidate(

@@ -41,6 +41,10 @@ def message(endpoint, *, sequence=None, envelope=None, message_id="message-1", i
 
 class TransportTests(unittest.TestCase):
     def test_direct_contracts_reject_coercible_invalid_types(self):
+        with self.assertRaises(TypeError):
+            InMemoryTransport(policy=0)
+        with self.assertRaises(TypeError):
+            JsonLineTransport(lambda _: None, policy=0)
         with self.assertRaises(ValueError):
             Endpoint("memory", "queue", port=True)
         with self.assertRaises(ValueError):

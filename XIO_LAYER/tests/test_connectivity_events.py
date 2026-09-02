@@ -240,6 +240,18 @@ class ConnectivityEventTests(unittest.TestCase):
                 received_timestamp=T0,
             )
 
+    def test_explicit_false_like_provenance_is_rejected(self):
+        with self.assertRaises(ConnectivityEventError):
+            connectivity_status_to_event(
+                make_status(NetworkMedium.WIFI),
+                source_app="host-monitor",
+                session_id="session-1",
+                peer_id="peer-1",
+                sequence=1,
+                received_timestamp=T0,
+                provenance=0,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -738,7 +738,9 @@ class PeerSessionManager:
         self._lock = RLock()
         self.local_peer = local_peer
         self.transport = transport
-        self.policy = policy or TransportPolicy()
+        if policy is not None and not isinstance(policy, TransportPolicy):
+            raise TypeError("policy must be a TransportPolicy or None")
+        self.policy = TransportPolicy() if policy is None else policy
         self._peers: dict[str, PeerDescriptor] = {}
         self._sessions: dict[str, _PeerSession] = {}
         self._revoked: set[str] = set()

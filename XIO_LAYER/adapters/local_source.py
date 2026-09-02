@@ -158,7 +158,9 @@ class LocalAdapterEventSource:
     ) -> tuple[AdapterHandoff, ...]:
         """Prepare one handoff per replayed record; never deliver or execute."""
 
-        privacy = privacy_policy or PrivacyPolicy()
+        if privacy_policy is not None and not isinstance(privacy_policy, PrivacyPolicy):
+            raise TypeError("privacy_policy must be a PrivacyPolicy or None")
+        privacy = PrivacyPolicy() if privacy_policy is None else privacy_policy
         prepared = []
         for local_record in self.replay():
             if (
