@@ -499,10 +499,28 @@ def _transport_from_dict(value: Any) -> TransportMessage:
     }
     if set(value) != required or not isinstance(value["destination"], Mapping):
         raise AdapterHandoffError("handoff message fields do not match the contract")
+    for field_name in ("message_id", "source", "channel"):
+        _require_text(value[field_name], field_name)
+    if value["sequence"] is not None and (
+        isinstance(value["sequence"], bool)
+        or not isinstance(value["sequence"], int)
+        or value["sequence"] < 1
+    ):
+        raise AdapterHandoffError("message sequence is invalid")
+    if value["idempotency_key"] is not None:
+        _require_text(value["idempotency_key"], "idempotency_key")
     destination = value["destination"]
     destination_required = {"scheme", "address", "medium", "scope", "port"}
     if set(destination) != destination_required:
         raise AdapterHandoffError("handoff destination fields do not match the contract")
+    for field_name in ("scheme", "address", "medium", "scope"):
+        _require_text(destination[field_name], f"destination.{field_name}")
+    if destination["port"] is not None and (
+        isinstance(destination["port"], bool)
+        or not isinstance(destination["port"], int)
+        or not 1 <= destination["port"] <= 65535
+    ):
+        raise AdapterHandoffError("destination port is invalid")
     if not isinstance(value["payload"], Mapping):
         raise AdapterHandoffError("handoff message payload must be a mapping")
     return TransportMessage(
@@ -526,6 +544,11 @@ def _transport_from_dict(value: Any) -> TransportMessage:
 
 def _opaque_id(prefix: str, value: str) -> str:
     return f"{prefix}-{content_hash(value)[:16]}"
+
+
+def _require_text(value: Any, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise AdapterHandoffError(f"{field_name} must be a non-empty string")
 
 
 def _validate_key(value: Any, field_name: str) -> None:

@@ -191,6 +191,14 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertEqual(restored.selection, handoff.selection)
         with self.assertRaises(AdapterHandoffError):
             AdapterHandoff.from_dict(handoff.to_dict())
+        invalid_message = handoff.to_dict()
+        invalid_message["message"] = {**invalid_message["message"], "message_id": 7}
+        with self.assertRaises(AdapterHandoffError):
+            AdapterHandoff.from_dict(invalid_message, caller_id="operator-1")
+        invalid_sequence = handoff.to_dict()
+        invalid_sequence["message"] = {**invalid_sequence["message"], "sequence": True}
+        with self.assertRaises(AdapterHandoffError):
+            AdapterHandoff.from_dict(invalid_sequence, caller_id="operator-1")
 
         permissions = PermissionRegistry()
         permissions.grant("operator-1", "handoff.deliver")
