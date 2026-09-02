@@ -16,6 +16,7 @@ from XIO_LAYER.adapters import (
     PrivacyPolicyError,
     SourceAdapterRegistry,
     StaleRoutePlanError,
+    deliver_adapter_handoff,
     prepare_adapter_handoff,
     transport_to_application_event,
 )
@@ -178,6 +179,45 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertNotIn("do-not-export", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("private-note", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("operator-1", json.dumps(handoff.to_dict(), sort_keys=True))
+
+        first_delivery = deliver_adapter_handoff(handoff, transport, audit)
+        duplicate_delivery = deliver_adapter_handoff(handoff, transport, audit)
+        self.assertEqual(first_delivery.status, "accepted")
+        self.assertEqual(duplicate_delivery.status, "duplicate")
+        self.assertEqual(len(transport.messages()), 1)
+        self.assertTrue(audit.verify())
+
+    def test_blocked_delivery_is_rejected_and_audited_without_retry_or_fallback(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-1",
+            selected_at=T0,
+        )
+        audit = AuditLedger()
+        handoff = prepare_adapter_handoff(
+            registry,
+            selection,
+            make_record(),
+            source="xio-layer",
+            destination=DESTINATION,
+            audit=audit,
+            handoff_id="handoff-1",
+        )
+
+        class BlockedTransport:
+            def send(self, message):
+                raise PermissionError("blocked by injected policy")
+
+        result = deliver_adapter_handoff(handoff, BlockedTransport(), audit)
+
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error, "PermissionError")
+        self.assertEqual(audit.entries()[-1].event_type, "adapter.handoff.delivery_rejected")
+        self.assertTrue(audit.verify())
 
     def test_prepared_handoff_round_trips_and_replays_without_execution(self):
         registry, _, _ = self.make_registry()

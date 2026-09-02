@@ -80,6 +80,12 @@ calling only the selected adapter's `convert()` method. It creates a
 does not call `send()`, open sockets, discover peers or invoke an XIO executor.
 The caller retains the explicit decision to deliver the prepared message.
 
+`deliver_adapter_handoff(...)` is the separate explicit delivery step. It
+accepts a caller-injected transport, returns an `AdapterHandoffDelivery` with
+the transport receipt, and audits accepted, duplicate, rejected and failed
+attempts. A transport policy rejection is reported as `rejected`; no retry or
+alternate adapter is selected.
+
 The default `PrivacyPolicy` exports no payload or source provenance keys and
 replaces session and peer identifiers with opaque hashes. A caller must
 explicitly allow top-level payload/provenance keys to export them. The handoff

@@ -16,7 +16,7 @@ from uuid import uuid4
 from ..core.audit import AuditLedger
 from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
-from ..core.transport import Endpoint, TransportMessage
+from ..core.transport import DeliveryReceipt, Endpoint, Transport, TransportMessage
 from .lucida_bridge import application_event_to_transport
 from .source_registry import AdapterSelection, SourceAdapterRegistry
 
@@ -143,6 +143,46 @@ class AdapterHandoff:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class AdapterHandoffDelivery:
+    """Receipt from one explicit delivery attempt for a prepared handoff."""
+
+    handoff_id: str
+    status: str
+    receipt: DeliveryReceipt | None
+    attempted_at: datetime
+    error: str | None = None
+
+    def __post_init__(self) -> None:
+        if not handoff_id_is_valid(self.handoff_id):
+            raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
+        if self.status not in {"accepted", "duplicate", "rejected", "failed"}:
+            raise AdapterHandoffError("delivery status is invalid")
+        object.__setattr__(self, "attempted_at", require_utc(self.attempted_at, "attempted_at"))
+
+    def to_dict(self) -> dict[str, Any]:
+        receipt = None
+        if self.receipt is not None:
+            receipt = {
+                "message_id": self.receipt.message_id,
+                "accepted": self.receipt.accepted,
+                "duplicate": self.receipt.duplicate,
+                "sequence": self.receipt.sequence,
+                "latency_ms": self.receipt.latency_ms,
+                "error": self.receipt.error,
+                "delivered_at": self.receipt.delivered_at.isoformat()
+                if self.receipt.delivered_at is not None
+                else None,
+            }
+        return {
+            "handoff_id": self.handoff_id,
+            "status": self.status,
+            "receipt": receipt,
+            "attempted_at": self.attempted_at.isoformat(),
+            "error": self.error,
+        }
+
+
 def prepare_adapter_handoff(
     registry: SourceAdapterRegistry,
     selection: AdapterSelection,
@@ -229,6 +269,71 @@ def prepare_adapter_handoff(
     )
 
 
+def deliver_adapter_handoff(
+    handoff: AdapterHandoff,
+    transport: Transport,
+    audit: AuditLedger,
+) -> AdapterHandoffDelivery:
+    """Deliver one prepared handoff when the caller explicitly invokes this function."""
+
+    if not isinstance(handoff, AdapterHandoff):
+        raise TypeError("handoff must be an AdapterHandoff")
+    if not callable(getattr(transport, "send", None)):
+        raise TypeError("transport must provide send")
+    if not callable(getattr(audit, "append", None)):
+        raise TypeError("audit must provide append")
+
+    attempted_at = utc_now()
+    try:
+        receipt = transport.send(handoff.message)
+        if not isinstance(receipt, DeliveryReceipt):
+            raise AdapterHandoffError("transport returned an invalid delivery receipt")
+        status = "duplicate" if receipt.duplicate else "accepted" if receipt.accepted else "rejected"
+        audit.append(
+            "adapter.handoff.delivered" if receipt.accepted else "adapter.handoff.delivery_rejected",
+            handoff.handoff_id,
+            status,
+            _delivery_audit_metadata(handoff, receipt=receipt),
+            handoff.selection.caller_id,
+        )
+        return AdapterHandoffDelivery(
+            handoff_id=handoff.handoff_id,
+            status=status,
+            receipt=receipt,
+            attempted_at=attempted_at,
+        )
+    except PermissionError as exc:
+        audit.append(
+            "adapter.handoff.delivery_rejected",
+            handoff.handoff_id,
+            "rejected",
+            _delivery_audit_metadata(handoff, error=type(exc).__name__),
+            handoff.selection.caller_id,
+        )
+        return AdapterHandoffDelivery(
+            handoff_id=handoff.handoff_id,
+            status="rejected",
+            receipt=None,
+            attempted_at=attempted_at,
+            error=type(exc).__name__,
+        )
+    except Exception as exc:
+        audit.append(
+            "adapter.handoff.delivery_failed",
+            handoff.handoff_id,
+            "failed",
+            _delivery_audit_metadata(handoff, error=type(exc).__name__),
+            handoff.selection.caller_id,
+        )
+        return AdapterHandoffDelivery(
+            handoff_id=handoff.handoff_id,
+            status="failed",
+            receipt=None,
+            attempted_at=attempted_at,
+            error=type(exc).__name__,
+        )
+
+
 def _audit_metadata(selection: AdapterSelection, **extra: Any) -> dict[str, Any]:
     metadata = {
         "selection_id": selection.selection_id,
@@ -237,6 +342,33 @@ def _audit_metadata(selection: AdapterSelection, **extra: Any) -> dict[str, Any]
         "plan_fingerprint": selection.plan_fingerprint,
     }
     metadata.update(extra)
+    return metadata
+
+
+def _delivery_audit_metadata(
+    handoff: AdapterHandoff,
+    *,
+    receipt: DeliveryReceipt | None = None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    metadata = {
+        "selection_id": handoff.selection.selection_id,
+        "source_app": handoff.selection.source_app,
+        "event_type": handoff.selection.event_type,
+        "message_id": handoff.message.message_id,
+        "sequence": handoff.message.sequence,
+    }
+    if receipt is not None:
+        metadata.update(
+            {
+                "delivery_status": receipt.status.value,
+                "duplicate": receipt.duplicate,
+                "latency_ms": receipt.latency_ms,
+                "receipt_error": receipt.error,
+            }
+        )
+    if error is not None:
+        metadata["error_type"] = error
     return metadata
 
 
@@ -263,9 +395,11 @@ def handoff_id_is_valid(value: Any) -> bool:
 
 __all__ = [
     "AdapterHandoff",
+    "AdapterHandoffDelivery",
     "AdapterHandoffError",
     "PrivacyPolicy",
     "PrivacyPolicyError",
     "handoff_id_is_valid",
+    "deliver_adapter_handoff",
     "prepare_adapter_handoff",
 ]

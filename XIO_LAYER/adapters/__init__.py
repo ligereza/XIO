@@ -17,9 +17,11 @@ from .lucida_bridge import (
 )
 from .handoff import (
     AdapterHandoff,
+    AdapterHandoffDelivery,
     AdapterHandoffError,
     PrivacyPolicy,
     PrivacyPolicyError,
+    deliver_adapter_handoff,
     prepare_adapter_handoff,
 )
 from .local_source import (
@@ -52,6 +54,7 @@ __all__ = [
     "APPLICATION_EVENT_SCHEMA_VERSION",
     "AdapterHandoff",
     "AdapterHandoffError",
+    "AdapterHandoffDelivery",
     "AdapterSelection",
     "CandidateNotAvailableError",
     "DuplicateLocalEventError",
@@ -77,5 +80,6 @@ __all__ = [
     "transport_to_application_event",
     "UndeclaredEventTypeError",
     "UnknownSourceAdapterError",
+    "deliver_adapter_handoff",
     "prepare_adapter_handoff",
 ]

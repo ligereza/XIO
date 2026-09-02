@@ -52,6 +52,8 @@ and replays records by ingestion sequence before handing them to that selected
 route. It does not choose a route or send a message.
 `JsonLineAuditLedger` persists the handoff audit chain across restarts and
 rejects malformed or tampered entries on reload.
+Delivery is a distinct caller action through `deliver_adapter_handoff`; its
+receipt is audited and a blocked transport is not retried or rerouted.
 
 ## Contrato de consumo LUCIDA/MULTI
 
