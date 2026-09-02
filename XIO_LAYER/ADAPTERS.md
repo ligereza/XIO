@@ -83,8 +83,9 @@ The caller retains the explicit decision to deliver the prepared message.
 `deliver_adapter_handoff(...)` is the separate explicit delivery step. It
 accepts a caller-injected transport, returns an `AdapterHandoffDelivery` with
 the transport receipt, and audits accepted, duplicate, rejected and failed
-attempts. A transport policy rejection is reported as `rejected`; no retry or
-alternate adapter is selected.
+attempts. A transport policy rejection is reported as `rejected`; an
+idempotency fingerprint conflict is reported as terminal `conflict`. Neither
+case triggers retry or alternate adapter selection.
 
 Delivery also requires a current `PermissionRegistry` grant for the selected
 caller, defaulting to `handoff.deliver`. The permission is checked immediately

@@ -54,7 +54,8 @@ route. It does not choose a route or send a message.
 rejects malformed or tampered entries on reload.
 Delivery is a distinct caller action through `deliver_adapter_handoff`; its
 receipt is audited, it requires a current `PermissionRegistry` grant, and a
-blocked or revoked delivery is not retried or rerouted.
+blocked, revoked or idempotency-conflicting delivery is not retried or
+rerouted; idempotency conflict remains distinguishable as a terminal result.
 
 ## Contrato de consumo LUCIDA/MULTI
 

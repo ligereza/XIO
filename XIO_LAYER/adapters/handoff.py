@@ -16,7 +16,7 @@ from uuid import uuid4
 from ..core.audit import AuditLedger, PermissionRegistry
 from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
-from ..core.transport import DeliveryReceipt, Endpoint, Transport, TransportMessage
+from ..core.transport import DeliveryReceipt, DeliveryStatus, Endpoint, Transport, TransportMessage
 from .lucida_bridge import application_event_to_transport
 from .source_registry import AdapterSelection, SourceAdapterRegistry
 
@@ -156,7 +156,7 @@ class AdapterHandoffDelivery:
     def __post_init__(self) -> None:
         if not handoff_id_is_valid(self.handoff_id):
             raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
-        if self.status not in {"accepted", "duplicate", "rejected", "failed"}:
+        if self.status not in {"accepted", "duplicate", "conflict", "rejected", "failed"}:
             raise AdapterHandoffError("delivery status is invalid")
         object.__setattr__(self, "attempted_at", require_utc(self.attempted_at, "attempted_at"))
 
@@ -313,9 +313,23 @@ def deliver_adapter_handoff(
         receipt = transport.send(handoff.message)
         if not isinstance(receipt, DeliveryReceipt):
             raise AdapterHandoffError("transport returned an invalid delivery receipt")
-        status = "duplicate" if receipt.duplicate else "accepted" if receipt.accepted else "rejected"
+        status = (
+            "duplicate"
+            if receipt.duplicate
+            else "accepted"
+            if receipt.accepted
+            else "conflict"
+            if receipt.status is DeliveryStatus.IDEMPOTENCY_CONFLICT
+            else "rejected"
+        )
+        event_type = {
+            "accepted": "adapter.handoff.delivered",
+            "duplicate": "adapter.handoff.delivered",
+            "conflict": "adapter.handoff.delivery_conflict",
+            "rejected": "adapter.handoff.delivery_rejected",
+        }[status]
         audit.append(
-            "adapter.handoff.delivered" if receipt.accepted else "adapter.handoff.delivery_rejected",
+            event_type,
             handoff.handoff_id,
             status,
             _delivery_audit_metadata(handoff, receipt=receipt),

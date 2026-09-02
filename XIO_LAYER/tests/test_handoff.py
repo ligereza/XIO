@@ -284,6 +284,46 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertEqual(audit.entries()[-1].outcome, "rejected")
         self.assertTrue(audit.verify())
 
+    def test_idempotency_conflict_is_terminal_and_not_retried(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-1",
+            selected_at=T0,
+        )
+        audit = AuditLedger()
+        handoff = prepare_adapter_handoff(
+            registry,
+            selection,
+            make_record(),
+            source="xio-layer",
+            destination=DESTINATION,
+            audit=audit,
+            message_id="message-conflict",
+            handoff_id="handoff-1",
+        )
+        permissions = PermissionRegistry()
+        permissions.grant("operator-1", "handoff.deliver")
+        transport = InMemoryTransport()
+        conflicting_message = replace(handoff.message, payload={"different": True})
+        self.assertTrue(transport.send(conflicting_message).accepted)
+
+        result = deliver_adapter_handoff(
+            handoff,
+            transport,
+            audit,
+            permissions=permissions,
+        )
+
+        self.assertEqual(result.status, "conflict")
+        self.assertEqual(result.receipt.error, "idempotency_conflict")
+        self.assertEqual(len(transport.messages()), 1)
+        self.assertEqual(audit.entries()[-1].event_type, "adapter.handoff.delivery_conflict")
+        self.assertTrue(audit.verify())
+
     def test_prepared_handoff_round_trips_and_replays_without_execution(self):
         registry, _, _ = self.make_registry()
         selection = registry.select_candidate(
