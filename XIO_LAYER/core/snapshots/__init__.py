@@ -1,10 +1,11 @@
 """State projection, snapshots and recovery checkpoints."""
 
-from .checkpoint import CheckpointStore, RecoveryManager, RecoveryResult
+from .checkpoint import CheckpointConflictError, CheckpointStore, RecoveryManager, RecoveryResult
 from .projector import SnapshotProjector, SnapshotStore
 
 __all__ = [
     "CheckpointStore",
+    "CheckpointConflictError",
     "RecoveryManager",
     "RecoveryResult",
     "SnapshotProjector",

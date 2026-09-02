@@ -8,9 +8,11 @@ import json
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from threading import RLock
 from ..contracts import Checkpoint, Snapshot, utc_now
 from ..events.log import EventLog
 from ..events.replay import replay_events
+from ..file_lock import exclusive_file_lock
 from .projector import SnapshotProjector
 
 
@@ -22,12 +24,18 @@ class RecoveryResult:
     issues: tuple[str, ...] = ()
 
 
+class CheckpointConflictError(ValueError):
+    """Raised when a checkpoint version is reused with different content."""
+
+
 class CheckpointStore:
     """Store checkpoints as atomic JSON files, never as executable state."""
 
     def __init__(self, directory: str | Path):
         self.directory = Path(directory)
         self.last_issues: list[str] = []
+        self._lock = RLock()
+        self._lock_path = self.directory / ".checkpoints.lock"
 
     @staticmethod
     def _stream_key(stream_id: str) -> str:
@@ -37,19 +45,44 @@ class CheckpointStore:
         return self.directory / f"{self._stream_key(checkpoint.stream_id)}-{checkpoint.sequence:020d}.json"
 
     def save(self, snapshot: Snapshot) -> Checkpoint:
-        checkpoint = Checkpoint.from_snapshot(snapshot)
-        self.directory.mkdir(parents=True, exist_ok=True)
-        destination = self._path(checkpoint)
-        with NamedTemporaryFile(
-            "w", encoding="utf-8", dir=self.directory, prefix=".checkpoint-", suffix=".tmp", delete=False
-        ) as stream:
-            temporary = Path(stream.name)
-            json.dump(checkpoint.to_dict(), stream, ensure_ascii=False, sort_keys=True)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, destination)
-        return checkpoint
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                checkpoint = Checkpoint.from_snapshot(snapshot)
+                self.directory.mkdir(parents=True, exist_ok=True)
+                destination = self._path(checkpoint)
+                if destination.exists():
+                    try:
+                        existing = Checkpoint.from_dict(
+                            json.loads(destination.read_text(encoding="utf-8"))
+                        )
+                    except Exception as exc:
+                        raise ValueError("existing checkpoint is not valid") from exc
+                    if existing.to_dict() == checkpoint.to_dict():
+                        return existing
+                    raise CheckpointConflictError(
+                        f"checkpoint version already exists: {checkpoint.stream_id}:{checkpoint.sequence}"
+                    )
+
+                temporary: Path | None = None
+                try:
+                    with NamedTemporaryFile(
+                        "w",
+                        encoding="utf-8",
+                        dir=self.directory,
+                        prefix=".checkpoint-",
+                        suffix=".tmp",
+                        delete=False,
+                    ) as stream:
+                        temporary = Path(stream.name)
+                        json.dump(checkpoint.to_dict(), stream, ensure_ascii=False, sort_keys=True)
+                        stream.write("\n")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temporary, destination)
+                finally:
+                    if temporary is not None and temporary.exists():
+                        temporary.unlink()
+                return checkpoint
 
     def _candidates(self, stream_id: str) -> list[Path]:
         if not self.directory.exists():
@@ -58,17 +91,19 @@ class CheckpointStore:
         return sorted(self.directory.glob(f"{prefix}*.json"), reverse=True)
 
     def load_latest(self, stream_id: str) -> Checkpoint | None:
-        self.last_issues = []
-        for path in self._candidates(stream_id):
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                checkpoint = Checkpoint.from_dict(data)
-                if checkpoint.stream_id != stream_id:
-                    raise ValueError("stream id mismatch")
-                return checkpoint
-            except Exception as exc:
-                self.last_issues.append(f"{path.name}: {exc}")
-        return None
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                self.last_issues = []
+                for path in self._candidates(stream_id):
+                    try:
+                        data = json.loads(path.read_text(encoding="utf-8"))
+                        checkpoint = Checkpoint.from_dict(data)
+                        if checkpoint.stream_id != stream_id:
+                            raise ValueError("stream id mismatch")
+                        return checkpoint
+                    except Exception as exc:
+                        self.last_issues.append(f"{path.name}: {exc}")
+                return None
 
 
 class RecoveryManager:

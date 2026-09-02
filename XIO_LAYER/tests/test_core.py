@@ -10,9 +10,14 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Event, ExplicitAction, Proposal, TimestampError
+from XIO_LAYER.core.contracts import Event, ExplicitAction, Proposal, Snapshot, TimestampError
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
-from XIO_LAYER.core.snapshots import CheckpointStore, RecoveryManager, SnapshotProjector
+from XIO_LAYER.core.snapshots import (
+    CheckpointConflictError,
+    CheckpointStore,
+    RecoveryManager,
+    SnapshotProjector,
+)
 from XIO_LAYER.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
 
 
@@ -205,6 +210,35 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_checkpoint_version_is_idempotent_but_conflicts_are_rejected(self):
+        first = Snapshot(
+            stream_id="demo",
+            version=2,
+            state={"total": 3},
+            captured_at=T0,
+            source_event_id="event-2",
+            snapshot_id="snapshot-2",
+        )
+        conflict = Snapshot(
+            stream_id="demo",
+            version=2,
+            state={"total": 99},
+            captured_at=T0,
+            source_event_id="event-2",
+            snapshot_id="snapshot-2-conflict",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = CheckpointStore(Path(directory) / "checkpoints")
+            saved = store.save(first)
+            repeated = store.save(first)
+            with self.assertRaises(CheckpointConflictError):
+                store.save(conflict)
+            loaded = store.load_latest("demo")
+
+        self.assertEqual(saved.to_dict(), repeated.to_dict())
+        self.assertIsNotNone(loaded)
+        self.assertEqual(loaded.to_dict(), saved.to_dict())
+
     def test_recovery_uses_checkpoint_then_replays_remaining_events(self):
         with tempfile.TemporaryDirectory() as directory:
             event_path = Path(directory) / "events.jsonl"
