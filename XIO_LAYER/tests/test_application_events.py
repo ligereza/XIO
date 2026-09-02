@@ -46,6 +46,25 @@ def reducer(state, event):
 
 
 class ApplicationEventContractTests(unittest.TestCase):
+    def test_explicit_falsy_event_id_is_rejected_instead_of_replaced(self):
+        arguments = {
+            "source_app": "test-app",
+            "event_type": "test.value",
+            "channel": "signals",
+            "payload": {"value": 1},
+            "source_timestamp": T0,
+            "received_timestamp": T0,
+            "session_id": "session-1",
+            "peer_id": "peer-1",
+            "sequence": 1,
+            "provenance": {},
+        }
+
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**arguments, event_id="")
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**arguments, event_id=0)
+
     def test_event_log_append_rejects_wrong_type_before_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"

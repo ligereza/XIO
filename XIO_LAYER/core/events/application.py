@@ -110,7 +110,9 @@ class ApplicationEvent:
         if raw_hash is not None and raw_hash != computed_hash:
             raise ApplicationEventContractError("raw_hash does not match payload")
         self.raw_hash = computed_hash
-        self.event_id = self._required(event_id or str(uuid4()), "event_id")
+        if event_id is None:
+            event_id = str(uuid4())
+        self.event_id = self._required(event_id, "event_id")
 
     @staticmethod
     def _required(value: str, field_name: str) -> str:

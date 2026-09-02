@@ -422,3 +422,57 @@ next_checkpoint: Run handshake-contract and complete-suite tests, then publish o
 previous_action: audit handshake freshness and trust-state invalidation
 decision_delta: extend fail-closed handshake validation from stale requests to semantic status/boolean consistency
 verification_signal: accepted=True/status=blocked and accepted=False/status=accepted are rejected before a manager can transition state.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Explicit event identity must be preserved or rejected; only an omitted identity may be generated.
+current_state: Handshake contracts are published with semantic status validation. ApplicationEvent uses event_id or uuid4(), so falsy supplied identities are silently replaced.
+verified_evidence: Constructing ApplicationEvent with event_id="" or event_id=0 reaches the UUID fallback and produces a new valid event id instead of raising.
+assumptions: Event IDs are correlation and deduplication keys; falsy supplied values are invalid input, while None is the only omission marker.
+strongest_failure_mode: A caller's requested identity disappears before logging, replay or audit, causing retries and records to refer to a different event.
+highest_consequence_error: A malformed event can be accepted with a fabricated identity and later be treated as an authoritative observation.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Change the UUID fallback to an explicit None check and add falsy identity regressions.
+    reversibility: high
+    evidence_needed: None continues to generate an ID; empty and non-string supplied values fail.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the identity behavior is directly observable and locally specified.
+    reversibility: high
+    evidence_needed: External guidance would not change the correlation contract.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve silent identity replacement in the canonical event path.
+    reversibility: high
+    evidence_needed: Acceptance that explicit invalid IDs may be replaced.
+
+search_gap:
+  uncertainty: Whether any caller intentionally passes an empty or falsy event_id to request generation.
+  consequence: Low; callers can omit the keyword or pass None explicitly, preserving the existing generation path.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The local constructor contract already rejects empty strings after generation and defines None as the optional value.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run application-event and complete-suite tests, then publish only the event contract, regression and ledger changes.
+previous_action: audit transport and event identity boundaries
+decision_delta: extend explicit identity preservation from adapter selection to the canonical ApplicationEvent constructor
+verification_signal: event_id="" and event_id=0 raise before an event is created; omitted event_id still produces a valid UUID.
