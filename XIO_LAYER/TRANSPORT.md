@@ -29,6 +29,10 @@ host has not established a known state; it is not a guessed measurement.
 `DeliveryReceipt` also validates its direct result contract: boolean flags must
 be real booleans, sequence values must be positive integers when present, and
 latency must be finite and non-negative before status mapping.
+`OscEnvelope` and `ArtNetEnvelope` apply the same fail-closed rule at their
+direct constructor boundary: addresses, argument collections, numeric frame
+fields, opcodes and payloads are validated before an envelope can be serialized
+or converted into an application event.
 `TransportPolicy` rejects ambiguous boolean values and malformed allowlists at
 construction time; a string such as `"false"` cannot silently enable network
 delivery.

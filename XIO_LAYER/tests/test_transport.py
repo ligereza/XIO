@@ -78,6 +78,20 @@ class TransportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             TransportPolicy(allowed_scopes=[True])
 
+    def test_protocol_envelopes_reject_invalid_constructor_types(self):
+        with self.assertRaises(ValueError):
+            OscEnvelope(address=7)
+        with self.assertRaises(ValueError):
+            OscEnvelope(address="/xio/test", arguments="cue")
+        with self.assertRaises(ValueError):
+            OscEnvelope(address="/xio/test", arguments=(float("nan"),))
+        with self.assertRaises(ValueError):
+            ArtNetEnvelope(universe=True, data=b"")
+        with self.assertRaises(ValueError):
+            ArtNetEnvelope(universe=1, data=b"", sequence=True)
+        with self.assertRaises(ValueError):
+            ArtNetEnvelope(universe=1, data=b"", opcode=7)
+
     def test_message_wire_round_trip_is_strict_and_does_not_send(self):
         endpoint = Endpoint("memory", "queue")
         original = message(endpoint, sequence=1, message_id="round-trip")
