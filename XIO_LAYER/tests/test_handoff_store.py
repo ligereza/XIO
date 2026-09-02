@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 import unittest
@@ -58,6 +60,41 @@ class JsonLineHandoffStoreTests(unittest.TestCase):
             self.assertEqual(results.count(True), 1)
             self.assertEqual(results.count(False), 15)
             self.assertEqual(len(store.replay(caller_id="operator-1")), 1)
+
+    def test_concurrent_processes_share_file_lock(self):
+        handoff = prepared_handoffs()[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoffs.jsonl"
+
+            wire_path = Path(directory) / "handoff.json"
+            wire_path.write_text(json.dumps(handoff.to_dict(), sort_keys=True), encoding="utf-8")
+            script = (
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "from XIO_LAYER.adapters import AdapterHandoff, JsonLineHandoffStore\n"
+                "wire = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))\n"
+                "handoff = AdapterHandoff.from_dict(wire, caller_id='operator-1')\n"
+                "print(JsonLineHandoffStore(sys.argv[1]).append(handoff))\n"
+            )
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path), str(wire_path)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for _ in range(4)
+            ]
+            results = []
+            for process in processes:
+                stdout, stderr = process.communicate()
+                self.assertEqual(process.returncode, 0, stderr)
+                results.append(stdout.strip() == "True")
+
+            self.assertEqual(results.count(True), 1)
+            self.assertEqual(results.count(False), 3)
+            self.assertEqual(len(JsonLineHandoffStore(path).replay(caller_id="operator-1")), 1)
+            self.assertTrue(path.with_name(path.name + ".lock").exists())
 
     def test_append_is_idempotent_and_replay_restores_without_caller_storage(self):
         handoffs = prepared_handoffs()

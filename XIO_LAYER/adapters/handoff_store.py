@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 import json
 import os
 from pathlib import Path
 from threading import RLock
 from typing import Any
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from ..core.contracts import content_hash
 from .handoff import AdapterHandoff, AdapterHandoffError
@@ -39,7 +45,8 @@ class JsonLineHandoffStore:
 
     def append(self, handoff: AdapterHandoff) -> bool:
         with self._lock:
-            return self._append_unlocked(handoff)
+            with _exclusive_process_lock(self.path.with_name(self.path.name + ".lock")):
+                return self._append_unlocked(handoff)
 
     def _append_unlocked(self, handoff: AdapterHandoff) -> bool:
         if not isinstance(handoff, AdapterHandoff):
@@ -76,7 +83,8 @@ class JsonLineHandoffStore:
 
     def replay(self, *, caller_id: str) -> tuple[AdapterHandoff, ...]:
         with self._lock:
-            return self._replay_unlocked(caller_id=caller_id)
+            with _exclusive_process_lock(self.path.with_name(self.path.name + ".lock")):
+                return self._replay_unlocked(caller_id=caller_id)
 
     def _replay_unlocked(self, *, caller_id: str) -> tuple[AdapterHandoff, ...]:
         """Restore unique prepared handoffs with an explicitly supplied caller id."""
@@ -136,6 +144,43 @@ def _stable_fingerprint(wire: dict[str, Any]) -> str:
     stable = deepcopy(wire)
     stable.pop("prepared_at", None)
     return content_hash(stable)
+
+
+@contextmanager
+def _exclusive_process_lock(path: Path):
+    """Serialize access to one store across processes on the current host."""
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stream = path.open("a+b")
+    except OSError as exc:
+        raise HandoffStoreError("handoff store lock could not be opened") from exc
+    try:
+        try:
+            stream.seek(0, os.SEEK_END)
+            if stream.tell() == 0:
+                stream.write(b"0")
+                stream.flush()
+            stream.seek(0)
+            if os.name == "nt":
+                msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        except OSError as exc:
+            raise HandoffStoreError("handoff store lock could not be acquired") from exc
+        try:
+            yield
+        finally:
+            try:
+                stream.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+            except OSError as exc:
+                raise HandoffStoreError("handoff store lock could not be released") from exc
+    finally:
+        stream.close()
 
 
 def _record_hash(entry: dict[str, Any]) -> str:

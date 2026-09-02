@@ -124,9 +124,9 @@ the same handoff id and stable prepared content is idempotent; changing that
 content is rejected as `DuplicateHandoffError`. Replay requires an explicit
 caller id and restores `prepared` handoffs only. Each JSONL line has a versioned
 envelope with a previous hash and record hash; tampering or reordering is
-rejected before reconstruction. Calls sharing one store instance are
-serialized; cross-process file locking remains a host-specific concern. The
-store never delivers a message.
+rejected before reconstruction. Calls are serialized both within one process
+and across processes through a sidecar lock file. The store never delivers a
+message.
 
 ## Replayable local source
 
