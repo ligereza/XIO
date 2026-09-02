@@ -156,6 +156,18 @@ class JsonLineHandoffStoreTests(unittest.TestCase):
             with self.assertRaises(HandoffIntegrityError):
                 store.replay(caller_id="operator-1")
 
+    def test_boolean_handoff_store_schema_is_rejected(self):
+        handoff = prepared_handoffs()[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoffs.jsonl"
+            store = JsonLineHandoffStore(path)
+            store.append(handoff)
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            entry["schema_version"] = True
+            path.write_text(json.dumps(entry, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaises(HandoffIntegrityError):
+                JsonLineHandoffStore(path).replay(caller_id="operator-1")
+
     def test_reordered_handoff_records_are_rejected(self):
         handoffs = prepared_handoffs()
         with tempfile.TemporaryDirectory() as directory:

@@ -128,7 +128,8 @@ caller id and restores `prepared` handoffs only. Each JSONL line has a versioned
 envelope with a previous hash and record hash; tampering or reordering is
 rejected before reconstruction. Calls are serialized both within one process
 and across processes through a sidecar lock file. The store never delivers a
-message.
+message. Its persisted schema version is validated as a real integer, so
+boolean values cannot masquerade as version `1` during integrity checks.
 
 ## Replayable local source
 

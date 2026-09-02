@@ -156,7 +156,11 @@ def _validate_entry(value: dict[str, Any], line_number: int, previous_hash: str)
     required = {"schema_version", "handoff", "previous_hash", "record_hash"}
     if set(value) != required:
         raise HandoffIntegrityError(f"handoff record fields invalid at line {line_number}")
-    if value["schema_version"] != HANDOFF_STORE_SCHEMA_VERSION:
+    if (
+        isinstance(value["schema_version"], bool)
+        or not isinstance(value["schema_version"], int)
+        or value["schema_version"] != HANDOFF_STORE_SCHEMA_VERSION
+    ):
         raise HandoffIntegrityError(f"unsupported handoff store schema at line {line_number}")
     if value["previous_hash"] != previous_hash:
         raise HandoffIntegrityError(f"handoff hash chain broken at line {line_number}")
