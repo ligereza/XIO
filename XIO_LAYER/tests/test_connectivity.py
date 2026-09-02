@@ -30,6 +30,43 @@ class FixedProbe:
 
 
 class ConnectivityContractTests(unittest.TestCase):
+    def test_status_restore_requires_exact_typed_contract(self):
+        status = ConnectionStatus(
+            endpoint=Endpoint("memory", "queue"),
+            state=ConnectionState.CONNECTED,
+            checked_at=T0,
+            latency_ms=2.5,
+            packets_sent=2,
+            packets_received=2,
+            last_sequence=1,
+            reason="probe_ok",
+        )
+        wire = status.to_dict()
+        invalid_payloads = []
+
+        missing_reason = dict(wire)
+        missing_reason.pop("reason")
+        invalid_payloads.append(missing_reason)
+
+        extra_field = dict(wire)
+        extra_field["extra"] = True
+        invalid_payloads.append(extra_field)
+
+        wrong_counter = dict(wire)
+        wrong_counter["packets_sent"] = True
+        invalid_payloads.append(wrong_counter)
+
+        wrong_endpoint = dict(wire)
+        wrong_endpoint["endpoint"] = {**wire["endpoint"], "port": "9000"}
+        invalid_payloads.append(wrong_endpoint)
+
+        for invalid in invalid_payloads:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    ConnectionStatus.from_dict(invalid)
+
+        self.assertEqual(ConnectionStatus.from_dict(wire).to_dict(), wire)
+
     def test_injected_probe_returns_host_measurement_without_mutation(self):
         endpoint = Endpoint(
             "ethernet",

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 import json
+import math
 from threading import RLock
 from typing import Any, Callable, Mapping, Protocol
 from uuid import uuid4
@@ -304,26 +305,72 @@ class ConnectionStatus:
     def from_dict(cls, data: Mapping[str, Any]) -> "ConnectionStatus":
         if not isinstance(data, Mapping):
             raise ValueError("connection status must be a mapping")
-        endpoint_data = data.get("endpoint")
+        required = {
+            "endpoint",
+            "state",
+            "checked_at",
+            "latency_ms",
+            "packets_sent",
+            "packets_received",
+            "packets_lost",
+            "last_sequence",
+            "last_error",
+            "reason",
+        }
+        if set(data) != required:
+            raise ValueError("connection status fields do not match the contract")
+        endpoint_data = data["endpoint"]
         if not isinstance(endpoint_data, Mapping):
             raise ValueError("connection status endpoint must be a mapping")
+        if set(endpoint_data) != {"scheme", "address", "medium", "scope", "port"}:
+            raise ValueError("connection status endpoint fields do not match the contract")
+        for field_name in ("scheme", "address", "medium", "scope"):
+            if not isinstance(endpoint_data[field_name], str) or not endpoint_data[field_name].strip():
+                raise ValueError(f"connection status endpoint {field_name} must be a non-empty string")
+        port = endpoint_data["port"]
+        if port is not None and (isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535):
+            raise ValueError("connection status endpoint port is invalid")
+        if not isinstance(data["state"], str):
+            raise ValueError("connection status state must be a string")
+        if not isinstance(data["checked_at"], str):
+            raise ValueError("connection status checked_at must be an ISO datetime")
+        latency_ms = data["latency_ms"]
+        if latency_ms is not None and (
+            isinstance(latency_ms, bool)
+            or not isinstance(latency_ms, (int, float))
+            or not math.isfinite(latency_ms)
+            or latency_ms < 0
+        ):
+            raise ValueError("connection status latency_ms is invalid")
+        for field_name in ("packets_sent", "packets_received", "packets_lost"):
+            counter = data[field_name]
+            if isinstance(counter, bool) or not isinstance(counter, int) or counter < 0:
+                raise ValueError(f"connection status {field_name} is invalid")
+        last_sequence = data["last_sequence"]
+        if last_sequence is not None and (
+            isinstance(last_sequence, bool) or not isinstance(last_sequence, int) or last_sequence < 1
+        ):
+            raise ValueError("connection status last_sequence is invalid")
+        for field_name in ("last_error", "reason"):
+            if data[field_name] is not None and not isinstance(data[field_name], str):
+                raise ValueError(f"connection status {field_name} must be a string or null")
         return cls(
             endpoint=Endpoint(
-                scheme=str(endpoint_data["scheme"]),
-                address=str(endpoint_data["address"]),
-                medium=str(endpoint_data["medium"]),
-                scope=str(endpoint_data["scope"]),
-                port=endpoint_data.get("port"),
+                scheme=endpoint_data["scheme"],
+                address=endpoint_data["address"],
+                medium=endpoint_data["medium"],
+                scope=endpoint_data["scope"],
+                port=port,
             ),
-            state=ConnectionState(str(data["state"])),
-            checked_at=datetime.fromisoformat(str(data["checked_at"])),
-            latency_ms=data.get("latency_ms"),
-            packets_sent=int(data.get("packets_sent", 0)),
-            packets_received=int(data.get("packets_received", 0)),
-            packets_lost=int(data.get("packets_lost", 0)),
-            last_sequence=data.get("last_sequence"),
-            last_error=data.get("last_error"),
-            reason=data.get("reason"),
+            state=ConnectionState(data["state"]),
+            checked_at=datetime.fromisoformat(data["checked_at"]),
+            latency_ms=latency_ms,
+            packets_sent=data["packets_sent"],
+            packets_received=data["packets_received"],
+            packets_lost=data["packets_lost"],
+            last_sequence=last_sequence,
+            last_error=data["last_error"],
+            reason=data["reason"],
         )
 
     @property

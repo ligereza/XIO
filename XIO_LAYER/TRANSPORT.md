@@ -15,6 +15,8 @@ ConnectionStatus = state + latency + sent/received/lost + last_error
 
 `ConnectionStatus` also carries the host-supplied `reason` and serializes to a
 stable dictionary with the endpoint, state and `checked_at` timestamp.
+Restoration requires the exact serialized fields and scalar types; omitted or
+coerced counters, endpoints and timestamps are rejected before analysis.
 
 ## Connectivity capability boundary
 

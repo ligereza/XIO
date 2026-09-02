@@ -56,6 +56,8 @@ without changing replay into action execution.
 `Event.from_dict()` and `ApplicationEvent.from_dict()` require the exact fields
 and scalar types emitted by their serializers; malformed records are rejected
 before replay or LUCIDA/MULTI restoration.
+`ConnectionStatus.from_dict()` applies the same fail-closed rule to measured
+connectivity state, including endpoint fields, counters, latency and sequence.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a
