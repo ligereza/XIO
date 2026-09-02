@@ -46,6 +46,7 @@ from .lucida_input import (
     LucidaInputLog,
     LucidaInputRecord,
     MAX_DATA_SUMMARY_FIELDS,
+    MAX_SUMMARY_FIELD_NAME_LENGTH,
 )
 from .protocol_events import ProtocolEventAdapter
 from .source_registry import (
@@ -92,6 +93,7 @@ __all__ = [
     "LucidaInputLog",
     "LucidaInputRecord",
     "MAX_DATA_SUMMARY_FIELDS",
+    "MAX_SUMMARY_FIELD_NAME_LENGTH",
     "JsonLineHandoffStore",
     "NoRouteMatchError",
     "PrivacyPolicy",

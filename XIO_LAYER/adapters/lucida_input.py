@@ -23,6 +23,7 @@ LUCIDA_INPUT_SCHEMA_VERSION = 1
 LUCIDA_INPUT_CHANNEL = "lucida.input"
 LUCIDA_INPUT_CONTRACT = "lucida-input-v1"
 MAX_DATA_SUMMARY_FIELDS = 16
+MAX_SUMMARY_FIELD_NAME_LENGTH = 64
 _SUMMARY_KINDS = frozenset(
     {"mapping", "null", "boolean", "integer", "number", "string", "bytes", "datetime", "sequence"}
 )
@@ -295,6 +296,8 @@ def _validate_data_summary(value: Any) -> dict[str, Any]:
             raise LucidaInputContractError("data_summary field is invalid")
         if not isinstance(field["name"], str) or not field["name"].strip():
             raise LucidaInputContractError("data_summary field name is invalid")
+        if len(field["name"]) > MAX_SUMMARY_FIELD_NAME_LENGTH:
+            raise LucidaInputContractError("data_summary field name is too long")
         if not isinstance(field["type"], str) or field["type"] not in _SUMMARY_KINDS:
             raise LucidaInputContractError("data_summary field type is unsupported")
         names.append(field["name"])
@@ -360,4 +363,5 @@ __all__ = [
     "LucidaInputLog",
     "LucidaInputRecord",
     "MAX_DATA_SUMMARY_FIELDS",
+    "MAX_SUMMARY_FIELD_NAME_LENGTH",
 ]

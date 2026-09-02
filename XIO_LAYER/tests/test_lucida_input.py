@@ -90,6 +90,14 @@ class LucidaInputRecordTests(unittest.TestCase):
         }
         with self.assertRaises(LucidaInputContractError):
             LucidaInputRecord.from_dict(invalid_summary)
+        invalid_summary["data_summary"] = {
+            "kind": "mapping",
+            "item_count": 1,
+            "fields": [{"name": "x" * 65, "type": "integer"}],
+            "truncated": False,
+        }
+        with self.assertRaises(LucidaInputContractError):
+            LucidaInputRecord.from_dict(invalid_summary)
 
 
 class LucidaInputLogTests(unittest.TestCase):

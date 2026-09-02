@@ -25,12 +25,13 @@ data_summary
 source version and capability are explicit caller metadata, not inferred by
 the contract.
 
-`data_summary` is bounded to 16 field descriptors. It contains only a value
-kind, the number of visible descriptors, sorted field names and a truncation
-flag. It never contains source values, bytes, media, credentials or arbitrary
-objects. `PrivacyPolicy` supplies the existing top-level allowlist. The status
-is `redacted` when fields are omitted or truncated, and `summary_only` when
-the complete payload shape fits without exposing values.
+`data_summary` is bounded to 16 field descriptors and 64 ASCII characters per
+field name. It contains only a value kind, the number of visible descriptors,
+sorted field names and a truncation flag. It never contains source values,
+bytes, media, credentials or arbitrary objects. `PrivacyPolicy` supplies the
+existing top-level allowlist. The status is `redacted` when fields are omitted
+or truncated, and `summary_only` when the complete payload shape fits without
+exposing values.
 
 ## Persistence and replay
 
