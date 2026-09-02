@@ -77,10 +77,12 @@ class ApplicationEvent:
         self.channel = self._required(channel, "channel")
         self.session_id = self._required(session_id, "session_id")
         self.peer_id = self._required(peer_id, "peer_id")
-        if sequence < 1:
+        if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
             raise ApplicationEventContractError("sequence must be positive")
-        if schema_version < 1:
+        if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version < 1:
             raise ApplicationEventContractError("schema_version must be positive")
+        if not isinstance(provenance, Mapping):
+            raise ApplicationEventContractError("provenance must be a mapping")
         self.sequence = sequence
         self.schema_version = schema_version
         self.source_timestamp = require_utc(source_timestamp, "source_timestamp")

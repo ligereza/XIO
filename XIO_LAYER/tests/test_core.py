@@ -10,7 +10,7 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Checkpoint, Event, ExplicitAction, Proposal, Snapshot, TimestampError
+from XIO_LAYER.core.contracts import Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
 from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
@@ -47,6 +47,26 @@ def make_event(event_id: str, value: int, occurred_offset: int = 0, received_off
 
 
 class EventAndReplayTests(unittest.TestCase):
+    def test_direct_temporal_contracts_reject_boolean_scalars(self):
+        event = make_event("event-temporal", 1)
+        with self.assertRaises(ValueError):
+            Event(
+                stream_id="demo",
+                kind="add",
+                source="test-device",
+                occurred_at=T0,
+                received_at=T0,
+                payload={"value": 1},
+                event_id="event-bool-schema",
+                schema_version=True,
+            )
+        with self.assertRaises(ValueError):
+            EventRecord(sequence=True, event=event)
+        with self.assertRaises(ValueError):
+            Snapshot(stream_id="demo", version=True, state={}, captured_at=T0)
+        with self.assertRaises(ValueError):
+            Checkpoint(stream_id="demo", sequence=True, state={}, source_event_id=None, captured_at=T0)
+
     def test_event_restore_requires_exact_typed_contract(self):
         event = make_event("event-restore", 1)
         wire = event.to_dict()

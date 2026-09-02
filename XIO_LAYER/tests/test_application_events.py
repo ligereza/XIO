@@ -46,6 +46,23 @@ def reducer(state, event):
 
 
 class ApplicationEventContractTests(unittest.TestCase):
+    def test_direct_constructor_rejects_boolean_sequence_and_non_mapping_provenance(self):
+        arguments = {
+            "source_app": "test-app",
+            "event_type": "test.value",
+            "channel": "signals",
+            "payload": {"value": 1},
+            "source_timestamp": T0,
+            "received_timestamp": T0,
+            "session_id": "session-1",
+            "peer_id": "peer-1",
+            "provenance": {},
+        }
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**arguments, sequence=True)
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**{**arguments, "sequence": 1, "provenance": []})
+
     def test_restore_requires_exact_typed_application_event_contract(self):
         event = make_event("event-restore", 1, 10)
         wire = event.to_dict()

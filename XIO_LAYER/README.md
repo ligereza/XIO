@@ -60,6 +60,8 @@ before replay or LUCIDA/MULTI restoration.
 connectivity state, including endpoint fields, counters, latency and sequence.
 The direct constructors enforce the same invariants, so restored and
 programmatically created transport observations cannot diverge in type rules.
+The event and snapshot constructors enforce the same temporal rule: boolean
+values cannot masquerade as schema versions or replay sequences.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a

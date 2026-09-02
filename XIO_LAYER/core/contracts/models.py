@@ -71,16 +71,14 @@ class Event:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
-        if not self.stream_id.strip():
-            raise ValueError("stream_id cannot be empty")
-        if not self.kind.strip():
-            raise ValueError("kind cannot be empty")
-        if not self.source.strip():
-            raise ValueError("source cannot be empty")
-        if not self.event_id.strip():
-            raise ValueError("event_id cannot be empty")
-        if self.schema_version < 1:
+        for field_name in ("stream_id", "kind", "source", "event_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version < 1:
             raise ValueError("schema_version must be positive")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a mapping")
         object.__setattr__(self, "occurred_at", require_utc(self.occurred_at, "occurred_at"))
         object.__setattr__(self, "received_at", require_utc(self.received_at, "received_at"))
         object.__setattr__(self, "payload", _json_copy(self.payload))
@@ -155,8 +153,10 @@ class EventRecord:
     event: Event
 
     def __post_init__(self) -> None:
-        if self.sequence < 1:
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 1:
             raise ValueError("sequence must be positive")
+        if not isinstance(self.event, Event):
+            raise ValueError("event must be an Event")
 
     def to_dict(self) -> dict[str, Any]:
         return {"sequence": self.sequence, "event": self.event.to_dict()}
@@ -186,10 +186,18 @@ class Snapshot:
     state_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if not self.stream_id.strip():
-            raise ValueError("stream_id cannot be empty")
-        if self.version < 0:
+        if not isinstance(self.stream_id, str) or not self.stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        if not isinstance(self.version, int) or isinstance(self.version, bool) or self.version < 0:
             raise ValueError("version cannot be negative")
+        if not isinstance(self.state, Mapping):
+            raise ValueError("state must be a mapping")
+        if self.source_event_id is not None and not isinstance(self.source_event_id, str):
+            raise ValueError("source_event_id must be a string or null")
+        if not isinstance(self.snapshot_id, str) or not self.snapshot_id.strip():
+            raise ValueError("snapshot_id must be a non-empty string")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version < 1:
+            raise ValueError("schema_version must be positive")
         object.__setattr__(self, "captured_at", require_utc(self.captured_at, "captured_at"))
         state = _json_copy(self.state)
         object.__setattr__(self, "state", state)
@@ -364,8 +372,16 @@ class Checkpoint:
     state_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.sequence < 0:
+        if not isinstance(self.stream_id, str) or not self.stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 0:
             raise ValueError("sequence cannot be negative")
+        if not isinstance(self.state, Mapping):
+            raise ValueError("state must be a mapping")
+        if self.source_event_id is not None and not isinstance(self.source_event_id, str):
+            raise ValueError("source_event_id must be a string or null")
+        if not isinstance(self.checkpoint_id, str) or not self.checkpoint_id.strip():
+            raise ValueError("checkpoint_id must be a non-empty string")
         object.__setattr__(self, "captured_at", require_utc(self.captured_at, "captured_at"))
         state = _json_copy(self.state)
         object.__setattr__(self, "state", state)
