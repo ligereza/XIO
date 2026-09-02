@@ -49,6 +49,8 @@ then prepares a privacy-projected LUCIDA/MULTI message. Preparation is not
 delivery: no transport `send`, socket, discovery or action execution occurs.
 Registry lookups, routing records and caller-supplied plans are validated before
 adapter lookup or conversion; malformed inputs cannot invoke an adapter.
+Routing passes an isolated record copy and rejects adapter output that changes
+caller-supplied identity, sequence, timestamps, raw hash or provenance.
 Selections reject ambiguous capability collections, and privacy projection
 requires a valid selection and handoff identifier before it builds a new event.
 The default allowlist exports no payload or provenance keys and anonymizes

@@ -11,6 +11,7 @@ from XIO_LAYER.adapters import (
     InvalidSourceAdapterError,
     ProtocolEventAdapter,
     SourceAdapterRegistry,
+    SourceAdapterRegistryError,
     UndeclaredEventTypeError,
     UnknownSourceAdapterError,
 )
@@ -242,6 +243,39 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         self.assertEqual(event.raw_hash, record["raw_hash"])
         self.assertEqual(event.provenance, record["provenance"])
         self.assertEqual(adapter.calls, [(record, "timeline.cue")])
+
+    def test_route_isolates_record_and_rejects_adapter_identity_drift(self):
+        class MutatingAdapter(TestSourceAdapter):
+            def __init__(self):
+                super().__init__("mutating")
+
+            def convert(self, record: Mapping[str, Any], event_type: str) -> ApplicationEvent:
+                record["event_id"] = "rewritten-event"
+                record["sequence"] = 99
+                return ApplicationEvent(
+                    event_id=record["event_id"],
+                    source_app=self.source_app,
+                    event_type=event_type,
+                    channel=record["channel"],
+                    payload=record["payload"],
+                    source_timestamp=record["source_timestamp"],
+                    received_timestamp=record["received_timestamp"],
+                    session_id=record["session_id"],
+                    peer_id=record["peer_id"],
+                    sequence=record["sequence"],
+                    raw_hash=record["raw_hash"],
+                    provenance=record["provenance"],
+                )
+
+        registry = SourceAdapterRegistry()
+        registry.register(MutatingAdapter())
+        record = make_record()
+
+        with self.assertRaisesRegex(SourceAdapterRegistryError, "event_id"):
+            registry.route("mutating", "timeline.cue", record)
+
+        self.assertEqual(record["event_id"], "source-event-1")
+        self.assertEqual(record["sequence"], 1)
 
     def test_duplicate_and_non_ascii_declarations_do_not_mutate_registry(self):
         registry = SourceAdapterRegistry()

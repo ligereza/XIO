@@ -43,14 +43,20 @@ class CountingAdapter:
 
     def convert(self, record: Mapping[str, Any], event_type: str) -> ApplicationEvent:
         self.calls.append(record)
+        source_timestamp = record.get("source_timestamp", T0)
+        received_timestamp = record.get("received_timestamp", T0)
+        if isinstance(source_timestamp, str):
+            source_timestamp = datetime.fromisoformat(source_timestamp)
+        if isinstance(received_timestamp, str):
+            received_timestamp = datetime.fromisoformat(received_timestamp)
         return ApplicationEvent(
             event_id=record["event_id"],
             source_app=self.source_app,
             event_type=event_type,
             channel="signals",
             payload=record["payload"],
-            source_timestamp=T0,
-            received_timestamp=T0,
+            source_timestamp=source_timestamp,
+            received_timestamp=received_timestamp,
             session_id="private-session",
             peer_id="private-peer",
             sequence=record["sequence"],

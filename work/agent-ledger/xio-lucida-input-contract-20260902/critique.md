@@ -203,3 +203,59 @@ previous_action: audit explicit selection identity boundary
 decision_delta: change from observed silent generation to fail-closed factory input handling
 verification_signal: selection_id="" must raise InvalidSourceAdapterError while selection_id=None still generates an ID.
 verification_note: The first focused run exposed a pre-existing NameError on the valid None path because uuid4 was not imported; the import is part of this bounded correction.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: A registered adapter must preserve caller-supplied event identity, ordering and transport provenance while remaining unable to mutate the caller record.
+current_state: Selection identity is fixed and published. SourceAdapterRegistry.route validates only adapter source_app and event_type, not identity fields from the input record.
+verified_evidence: A temporary adapter changed event_id to wrong-id and sequence to 99 for a record carrying source-id and sequence 1; route accepted the altered ApplicationEvent.
+assumptions: Protocol adapters may synthesize absent optional fields, but any field supplied by the caller must be preserved; provenance may be extended but not changed for existing keys.
+strongest_failure_mode: An adapter can silently reorder or relabel an observation, causing replay, dedupe, handoff and audit records to refer to a different event than the source observed.
+highest_consequence_error: A corrupted identity can be accepted as a valid observation and later treated as the basis for a deterministic action proposal.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: medium
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Pass an isolated record copy and validate all caller-supplied preserved fields after conversion.
+    reversibility: high
+    evidence_needed: Regression for identity drift, sequence drift and caller-record mutation, plus protocol adapter compatibility.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the local adapter contract already declares preservation semantics.
+    reversibility: high
+    evidence_needed: External guidance would not resolve this explicit local boundary.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve a known identity-integrity gap.
+    reversibility: high
+    evidence_needed: Acceptance would need to permit adapters to rewrite source identity.
+
+search_gap:
+  uncertainty: Whether any adapter intentionally rewrites a supplied field rather than synthesizing an absent one.
+  consequence: Medium; strict rejection can reveal an undocumented adapter, while acceptance weakens replay integrity.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: ADAPTERS.md explicitly requires preservation of event id, sequence, timestamps, raw hash and provenance.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Add isolated-record routing and preservation checks, run protocol and full-suite regressions, then publish.
+previous_action: audit adapter output preservation and record isolation
+decision_delta: change from accepting routed output to fail-closed validation of caller-supplied identity
+verification_signal: The broken adapter must raise SourceAdapterRegistryError and the caller record must remain unchanged.
+verification_note: The first full-suite run exposed nine local-source integration errors because JSON ISO timestamp strings were compared directly with adapter datetime values; temporal comparison now normalizes the representation without relaxing identity checks.
+verification_note_2: The focused rerun exposed one existing test adapter that replaced fixture timestamps with T0; the fixture now preserves provided timestamp instants and retains T0 only when the field is absent.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping, Protocol
@@ -297,11 +298,14 @@ class SourceAdapterRegistry:
             raise UndeclaredEventTypeError(
                 f"event type not declared by {source_app}: {event_type}"
             )
-        event = registered.adapter.convert(record, event_type)
+        original_record = deepcopy(dict(record))
+        isolated_record = deepcopy(original_record)
+        event = registered.adapter.convert(isolated_record, event_type)
         if not isinstance(event, ApplicationEvent):
             raise SourceAdapterRegistryError("source adapter must return ApplicationEvent")
         if event.source_app != source_app or event.event_type != event_type:
             raise SourceAdapterRegistryError("adapter output does not match routed declaration")
+        _validate_preserved_fields(original_record, event)
         return event
 
 
@@ -353,6 +357,45 @@ def _validate_identifier(value: Any, field_name: str) -> None:
         raise InvalidSourceAdapterError(f"{field_name} must be a non-empty ASCII identifier")
     if not value[0].isalnum() or any(not (char.isalnum() or char in "._-") for char in value):
         raise InvalidSourceAdapterError(f"{field_name} contains unsupported characters")
+
+
+def _validate_preserved_fields(record: Mapping[str, Any], event: ApplicationEvent) -> None:
+    for field_name in (
+        "event_id",
+        "channel",
+        "source_timestamp",
+        "received_timestamp",
+        "session_id",
+        "peer_id",
+        "sequence",
+        "raw_hash",
+    ):
+        if field_name in record and not _preserved_value_matches(
+            field_name,
+            record[field_name],
+            getattr(event, field_name),
+        ):
+            raise SourceAdapterRegistryError(
+                f"adapter output changed caller-supplied field: {field_name}"
+            )
+    provenance = record.get("provenance")
+    if provenance is not None:
+        if not isinstance(provenance, Mapping):
+            raise SourceAdapterRegistryError("adapter input provenance must be a mapping")
+        for key, value in provenance.items():
+            if event.provenance.get(key) != value:
+                raise SourceAdapterRegistryError(
+                    f"adapter output changed caller-supplied provenance: {key}"
+                )
+
+
+def _preserved_value_matches(field_name: str, expected: Any, actual: Any) -> bool:
+    if field_name in {"source_timestamp", "received_timestamp"} and isinstance(expected, str):
+        try:
+            expected = datetime.fromisoformat(expected)
+        except ValueError:
+            return False
+    return actual == expected
 
 
 __all__ = [

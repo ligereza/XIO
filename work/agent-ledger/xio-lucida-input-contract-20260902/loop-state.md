@@ -29,6 +29,8 @@ completed:
     evidence: Event, ActionResult and TransportMessage reject integer mapping keys; ActionGate turns an invalid handler mapping into a failed, hash-verifiable audit entry. Documentation is synchronized.
   - item: Source selection preserves explicit identity semantics.
     evidence: select_candidate now rejects an explicitly empty selection_id, generates only when selection_id is None, and imports uuid4 for that valid path. Focused and full-suite tests pass.
+  - item: Adapter routing isolates records and rejects identity drift.
+    evidence: route now gives adapters a deep-copied record, normalizes serialized timestamps for comparison, and rejects changed caller-supplied identity/sequence/provenance. Adapter integration tests pass after the fixture was corrected to preserve supplied timestamps.
 
 current_state:
   files_or_resources:
@@ -37,7 +39,7 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/critique.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 164 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key and selection-identity regressions pass; compileall, technical ASCII and diff checks pass.
+  tests_and_checks: XIO_LAYER suite passes 165 tests; adapter/handoff integration subset passes 40 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key, selection-identity and adapter-isolation regressions pass; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.

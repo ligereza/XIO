@@ -19,10 +19,11 @@ or invalid source ids, and routes only declared event types. An unknown source
 or undeclared type fails before the adapter is called and does not mutate the
 registry or source record.
 
-Adapters receive a source record that was validated by the host boundary. They
-must return the existing `ApplicationEvent` contract and preserve event id,
-sequence, timestamps, raw hash and provenance. The registry verifies that the
-returned event matches the routed source and event type.
+Adapters receive an isolated copy of a source record that was validated by the
+host boundary. They must return the existing `ApplicationEvent` contract and
+preserve event id, sequence, timestamps, raw hash and caller-supplied provenance.
+The registry verifies those fields when supplied, while allowing an adapter to
+add provenance or synthesize fields that were absent from the record.
 
 `ProtocolEventAdapter` now declares OSC and Art-Net event types and can be
 routed through the same registry. Its existing direct `from_osc` and
