@@ -7,12 +7,42 @@ import tempfile
 import unittest
 
 from XIO_LAYER.core.audit import (
+    AuditLedger,
     AuditLedgerPersistenceError,
     JsonLineAuditLedger,
 )
+from XIO_LAYER.core.contracts import AuditEntry
 
 
 class JsonLineAuditLedgerTests(unittest.TestCase):
+    def test_audit_entry_restore_requires_exact_typed_contract(self):
+        audit_entry = AuditLedger().append("probe", "subject-1", "recorded", {"safe": True}, "actor-1")
+        wire = audit_entry.to_dict()
+        invalid_payloads = []
+
+        extra_field = dict(wire)
+        extra_field["extra"] = True
+        invalid_payloads.append(extra_field)
+
+        wrong_actor = dict(wire)
+        wrong_actor["actor_id"] = 7
+        invalid_payloads.append(wrong_actor)
+
+        wrong_details = dict(wire)
+        wrong_details["details"] = []
+        invalid_payloads.append(wrong_details)
+
+        wrong_hash_type = dict(wire)
+        wrong_hash_type["entry_hash"] = 7
+        invalid_payloads.append(wrong_hash_type)
+
+        for invalid in invalid_payloads:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    AuditEntry.from_dict(invalid)
+
+        self.assertEqual(AuditEntry.from_dict(wire).to_dict(), wire)
+
     def test_concurrent_processes_preserve_audit_hash_chain(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audit.jsonl"

@@ -330,19 +330,24 @@ class AuditEntry:
         }
         if set(data) != required:
             raise ValueError("audit entry fields do not match the contract")
+        for field_name in ("audit_id", "recorded_at", "event_type", "subject_id", "outcome", "previous_hash", "entry_hash"):
+            if not isinstance(data[field_name], str) or not data[field_name].strip():
+                raise ValueError(f"audit entry {field_name} must be a non-empty string")
+        if data["actor_id"] is not None and not isinstance(data["actor_id"], str):
+            raise ValueError("audit entry actor_id must be a string or null")
         details = data["details"]
         if not isinstance(details, Mapping):
             raise ValueError("audit entry details must be a mapping")
         return cls(
-            audit_id=str(data["audit_id"]),
-            recorded_at=datetime.fromisoformat(str(data["recorded_at"])),
-            event_type=str(data["event_type"]),
-            subject_id=str(data["subject_id"]),
-            actor_id=None if data["actor_id"] is None else str(data["actor_id"]),
-            outcome=str(data["outcome"]),
+            audit_id=data["audit_id"],
+            recorded_at=datetime.fromisoformat(data["recorded_at"]),
+            event_type=data["event_type"],
+            subject_id=data["subject_id"],
+            actor_id=data["actor_id"],
+            outcome=data["outcome"],
             details=details,
-            previous_hash=str(data["previous_hash"]),
-            entry_hash=str(data["entry_hash"]),
+            previous_hash=data["previous_hash"],
+            entry_hash=data["entry_hash"],
         )
 
 
