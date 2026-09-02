@@ -86,6 +86,11 @@ the transport receipt, and audits accepted, duplicate, rejected and failed
 attempts. A transport policy rejection is reported as `rejected`; no retry or
 alternate adapter is selected.
 
+Delivery also requires a current `PermissionRegistry` grant for the selected
+caller, defaulting to `handoff.deliver`. The permission is checked immediately
+before `transport.send()`. A revoked or missing grant returns `rejected`, is
+audited, and leaves the transport untouched.
+
 The default `PrivacyPolicy` exports no payload or source provenance keys and
 replaces session and peer identifiers with opaque hashes. A caller must
 explicitly allow top-level payload/provenance keys to export them. The handoff

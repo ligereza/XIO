@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any, Mapping
 from uuid import uuid4
 
-from ..core.audit import AuditLedger
+from ..core.audit import AuditLedger, PermissionRegistry
 from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
 from ..core.transport import DeliveryReceipt, Endpoint, Transport, TransportMessage
@@ -273,8 +273,11 @@ def deliver_adapter_handoff(
     handoff: AdapterHandoff,
     transport: Transport,
     audit: AuditLedger,
+    *,
+    permissions: PermissionRegistry,
+    required_permission: str = "handoff.deliver",
 ) -> AdapterHandoffDelivery:
-    """Deliver one prepared handoff when the caller explicitly invokes this function."""
+    """Deliver one prepared handoff after a current caller permission check."""
 
     if not isinstance(handoff, AdapterHandoff):
         raise TypeError("handoff must be an AdapterHandoff")
@@ -282,8 +285,30 @@ def deliver_adapter_handoff(
         raise TypeError("transport must provide send")
     if not callable(getattr(audit, "append", None)):
         raise TypeError("audit must provide append")
+    if not isinstance(permissions, PermissionRegistry):
+        raise TypeError("permissions must be a PermissionRegistry")
+    if not isinstance(required_permission, str) or not required_permission.strip():
+        raise ValueError("required_permission cannot be empty")
 
     attempted_at = utc_now()
+    if not permissions.allows(handoff.selection.caller_id, required_permission):
+        audit.append(
+            "adapter.handoff.delivery_rejected",
+            handoff.handoff_id,
+            "rejected",
+            {
+                **_delivery_audit_metadata(handoff, error="permission_missing_or_revoked"),
+                "permission": required_permission,
+            },
+            handoff.selection.caller_id,
+        )
+        return AdapterHandoffDelivery(
+            handoff_id=handoff.handoff_id,
+            status="rejected",
+            receipt=None,
+            attempted_at=attempted_at,
+            error="permission_missing_or_revoked",
+        )
     try:
         receipt = transport.send(handoff.message)
         if not isinstance(receipt, DeliveryReceipt):

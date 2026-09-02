@@ -20,7 +20,7 @@ from XIO_LAYER.adapters import (
     prepare_adapter_handoff,
     transport_to_application_event,
 )
-from XIO_LAYER.core.audit import AuditLedger
+from XIO_LAYER.core.audit import AuditLedger, PermissionRegistry
 from XIO_LAYER.core.events import ApplicationEvent, ApplicationEventLog
 from XIO_LAYER.core.transport import Endpoint, InMemoryTransport
 
@@ -180,8 +180,20 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertNotIn("private-note", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("operator-1", json.dumps(handoff.to_dict(), sort_keys=True))
 
-        first_delivery = deliver_adapter_handoff(handoff, transport, audit)
-        duplicate_delivery = deliver_adapter_handoff(handoff, transport, audit)
+        permissions = PermissionRegistry()
+        permissions.grant("operator-1", "handoff.deliver")
+        first_delivery = deliver_adapter_handoff(
+            handoff,
+            transport,
+            audit,
+            permissions=permissions,
+        )
+        duplicate_delivery = deliver_adapter_handoff(
+            handoff,
+            transport,
+            audit,
+            permissions=permissions,
+        )
         self.assertEqual(first_delivery.status, "accepted")
         self.assertEqual(duplicate_delivery.status, "duplicate")
         self.assertEqual(len(transport.messages()), 1)
@@ -207,16 +219,69 @@ class AdapterHandoffTests(unittest.TestCase):
             audit=audit,
             handoff_id="handoff-1",
         )
+        permissions = PermissionRegistry()
+        permissions.grant("operator-1", "handoff.deliver")
 
         class BlockedTransport:
             def send(self, message):
                 raise PermissionError("blocked by injected policy")
 
-        result = deliver_adapter_handoff(handoff, BlockedTransport(), audit)
+        result = deliver_adapter_handoff(
+            handoff,
+            BlockedTransport(),
+            audit,
+            permissions=permissions,
+        )
 
         self.assertEqual(result.status, "rejected")
         self.assertEqual(result.error, "PermissionError")
         self.assertEqual(audit.entries()[-1].event_type, "adapter.handoff.delivery_rejected")
+        self.assertTrue(audit.verify())
+
+    def test_revoked_delivery_permission_blocks_transport_side_effect(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-1",
+            selected_at=T0,
+        )
+        audit = AuditLedger()
+        handoff = prepare_adapter_handoff(
+            registry,
+            selection,
+            make_record(),
+            source="xio-layer",
+            destination=DESTINATION,
+            audit=audit,
+            handoff_id="handoff-1",
+        )
+        permissions = PermissionRegistry()
+        permissions.grant("operator-1", "handoff.deliver")
+        permissions.revoke("operator-1", "handoff.deliver")
+
+        class CountingTransport:
+            def __init__(self):
+                self.calls = 0
+
+            def send(self, message):
+                self.calls += 1
+                raise AssertionError("transport must not be called after permission revocation")
+
+        transport = CountingTransport()
+        result = deliver_adapter_handoff(
+            handoff,
+            transport,
+            audit,
+            permissions=permissions,
+        )
+
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.error, "permission_missing_or_revoked")
+        self.assertEqual(transport.calls, 0)
+        self.assertEqual(audit.entries()[-1].outcome, "rejected")
         self.assertTrue(audit.verify())
 
     def test_prepared_handoff_round_trips_and_replays_without_execution(self):
