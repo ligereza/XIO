@@ -47,7 +47,11 @@ class LucidaApplicationEnvelope:
     envelope_type: str = field(init=False, default=APPLICATION_EVENT_ENVELOPE_TYPE)
 
     def __post_init__(self) -> None:
-        if self.schema_version != APPLICATION_EVENT_SCHEMA_VERSION:
+        if (
+            isinstance(self.schema_version, bool)
+            or not isinstance(self.schema_version, int)
+            or self.schema_version != APPLICATION_EVENT_SCHEMA_VERSION
+        ):
             raise LucidaBridgeError("unsupported application-event envelope schema")
 
     def to_dict(self) -> dict[str, Any]:
@@ -66,7 +70,11 @@ class LucidaApplicationEnvelope:
             raise LucidaBridgeError("transport envelope fields do not match application-event schema")
         if value.get("type") != APPLICATION_EVENT_ENVELOPE_TYPE:
             raise LucidaBridgeError("transport envelope is not an application-event envelope")
-        if value.get("schema_version") != APPLICATION_EVENT_SCHEMA_VERSION:
+        if (
+            isinstance(value.get("schema_version"), bool)
+            or not isinstance(value.get("schema_version"), int)
+            or value.get("schema_version") != APPLICATION_EVENT_SCHEMA_VERSION
+        ):
             raise LucidaBridgeError("unsupported application-event envelope schema")
         return cls(schema_version=APPLICATION_EVENT_SCHEMA_VERSION)
 

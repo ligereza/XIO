@@ -8,6 +8,7 @@ import unittest
 
 from XIO_LAYER.adapters import (
     APPLICATION_EVENT_CHANNEL,
+    LucidaApplicationEnvelope,
     LucidaBridgeError,
     application_event_to_transport,
     transport_to_application_event,
@@ -94,6 +95,14 @@ class LucidaBridgeTests(unittest.TestCase):
             transport_to_application_event(
                 replace(message, envelope={"type": "osc", "schema_version": 1})
             )
+
+    def test_boolean_envelope_schema_is_rejected(self):
+        with self.assertRaises(LucidaBridgeError):
+            LucidaApplicationEnvelope(schema_version=True)
+        message = fixture_messages()[0]
+        invalid_envelope = {"type": "xio.application-event", "schema_version": True}
+        with self.assertRaises(LucidaBridgeError):
+            transport_to_application_event(replace(message, envelope=invalid_envelope))
 
     def test_invalid_payload_and_sequence_are_rejected(self):
         message = fixture_messages()[0]
