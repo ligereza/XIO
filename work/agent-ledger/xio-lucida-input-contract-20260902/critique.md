@@ -638,3 +638,57 @@ next_checkpoint: Run complete XIO_LAYER tests and publish the policy/provenance 
 previous_action: audit remaining truthiness fallbacks after strict ID/timestamp fixes
 decision_delta: extend the strict optional-input rule to injected policies and connectivity provenance
 verification_signal: policy=0, privacy_policy=0 and provenance=0 fail before defaulting or projection.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Adapter-generated provenance markers must not be overwritten by caller metadata; non-reserved extensions must survive.
+current_state: Optional policy and provenance values are strict. Protocol and connectivity adapters merge caller provenance after canonical markers, allowing reserved keys to be spoofed.
+verified_evidence: ProtocolEventAdapter.from_osc with provenance protocol=artnet returns protocol=artnet; connectivity_status_to_event with status_hash=wrong returns the caller value.
+assumptions: adapter, protocol, origin, status_contract, status_hash and envelope are producer-owned markers; arbitrary extension keys remain caller-owned.
+strongest_failure_mode: A canonical event claims a protocol or measurement origin that its adapter did not produce.
+highest_consequence_error: Replay, audit or analysis trusts forged provenance and attributes an observation to the wrong source.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Merge caller extensions first and canonical markers last, with protocol and connectivity regressions.
+    reversibility: high
+    evidence_needed: Reserved markers remain canonical and non-reserved metadata remains present.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the precedence defect is directly reproducible locally.
+    reversibility: high
+    evidence_needed: External guidance would not change producer-owned fields.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve provenance spoofing at adapter boundaries.
+    reversibility: high
+    evidence_needed: Acceptance that caller metadata can redefine adapter identity.
+
+search_gap:
+  uncertainty: Whether callers rely on overriding canonical marker names.
+  consequence: Low; overriding them contradicts their meaning, while extension keys remain compatible.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The local provenance contract already distinguishes adapter-owned markers from caller-supplied extensions.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Run focused provenance regressions and the complete XIO_LAYER suite, then publish only scoped adapter/docs/test/ledger changes.
+previous_action: audit optional policy and provenance boundaries
+decision_delta: protect canonical provenance precedence after strict optional-input validation
+verification_signal: spoofed protocol/adapter/origin/status_hash values are overridden by the producing adapter, while extra metadata remains.

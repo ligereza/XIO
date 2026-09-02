@@ -57,11 +57,11 @@ def connectivity_status_to_event(
     }
     event_id = "connectivity-" + content_hash(stable_identity)
     event_provenance = {
+        **(dict(provenance) if provenance is not None else {}),
         "adapter": "connectivity_status",
         "origin": "host_probe",
         "status_contract": "ConnectionStatus",
         "status_hash": content_hash(status_payload),
-        **(dict(provenance) if provenance is not None else {}),
     }
     return ApplicationEvent(
         event_id=event_id,

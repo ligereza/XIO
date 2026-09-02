@@ -79,10 +79,10 @@ class ProtocolEventAdapter:
             peer_id=self.peer_id,
             sequence=sequence,
             provenance={
+                **(dict(provenance) if provenance is not None else {}),
                 "adapter": "osc",
                 "protocol": "osc",
                 "envelope": envelope.to_dict(),
-                **(dict(provenance) if provenance is not None else {}),
             },
         )
 
@@ -108,9 +108,9 @@ class ProtocolEventAdapter:
             peer_id=self.peer_id,
             sequence=sequence,
             provenance={
+                **(dict(provenance) if provenance is not None else {}),
                 "adapter": "artnet",
                 "protocol": "artnet",
                 "envelope": envelope.to_dict(),
-                **(dict(provenance) if provenance is not None else {}),
             },
         )

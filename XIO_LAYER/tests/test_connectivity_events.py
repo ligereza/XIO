@@ -252,6 +252,23 @@ class ConnectivityEventTests(unittest.TestCase):
                 provenance=0,
             )
 
+    def test_connectivity_adapter_protects_canonical_provenance(self):
+        event = connectivity_status_to_event(
+            make_status(NetworkMedium.WIFI),
+            source_app="host-monitor",
+            session_id="session-1",
+            peer_id="peer-1",
+            sequence=1,
+            received_timestamp=T0,
+            provenance={"adapter": "spoofed", "origin": "manual", "status_hash": "wrong", "extra": True},
+        )
+
+        self.assertEqual(event.provenance["adapter"], "connectivity_status")
+        self.assertEqual(event.provenance["origin"], "host_probe")
+        self.assertEqual(event.provenance["status_contract"], "ConnectionStatus")
+        self.assertNotEqual(event.provenance["status_hash"], "wrong")
+        self.assertTrue(event.provenance["extra"])
+
 
 if __name__ == "__main__":
     unittest.main()

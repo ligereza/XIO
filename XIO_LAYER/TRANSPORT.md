@@ -156,6 +156,9 @@ and `ArtNetEnvelope`. It does not read a socket or discover an application:
 - `raw_hash` identifies the canonical reversible payload representation;
 - `source_app`, `session_id`, `peer_id`, timestamps and sequence are supplied
   by the caller.
+- Canonical provenance markers emitted by protocol and connectivity adapters
+  take precedence over caller metadata; non-reserved provenance extensions are
+  retained.
 
 `core/events/replay_jsonl.py` provides `ApplicationEventLog` and `replay_jsonl`.
 JSONL replay sorts by `sequence`, then received timestamp and event id, skips

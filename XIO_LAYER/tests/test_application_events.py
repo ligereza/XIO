@@ -213,6 +213,21 @@ class ApplicationEventContractTests(unittest.TestCase):
                 provenance=0,
             )
 
+    def test_protocol_adapter_protects_canonical_provenance(self):
+        envelope = OscEnvelope("/xio/test", ("cue",))
+        adapter = ProtocolEventAdapter("source-app", "session-1", "peer-1")
+
+        event = adapter.from_osc(
+            envelope,
+            channel="signals",
+            sequence=1,
+            provenance={"adapter": "spoofed", "protocol": "artnet", "extra": "kept"},
+        )
+
+        self.assertEqual(event.provenance["adapter"], "osc")
+        self.assertEqual(event.provenance["protocol"], "osc")
+        self.assertEqual(event.provenance["extra"], "kept")
+
     def test_invalid_contract_is_rejected(self):
         with self.assertRaises(TimestampError):
             ApplicationEvent(
