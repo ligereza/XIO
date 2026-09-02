@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 import unittest
 
 from XIO_LAYER.adapters import (
@@ -47,6 +48,17 @@ def prepared_handoffs():
 
 
 class JsonLineHandoffStoreTests(unittest.TestCase):
+    def test_concurrent_same_content_append_is_serialized_and_idempotent(self):
+        handoff = prepared_handoffs()[0]
+        with tempfile.TemporaryDirectory() as directory:
+            store = JsonLineHandoffStore(Path(directory) / "handoffs.jsonl")
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(store.append, [handoff] * 16))
+
+            self.assertEqual(results.count(True), 1)
+            self.assertEqual(results.count(False), 15)
+            self.assertEqual(len(store.replay(caller_id="operator-1")), 1)
+
     def test_append_is_idempotent_and_replay_restores_without_caller_storage(self):
         handoffs = prepared_handoffs()
         with tempfile.TemporaryDirectory() as directory:

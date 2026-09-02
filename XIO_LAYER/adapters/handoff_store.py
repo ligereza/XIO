@@ -6,6 +6,7 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from ..core.contracts import content_hash
@@ -34,8 +35,13 @@ class JsonLineHandoffStore:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = RLock()
 
     def append(self, handoff: AdapterHandoff) -> bool:
+        with self._lock:
+            return self._append_unlocked(handoff)
+
+    def _append_unlocked(self, handoff: AdapterHandoff) -> bool:
         if not isinstance(handoff, AdapterHandoff):
             raise TypeError("handoff must be an AdapterHandoff")
         wire = handoff.to_dict()
@@ -69,6 +75,10 @@ class JsonLineHandoffStore:
         return True
 
     def replay(self, *, caller_id: str) -> tuple[AdapterHandoff, ...]:
+        with self._lock:
+            return self._replay_unlocked(caller_id=caller_id)
+
+    def _replay_unlocked(self, *, caller_id: str) -> tuple[AdapterHandoff, ...]:
         """Restore unique prepared handoffs with an explicitly supplied caller id."""
 
         restored: dict[str, AdapterHandoff] = {}
