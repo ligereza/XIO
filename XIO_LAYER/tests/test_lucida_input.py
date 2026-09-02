@@ -195,6 +195,58 @@ class LucidaInputLogTests(unittest.TestCase):
             with self.assertRaises(LucidaInputContractError):
                 LucidaInputLog(path).replay()
 
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lucida-input.jsonl"
+            storage = ApplicationEventLog(path)
+            unsupported_schema = ApplicationEvent(
+                event_id="unsupported-storage-schema",
+                source_app="fixture-source",
+                event_type="fixture.value",
+                channel="lucida.input",
+                payload={"data_summary": summary},
+                source_timestamp=T0,
+                received_timestamp=T0,
+                session_id="lucida-input",
+                peer_id="xio-layer",
+                sequence=1,
+                schema_version=2,
+                provenance={
+                    "capability": "observe.value",
+                    "contract": "lucida-input-v1",
+                    "privacy_status": "summary_only",
+                    "source_version": "fixture-1",
+                },
+            )
+            storage.append(unsupported_schema)
+            with self.assertRaises(LucidaInputContractError):
+                LucidaInputLog(path).replay()
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lucida-input.jsonl"
+            storage = ApplicationEventLog(path)
+            null_replacement = ApplicationEvent(
+                event_id="null-replacement",
+                source_app="fixture-source",
+                event_type="fixture.value",
+                channel="lucida.input",
+                payload={"data_summary": summary},
+                source_timestamp=T0,
+                received_timestamp=T0,
+                session_id="lucida-input",
+                peer_id="xio-layer",
+                sequence=1,
+                provenance={
+                    "capability": "observe.value",
+                    "contract": "lucida-input-v1",
+                    "privacy_status": "summary_only",
+                    "source_version": "fixture-1",
+                    "replaces": None,
+                },
+            )
+            storage.append(null_replacement)
+            with self.assertRaises(LucidaInputContractError):
+                LucidaInputLog(path).replay()
+
 
 if __name__ == "__main__":
     unittest.main()

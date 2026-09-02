@@ -221,6 +221,8 @@ def _to_storage_event(record: LucidaInputRecord, *, replaces: str | None = None)
 
 
 def _from_storage_event(event: ApplicationEvent) -> LucidaInputRecord:
+    if event.schema_version != LUCIDA_INPUT_SCHEMA_VERSION:
+        raise LucidaInputContractError("storage event schema_version is unsupported")
     if event.channel != LUCIDA_INPUT_CHANNEL:
         raise LucidaInputContractError("storage event channel is not lucida.input")
     if not isinstance(event.payload, Mapping) or set(event.payload) != {"data_summary"}:
@@ -232,6 +234,8 @@ def _from_storage_event(event: ApplicationEvent) -> LucidaInputRecord:
     if set(event.provenance) - allowed or event.provenance["contract"] != LUCIDA_INPUT_CONTRACT:
         raise LucidaInputContractError("storage event provenance does not match the contract")
     replacement_for = event.provenance.get("replaces")
+    if "replaces" in event.provenance and replacement_for is None:
+        raise LucidaInputContractError("replaces must be an explicit identifier")
     if replacement_for is not None:
         _validate_identifier(replacement_for, "replaces")
     return LucidaInputRecord(
