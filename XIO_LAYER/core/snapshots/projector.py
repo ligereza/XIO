@@ -56,6 +56,10 @@ class SnapshotProjector:
         )
 
 
+class SnapshotConflictError(ValueError):
+    """Raised when a snapshot version is reused with different content."""
+
+
 class SnapshotStore:
     """In-process latest-snapshot store with stale-write protection."""
 
@@ -70,6 +74,12 @@ class SnapshotStore:
             current = self._snapshots.get(snapshot.stream_id)
             if current is not None and snapshot.version < current.version:
                 raise ValueError("cannot replace a snapshot with an older version")
+            if current is not None and snapshot.version == current.version:
+                if current.to_dict() == snapshot.to_dict():
+                    return current
+                raise SnapshotConflictError(
+                    f"snapshot version already exists: {snapshot.stream_id}:{snapshot.version}"
+                )
             self._snapshots[snapshot.stream_id] = snapshot
             return snapshot
 

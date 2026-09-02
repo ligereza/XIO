@@ -59,7 +59,9 @@ and replays records by ingestion sequence before handing them to that selected
 route. It does not choose a route or send a message.
 `EventLog` and `ApplicationEventLog` persist records with fsync and the shared
 sidecar lock, reload current state before append, and expose persistence errors
-without changing replay into action execution.
+without changing replay into action execution. Persistent `EventLog` loading
+rejects missing or reused ingestion sequences instead of silently replaying an
+incomplete log.
 Both append boundaries reject the wrong event record type before acquiring a
 file lock or touching in-memory or on-disk state.
 `Event.from_dict()` and `ApplicationEvent.from_dict()` require the exact fields
@@ -95,8 +97,11 @@ an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a
 checkpoint against the event-log prefix before using it; an inconsistent
 checkpoint is reported and replaced by a full state-only replay.
-`SnapshotStore.save()` and `CheckpointStore.save()` reject non-snapshot inputs
-before mutating memory or acquiring the checkpoint file lock.
+`SnapshotStore.save()` is idempotent for the exact same snapshot and rejects
+same-version conflicts as well as older versions. `CheckpointStore.save()` keeps
+the corresponding stream/version conflict rule and both stores reject
+non-snapshot inputs before mutating memory or acquiring the checkpoint file
+lock.
 Projection and recovery also reject malformed stream ids, record collections,
 base snapshots and manager dependencies before replay begins.
 Checkpoint restoration requires the exact serialized fields, scalar types and

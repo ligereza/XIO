@@ -18,6 +18,7 @@ from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
     CheckpointStore,
     RecoveryManager,
+    SnapshotConflictError,
     SnapshotStore,
     SnapshotProjector,
 )
@@ -61,6 +62,31 @@ class EventAndReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(TypeError, "Snapshot"):
                 checkpoints.save(object())
             self.assertFalse(any(Path(directory).rglob("*.json")))
+
+    def test_snapshot_store_is_idempotent_but_rejects_same_version_conflicts(self):
+        first = Snapshot(
+            stream_id="demo",
+            version=2,
+            state={"total": 3},
+            captured_at=T0,
+            snapshot_id="snapshot-first",
+        )
+        conflict = Snapshot(
+            stream_id="demo",
+            version=2,
+            state={"total": 99},
+            captured_at=T0,
+            snapshot_id="snapshot-conflict",
+        )
+        store = SnapshotStore()
+
+        saved = store.save(first)
+        repeated = store.save(first)
+        with self.assertRaises(SnapshotConflictError):
+            store.save(conflict)
+
+        self.assertIs(repeated, saved)
+        self.assertEqual(store.latest("demo"), first)
 
     def test_recovery_boundaries_reject_invalid_inputs(self):
         projector = SnapshotProjector(add_reducer)
