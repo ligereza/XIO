@@ -37,6 +37,16 @@ from .local_source import (
     LocalEventRecord,
     LocalEventSourceError,
 )
+from .lucida_input import (
+    DuplicateLucidaInputError,
+    LUCIDA_INPUT_CHANNEL,
+    LUCIDA_INPUT_CONTRACT,
+    LUCIDA_INPUT_SCHEMA_VERSION,
+    LucidaInputContractError,
+    LucidaInputLog,
+    LucidaInputRecord,
+    MAX_DATA_SUMMARY_FIELDS,
+)
 from .protocol_events import ProtocolEventAdapter
 from .source_registry import (
     AdapterSelection,
@@ -74,6 +84,14 @@ __all__ = [
     "LocalAdapterEventSource",
     "LocalEventRecord",
     "LocalEventSourceError",
+    "DuplicateLucidaInputError",
+    "LUCIDA_INPUT_CHANNEL",
+    "LUCIDA_INPUT_CONTRACT",
+    "LUCIDA_INPUT_SCHEMA_VERSION",
+    "LucidaInputContractError",
+    "LucidaInputLog",
+    "LucidaInputRecord",
+    "MAX_DATA_SUMMARY_FIELDS",
     "JsonLineHandoffStore",
     "NoRouteMatchError",
     "PrivacyPolicy",

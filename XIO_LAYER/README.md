@@ -39,7 +39,7 @@ XIO_LAYER/
 │   ├── transport/   política, transporte y probe de conectividad inyectable
 │   └── sessions/    peers, handshake y fan-out dirigido
 ├── adapters/xio/    frontera de observación y ejecución explícita
-├── adapters/        puentes de protocolo inyectables, incluido LUCIDA/MULTI
+├── adapters/        puentes de protocolo y entrada LUCIDA/MULTI
 └── tests/           pruebas unitarias e integración ligera
 ```
 
@@ -149,6 +149,14 @@ Replacing a peer authorization also invalidates stale endpoint and handshake
 state while retaining explicit delivery history.
 Public session operations reject malformed record types and peer identifiers
 before mutating state or calling the injected transport.
+
+`adapters/lucida_input.py` exposes a narrower `LucidaInputRecord` for a future
+LUCIDA reducer. It carries only event identity, source/version, type/time,
+sequence, capability, privacy status and a bounded data shape. It reuses
+`PrivacyPolicy` and `ApplicationEventLog`; raw payload values never cross this
+boundary. `LucidaInputLog.replace()` is the explicit append-only replacement
+path, while replay remains sequence-ordered and idempotent. The synthetic
+fixture is `tests/fixtures/lucida_input_events.jsonl`.
 
 ## Contrato de consumo LUCIDA/MULTI
 
