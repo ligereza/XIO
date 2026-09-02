@@ -224,8 +224,22 @@ class AdapterHandoffDelivery:
     def __post_init__(self) -> None:
         if not handoff_id_is_valid(self.handoff_id):
             raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
-        if self.status not in {"accepted", "duplicate", "conflict", "rejected", "failed"}:
+        if not isinstance(self.status, str) or self.status not in {
+            "accepted", "duplicate", "conflict", "rejected", "failed"
+        }:
             raise AdapterHandoffError("delivery status is invalid")
+        if self.receipt is not None and not isinstance(self.receipt, DeliveryReceipt):
+            raise TypeError("receipt must be a DeliveryReceipt or None")
+        if self.status in {"accepted", "duplicate", "conflict"} and self.receipt is None:
+            raise AdapterHandoffError("successful delivery statuses require a receipt")
+        if self.status == "duplicate" and not self.receipt.duplicate:
+            raise AdapterHandoffError("duplicate status requires a duplicate receipt")
+        if self.status == "accepted" and (not self.receipt.accepted or self.receipt.duplicate):
+            raise AdapterHandoffError("accepted status requires a non-duplicate accepted receipt")
+        if self.status == "conflict" and self.receipt.status is not DeliveryStatus.IDEMPOTENCY_CONFLICT:
+            raise AdapterHandoffError("conflict status requires an idempotency-conflict receipt")
+        if self.error is not None and not isinstance(self.error, str):
+            raise TypeError("error must be a string or None")
         object.__setattr__(self, "attempted_at", require_utc(self.attempted_at, "attempted_at"))
 
     def to_dict(self) -> dict[str, Any]:

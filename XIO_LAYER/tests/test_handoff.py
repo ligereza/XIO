@@ -11,6 +11,7 @@ from typing import Any, Mapping
 
 from XIO_LAYER.adapters import (
     AdapterHandoff,
+    AdapterHandoffDelivery,
     AdapterHandoffError,
     AdapterSelection,
     CandidateNotAvailableError,
@@ -262,6 +263,21 @@ class AdapterHandoffTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(AdapterHandoffError, "do not match"):
             replace(handoff, event=mismatched_event)
+
+    def test_delivery_result_constructor_rejects_incoherent_receipts(self):
+        with self.assertRaisesRegex(TypeError, "DeliveryReceipt"):
+            AdapterHandoffDelivery("handoff-1", "accepted", object(), T0)
+        with self.assertRaisesRegex(AdapterHandoffError, "require a receipt"):
+            AdapterHandoffDelivery("handoff-1", "accepted", None, T0)
+        with self.assertRaisesRegex(AdapterHandoffError, "duplicate receipt"):
+            AdapterHandoffDelivery(
+                "handoff-1",
+                "duplicate",
+                DeliveryReceipt("message-1", accepted=True),
+                T0,
+            )
+        with self.assertRaisesRegex(TypeError, "error"):
+            AdapterHandoffDelivery("handoff-1", "rejected", None, T0, error=7)
 
     def test_blocked_delivery_is_rejected_and_audited_without_retry_or_fallback(self):
         registry, _, _ = self.make_registry()
