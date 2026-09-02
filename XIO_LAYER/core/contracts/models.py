@@ -279,11 +279,17 @@ class ActionResult:
     error: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.action_id, str) or not self.action_id.strip():
+            raise ValueError("action_id must be a non-empty string")
+        if not isinstance(self.status, str) or self.status not in {"succeeded", "failed", "denied"}:
+            raise ValueError("status must be succeeded, failed or denied")
+        if not isinstance(self.output, Mapping):
+            raise ValueError("output must be a mapping")
+        if self.error is not None and not isinstance(self.error, str):
+            raise ValueError("error must be a string or null")
         object.__setattr__(self, "started_at", require_utc(self.started_at, "started_at"))
         object.__setattr__(self, "finished_at", require_utc(self.finished_at, "finished_at"))
         object.__setattr__(self, "output", _json_copy(self.output))
-        if self.status not in {"succeeded", "failed", "denied"}:
-            raise ValueError("status must be succeeded, failed or denied")
         if self.finished_at < self.started_at:
             raise TimestampError("finished_at cannot precede started_at")
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import RLock
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from ..contracts import ActionHandler, ActionResult, ExplicitAction, utc_now
 from .ledger import AuditLedger
@@ -87,10 +87,16 @@ class ActionGate:
             return result
 
         try:
+            def invoke() -> Mapping[str, Any] | None:
+                output = handler(action)
+                if output is not None and not isinstance(output, Mapping):
+                    raise ValueError("action handler output must be a mapping or null")
+                return output
+
             allowed, output = self.permissions.run_if_allowed(
                 action.actor_id,
                 required_permission,
-                lambda: handler(action),
+                invoke,
             )
         except Exception as exc:  # action failures must become inspectable results
             result = ActionResult(

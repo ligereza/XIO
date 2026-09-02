@@ -11,7 +11,7 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
+from XIO_LAYER.core.contracts import ActionResult, Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
 from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
@@ -275,6 +275,35 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
         later = gate.execute(action, "device.write", lambda _: {"unexpected": True})
         self.assertEqual(later.status, "denied")
         self.assertEqual(later.error, "permission_missing_or_revoked")
+
+    def test_invalid_handler_output_becomes_a_failed_audited_result(self):
+        permissions = PermissionRegistry()
+        audit = AuditLedger()
+        gate = ActionGate(permissions, audit)
+        permissions.grant("user-1", "device.write")
+        action = ExplicitAction(
+            proposal_id="proposal-invalid-output",
+            action_type="device.write",
+            parameters={},
+            actor_id="user-1",
+            requested_at=T0,
+            explicitly_confirmed=True,
+        )
+
+        result = gate.execute(action, "device.write", lambda _: ["not-a-mapping"])
+
+        self.assertEqual(result.status, "failed")
+        self.assertIn("action handler output must be a mapping", result.error)
+        self.assertEqual(audit.entries()[0].outcome, "failed")
+        self.assertTrue(audit.verify())
+        with self.assertRaises(ValueError):
+            ActionResult(
+                action_id="action-invalid-output",
+                status="succeeded",
+                started_at=T0,
+                finished_at=T0,
+                output=[],
+            )
 
     def test_proposal_and_unconfirmed_action_cannot_execute(self):
         permissions = PermissionRegistry()
