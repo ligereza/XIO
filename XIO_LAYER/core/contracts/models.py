@@ -39,7 +39,12 @@ def require_utc(value: datetime, field_name: str) -> datetime:
 def _json_copy(value: Mapping[str, Any]) -> dict[str, Any]:
     """Copy a JSON-like mapping so callers cannot mutate a contract in place."""
 
-    return deepcopy(dict(value))
+    copied = deepcopy(dict(value))
+    try:
+        json.dumps(copied, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("mapping must be JSON-safe") from exc
+    return copied
 
 
 def canonical_json(value: Any) -> str:
@@ -71,16 +76,14 @@ class Event:
     schema_version: int = 1
 
     def __post_init__(self) -> None:
-        if not self.stream_id.strip():
-            raise ValueError("stream_id cannot be empty")
-        if not self.kind.strip():
-            raise ValueError("kind cannot be empty")
-        if not self.source.strip():
-            raise ValueError("source cannot be empty")
-        if not self.event_id.strip():
-            raise ValueError("event_id cannot be empty")
-        if self.schema_version < 1:
+        for field_name in ("stream_id", "kind", "source", "event_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version < 1:
             raise ValueError("schema_version must be positive")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a mapping")
         object.__setattr__(self, "occurred_at", require_utc(self.occurred_at, "occurred_at"))
         object.__setattr__(self, "received_at", require_utc(self.received_at, "received_at"))
         object.__setattr__(self, "payload", _json_copy(self.payload))
@@ -109,15 +112,37 @@ class Event:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Event":
+        required = {
+            "stream_id",
+            "kind",
+            "source",
+            "occurred_at",
+            "received_at",
+            "payload",
+            "event_id",
+            "schema_version",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("event fields do not match the contract")
+        for field_name in ("stream_id", "kind", "source", "event_id"):
+            if not isinstance(data[field_name], str):
+                raise ValueError(f"event {field_name} must be a string")
+        for field_name in ("occurred_at", "received_at"):
+            if not isinstance(data[field_name], str):
+                raise ValueError(f"event {field_name} must be an ISO datetime")
+        if not isinstance(data["schema_version"], int) or isinstance(data["schema_version"], bool):
+            raise ValueError("event schema_version must be an integer")
+        if not isinstance(data["payload"], Mapping):
+            raise ValueError("event payload must be a mapping")
         return cls(
-            stream_id=str(data["stream_id"]),
-            kind=str(data["kind"]),
-            source=str(data["source"]),
-            occurred_at=datetime.fromisoformat(str(data["occurred_at"])),
-            received_at=datetime.fromisoformat(str(data["received_at"])),
-            payload=data.get("payload", {}),
-            event_id=str(data["event_id"]),
-            schema_version=int(data.get("schema_version", 1)),
+            stream_id=data["stream_id"],
+            kind=data["kind"],
+            source=data["source"],
+            occurred_at=datetime.fromisoformat(data["occurred_at"]),
+            received_at=datetime.fromisoformat(data["received_at"]),
+            payload=data["payload"],
+            event_id=data["event_id"],
+            schema_version=data["schema_version"],
         )
 
     @property
@@ -133,15 +158,23 @@ class EventRecord:
     event: Event
 
     def __post_init__(self) -> None:
-        if self.sequence < 1:
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 1:
             raise ValueError("sequence must be positive")
+        if not isinstance(self.event, Event):
+            raise ValueError("event must be an Event")
 
     def to_dict(self) -> dict[str, Any]:
         return {"sequence": self.sequence, "event": self.event.to_dict()}
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "EventRecord":
-        return cls(sequence=int(data["sequence"]), event=Event.from_dict(data["event"]))
+        if not isinstance(data, Mapping) or set(data) != {"sequence", "event"}:
+            raise ValueError("event record fields do not match the contract")
+        if not isinstance(data["sequence"], int) or isinstance(data["sequence"], bool):
+            raise ValueError("event record sequence must be an integer")
+        if not isinstance(data["event"], Mapping):
+            raise ValueError("event record event must be a mapping")
+        return cls(sequence=data["sequence"], event=Event.from_dict(data["event"]))
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,10 +191,18 @@ class Snapshot:
     state_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if not self.stream_id.strip():
-            raise ValueError("stream_id cannot be empty")
-        if self.version < 0:
+        if not isinstance(self.stream_id, str) or not self.stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        if not isinstance(self.version, int) or isinstance(self.version, bool) or self.version < 0:
             raise ValueError("version cannot be negative")
+        if not isinstance(self.state, Mapping):
+            raise ValueError("state must be a mapping")
+        if self.source_event_id is not None and not isinstance(self.source_event_id, str):
+            raise ValueError("source_event_id must be a string or null")
+        if not isinstance(self.snapshot_id, str) or not self.snapshot_id.strip():
+            raise ValueError("snapshot_id must be a non-empty string")
+        if not isinstance(self.schema_version, int) or isinstance(self.schema_version, bool) or self.schema_version < 1:
+            raise ValueError("schema_version must be positive")
         object.__setattr__(self, "captured_at", require_utc(self.captured_at, "captured_at"))
         state = _json_copy(self.state)
         object.__setattr__(self, "state", state)
@@ -299,8 +340,16 @@ class Checkpoint:
     state_hash: str = field(init=False)
 
     def __post_init__(self) -> None:
-        if self.sequence < 0:
+        if not isinstance(self.stream_id, str) or not self.stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 0:
             raise ValueError("sequence cannot be negative")
+        if not isinstance(self.state, Mapping):
+            raise ValueError("state must be a mapping")
+        if self.source_event_id is not None and not isinstance(self.source_event_id, str):
+            raise ValueError("source_event_id must be a string or null")
+        if not isinstance(self.checkpoint_id, str) or not self.checkpoint_id.strip():
+            raise ValueError("checkpoint_id must be a non-empty string")
         object.__setattr__(self, "captured_at", require_utc(self.captured_at, "captured_at"))
         state = _json_copy(self.state)
         object.__setattr__(self, "state", state)
@@ -330,15 +379,39 @@ class Checkpoint:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Checkpoint":
+        required = {
+            "stream_id",
+            "sequence",
+            "state",
+            "source_event_id",
+            "captured_at",
+            "checkpoint_id",
+            "state_hash",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("checkpoint fields do not match the contract")
+        if not isinstance(data["stream_id"], str):
+            raise ValueError("checkpoint stream_id must be a string")
+        if not isinstance(data["sequence"], int) or isinstance(data["sequence"], bool):
+            raise ValueError("checkpoint sequence must be an integer")
+        if not isinstance(data["state"], Mapping):
+            raise ValueError("checkpoint state must be a mapping")
+        if data["source_event_id"] is not None and not isinstance(data["source_event_id"], str):
+            raise ValueError("checkpoint source_event_id must be a string or null")
+        if not isinstance(data["captured_at"], str):
+            raise ValueError("checkpoint captured_at must be a string")
+        if not isinstance(data["checkpoint_id"], str):
+            raise ValueError("checkpoint checkpoint_id must be a string")
+        if not isinstance(data["state_hash"], str):
+            raise ValueError("checkpoint state_hash must be a string")
         checkpoint = cls(
-            stream_id=str(data["stream_id"]),
-            sequence=int(data["sequence"]),
+            stream_id=data["stream_id"],
+            sequence=data["sequence"],
             state=data["state"],
-            source_event_id=data.get("source_event_id"),
-            captured_at=datetime.fromisoformat(str(data["captured_at"])),
-            checkpoint_id=str(data["checkpoint_id"]),
+            source_event_id=data["source_event_id"],
+            captured_at=datetime.fromisoformat(data["captured_at"]),
+            checkpoint_id=data["checkpoint_id"],
         )
-        expected = str(data.get("state_hash", ""))
-        if expected and expected != checkpoint.state_hash:
+        if data["state_hash"] != checkpoint.state_hash:
             raise ValueError("checkpoint state hash mismatch")
         return checkpoint

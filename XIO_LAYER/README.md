@@ -43,7 +43,7 @@ XIO_LAYER/
 Desde la raíz del repositorio:
 
 ```text
-python -m unittest discover -s XIO_LAYER/tests -v
+python -m unittest discover -s XIO_LAYER/tests -t . -v
 ```
 
 No hay dependencias de Flask, ADB, Termux, Android o servicios externos.

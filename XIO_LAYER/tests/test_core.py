@@ -7,7 +7,7 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Event, ExplicitAction, Proposal, TimestampError
+from XIO_LAYER.core.contracts import Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
 from XIO_LAYER.core.snapshots import CheckpointStore, RecoveryManager, SnapshotProjector
 from XIO_LAYER.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
@@ -73,6 +73,30 @@ class EventAndReplayTests(unittest.TestCase):
                 received_at=T0,
             )
 
+    def test_serialized_event_and_checkpoint_contracts_reject_type_coercion(self):
+        event = make_event("event-serialized", 1)
+        event_wire = event.to_dict()
+
+        with self.assertRaises(ValueError):
+            Event.from_dict(dict(event_wire, schema_version="1"))
+        with self.assertRaises(ValueError):
+            Event.from_dict(dict(event_wire, payload=[("value", 1)]))
+        with self.assertRaises(ValueError):
+            EventRecord.from_dict({"sequence": "1", "event": event_wire})
+
+        snapshot = Snapshot(
+            stream_id="demo",
+            version=1,
+            state={"total": 1},
+            captured_at=T0,
+            source_event_id=event.event_id,
+        )
+        checkpoint_wire = Checkpoint.from_snapshot(snapshot).to_dict()
+        with self.assertRaises(ValueError):
+            Checkpoint.from_dict(dict(checkpoint_wire, sequence="1"))
+        with self.assertRaises(ValueError):
+            Checkpoint.from_dict(dict(checkpoint_wire, state=[("total", 1)]))
+
     def test_replay_materializes_snapshot_without_dispatching_action(self):
         log = EventLog()
         log.append(make_event("event-1", 3))
@@ -84,6 +108,29 @@ class EventAndReplayTests(unittest.TestCase):
         self.assertEqual(snapshot.state, {"total": 7})
         self.assertEqual(snapshot.version, 2)
         self.assertEqual(snapshot.source_event_id, "event-2")
+
+    def test_snapshot_projection_isolated_by_stream_and_base_version(self):
+        log = EventLog()
+        first = log.append(make_event("event-1", 1))
+        second = log.append(make_event("event-2", 2))
+        projector = SnapshotProjector(add_reducer)
+        base_snapshot = projector.project("demo", [first])
+
+        foreign = Event(
+            stream_id="other",
+            kind="add",
+            source="test-device",
+            occurred_at=T0,
+            received_at=T0,
+            payload={"value": 10},
+            event_id="foreign-event",
+        )
+        with self.assertRaises(ValueError):
+            projector.project("demo", [EventRecord(3, foreign)])
+        with self.assertRaises(ValueError):
+            projector.project("other", [second], base_snapshot=base_snapshot)
+        with self.assertRaises(ValueError):
+            projector.project("demo", [first], base_snapshot=base_snapshot)
 
 
 class PermissionAuditAndTransportTests(unittest.TestCase):
