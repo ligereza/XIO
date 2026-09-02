@@ -58,6 +58,8 @@ blocked, revoked or idempotency-conflicting delivery is not retried or
 rerouted; idempotency conflict remains distinguishable as a terminal result.
 Local replay derives stable handoff ids from the selected route and event id,
 keeping repeated projections fingerprint-identical.
+Prepared handoffs can be restored from their privacy-safe representation; the
+caller must re-inject its identity before any permission-checked delivery.
 
 ## Contrato de consumo LUCIDA/MULTI
 

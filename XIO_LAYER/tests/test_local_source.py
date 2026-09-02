@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from XIO_LAYER.adapters import (
+    AdapterHandoff,
     DuplicateLocalEventError,
     LocalAdapterEventSource,
     LocalEventSourceError,
@@ -92,6 +93,10 @@ class LocalEventSourceTests(unittest.TestCase):
             replayed_events = tuple(
                 transport_to_application_event(item.message) for item in replayed_handoffs
             )
+            restored_handoffs = tuple(
+                AdapterHandoff.from_dict(item.to_dict(), caller_id="operator-1")
+                for item in handoffs
+            )
             log = ApplicationEventLog(Path(directory) / "lucida-events.jsonl")
             for event in events:
                 self.assertTrue(log.append(event))
@@ -112,6 +117,10 @@ class LocalEventSourceTests(unittest.TestCase):
         self.assertEqual(
             [event.fingerprint for event in events],
             [event.fingerprint for event in replayed_events],
+        )
+        self.assertEqual(
+            [item.message.fingerprint for item in handoffs],
+            [item.message.fingerprint for item in restored_handoffs],
         )
         self.assertEqual([event.payload for event in events], [{"cue": "intro"}, {"cue": "outro"}])
         self.assertNotIn("private_note", json.dumps([event.to_dict() for event in events], sort_keys=True))

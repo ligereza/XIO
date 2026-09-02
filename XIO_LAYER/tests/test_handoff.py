@@ -9,6 +9,8 @@ import unittest
 from typing import Any, Mapping
 
 from XIO_LAYER.adapters import (
+    AdapterHandoff,
+    AdapterHandoffError,
     AdapterSelection,
     CandidateNotAvailableError,
     InvalidSourceAdapterError,
@@ -183,6 +185,12 @@ class AdapterHandoffTests(unittest.TestCase):
         self.assertNotIn("do-not-export", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("private-note", json.dumps(audit.entries()[-1].to_dict(), sort_keys=True))
         self.assertNotIn("operator-1", json.dumps(handoff.to_dict(), sort_keys=True))
+        restored = AdapterHandoff.from_dict(handoff.to_dict(), caller_id="operator-1")
+        self.assertEqual(restored.event.to_dict(), handoff.event.to_dict())
+        self.assertEqual(restored.message.fingerprint, handoff.message.fingerprint)
+        self.assertEqual(restored.selection, handoff.selection)
+        with self.assertRaises(AdapterHandoffError):
+            AdapterHandoff.from_dict(handoff.to_dict())
 
         permissions = PermissionRegistry()
         permissions.grant("operator-1", "handoff.deliver")

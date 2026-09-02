@@ -17,7 +17,7 @@ from ..core.audit import AuditLedger, PermissionRegistry
 from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
 from ..core.transport import DeliveryReceipt, DeliveryStatus, Endpoint, Transport, TransportMessage
-from .lucida_bridge import application_event_to_transport
+from .lucida_bridge import application_event_to_transport, transport_to_application_event
 from .source_registry import AdapterSelection, SourceAdapterRegistry
 
 
@@ -127,11 +127,12 @@ class AdapterHandoff:
             raise AdapterHandoffError("handoff_id must be a non-empty ASCII identifier")
         object.__setattr__(self, "prepared_at", require_utc(self.prepared_at, "prepared_at"))
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, *, include_caller: bool = False) -> dict[str, Any]:
         """Serialize only the projected event and public selection metadata."""
 
         selection = self.selection.to_dict()
-        selection.pop("caller_id", None)
+        if not include_caller:
+            selection.pop("caller_id", None)
         return {
             "handoff_id": self.handoff_id,
             "selection": selection,
@@ -141,6 +142,57 @@ class AdapterHandoff:
             "privacy_policy": self.privacy_policy.to_dict(),
             "status": "prepared",
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any], *, caller_id: str | None = None) -> "AdapterHandoff":
+        if not isinstance(data, Mapping):
+            raise AdapterHandoffError("adapter handoff must be a mapping")
+        required = {
+            "handoff_id",
+            "selection",
+            "event",
+            "message",
+            "prepared_at",
+            "privacy_policy",
+            "status",
+        }
+        if set(data) != required or data["status"] != "prepared":
+            raise AdapterHandoffError("adapter handoff fields do not match the contract")
+        selection_data = data["selection"]
+        if not isinstance(selection_data, Mapping):
+            raise AdapterHandoffError("handoff selection must be a mapping")
+        selection_data = dict(selection_data)
+        stored_caller = selection_data.get("caller_id")
+        if stored_caller is None:
+            if caller_id is None:
+                raise AdapterHandoffError("caller_id is required to restore a public handoff")
+            selection_data["caller_id"] = caller_id
+        elif caller_id is not None and stored_caller != caller_id:
+            raise AdapterHandoffError("caller_id does not match the stored selection")
+        try:
+            selection = AdapterSelection.from_dict(selection_data)
+            event = ApplicationEvent.from_dict(data["event"])
+            message = _transport_from_dict(data["message"])
+            prepared_at = datetime.fromisoformat(str(data["prepared_at"]))
+            privacy = _privacy_from_dict(data["privacy_policy"])
+        except (TypeError, ValueError, KeyError) as exc:
+            raise AdapterHandoffError("adapter handoff could not be restored") from exc
+        try:
+            bridged_event = transport_to_application_event(message)
+        except Exception as exc:
+            raise AdapterHandoffError("restored handoff message failed bridge validation") from exc
+        if bridged_event.to_dict() != event.to_dict():
+            raise AdapterHandoffError("restored event and transport message do not match")
+        if event.source_app != selection.source_app or event.event_type != selection.event_type:
+            raise AdapterHandoffError("restored event does not match selected route")
+        return cls(
+            handoff_id=data["handoff_id"],
+            selection=selection,
+            event=event,
+            message=message,
+            prepared_at=prepared_at,
+            privacy_policy=privacy,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -409,6 +461,67 @@ def _delivery_audit_metadata(
     if error is not None:
         metadata["error_type"] = error
     return metadata
+
+
+def _privacy_from_dict(value: Any) -> PrivacyPolicy:
+    if not isinstance(value, Mapping):
+        raise AdapterHandoffError("privacy policy must be a mapping")
+    required = {
+        "allowed_payload_keys",
+        "allowed_provenance_keys",
+        "expose_session_id",
+        "expose_peer_id",
+        "version",
+    }
+    if set(value) != required or value["version"] != "allowlist-v1":
+        raise AdapterHandoffError("privacy policy fields do not match the contract")
+    return PrivacyPolicy(
+        allowed_payload_keys=frozenset(value["allowed_payload_keys"]),
+        allowed_provenance_keys=frozenset(value["allowed_provenance_keys"]),
+        expose_session_id=value["expose_session_id"],
+        expose_peer_id=value["expose_peer_id"],
+    )
+
+
+def _transport_from_dict(value: Any) -> TransportMessage:
+    if not isinstance(value, Mapping):
+        raise AdapterHandoffError("handoff message must be a mapping")
+    required = {
+        "message_id",
+        "source",
+        "destination",
+        "channel",
+        "payload",
+        "sent_at",
+        "sequence",
+        "idempotency_key",
+        "envelope",
+    }
+    if set(value) != required or not isinstance(value["destination"], Mapping):
+        raise AdapterHandoffError("handoff message fields do not match the contract")
+    destination = value["destination"]
+    destination_required = {"scheme", "address", "medium", "scope", "port"}
+    if set(destination) != destination_required:
+        raise AdapterHandoffError("handoff destination fields do not match the contract")
+    if not isinstance(value["payload"], Mapping):
+        raise AdapterHandoffError("handoff message payload must be a mapping")
+    return TransportMessage(
+        message_id=value["message_id"],
+        source=value["source"],
+        destination=Endpoint(
+            scheme=destination["scheme"],
+            address=destination["address"],
+            medium=destination["medium"],
+            scope=destination["scope"],
+            port=destination["port"],
+        ),
+        channel=value["channel"],
+        payload=value["payload"],
+        sent_at=datetime.fromisoformat(str(value["sent_at"])),
+        sequence=value["sequence"],
+        idempotency_key=value["idempotency_key"],
+        envelope=value["envelope"],
+    )
 
 
 def _opaque_id(prefix: str, value: str) -> str:

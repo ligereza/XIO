@@ -108,6 +108,12 @@ The projected event remains a normal `ApplicationEvent`: it can be appended to
 it cannot select another adapter or execute an action. Successful and rejected
 handoffs are hash-chained in `AuditLedger`.
 
+`AdapterHandoff.to_dict()` is privacy-safe by default and omits `caller_id`.
+`AdapterHandoff.from_dict(..., caller_id=...)` requires the caller to re-inject
+that identity explicitly, validates the stored LUCIDA/MULTI message against the
+projected event, and restores only a `prepared` handoff. It never sends the
+restored message.
+
 `JsonLineAuditLedger` is the restart-safe local implementation of that port:
 it writes one JSONL entry at a time, fsyncs before exposing the entry in memory,
 revalidates the full hash chain on startup, and rejects malformed or tampered
