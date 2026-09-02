@@ -53,6 +53,9 @@ route. It does not choose a route or send a message.
 `EventLog` and `ApplicationEventLog` persist records with fsync and the shared
 sidecar lock, reload current state before append, and expose persistence errors
 without changing replay into action execution.
+`Event.from_dict()` and `ApplicationEvent.from_dict()` require the exact fields
+and scalar types emitted by their serializers; malformed records are rejected
+before replay or LUCIDA/MULTI restoration.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a

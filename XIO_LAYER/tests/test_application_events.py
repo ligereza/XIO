@@ -46,6 +46,34 @@ def reducer(state, event):
 
 
 class ApplicationEventContractTests(unittest.TestCase):
+    def test_restore_requires_exact_typed_application_event_contract(self):
+        event = make_event("event-restore", 1, 10)
+        wire = event.to_dict()
+        invalid_payloads = []
+
+        missing_provenance = dict(wire)
+        missing_provenance.pop("provenance")
+        invalid_payloads.append(missing_provenance)
+
+        extra_field = dict(wire)
+        extra_field["extra"] = True
+        invalid_payloads.append(extra_field)
+
+        wrong_sequence = dict(wire)
+        wrong_sequence["sequence"] = True
+        invalid_payloads.append(wrong_sequence)
+
+        wrong_hash = dict(wire)
+        wrong_hash["raw_hash"] = 7
+        invalid_payloads.append(wrong_hash)
+
+        for invalid in invalid_payloads:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ApplicationEventContractError):
+                    ApplicationEvent.from_dict(invalid)
+
+        self.assertEqual(ApplicationEvent.from_dict(wire).to_dict(), wire)
+
     def test_osc_payload_provenance_and_hash_round_trip(self):
         envelope = OscEnvelope("/xio/test", (1, "cue", b"\x00\xff"), timetag=T0)
         adapter = ProtocolEventAdapter("source-app", "session-1", "peer-1")

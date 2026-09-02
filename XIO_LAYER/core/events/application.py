@@ -127,18 +127,53 @@ class ApplicationEvent:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ApplicationEvent":
+        required = {
+            "event_id",
+            "schema_version",
+            "source_app",
+            "event_type",
+            "channel",
+            "payload",
+            "source_timestamp",
+            "received_timestamp",
+            "session_id",
+            "peer_id",
+            "sequence",
+            "raw_hash",
+            "provenance",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ApplicationEventContractError("application event fields do not match the contract")
+        for field_name in (
+            "event_id",
+            "source_app",
+            "event_type",
+            "channel",
+            "source_timestamp",
+            "received_timestamp",
+            "session_id",
+            "peer_id",
+            "raw_hash",
+        ):
+            if not isinstance(data[field_name], str):
+                raise ApplicationEventContractError(f"application event {field_name} must be a string")
+        for field_name in ("schema_version", "sequence"):
+            if not isinstance(data[field_name], int) or isinstance(data[field_name], bool):
+                raise ApplicationEventContractError(f"application event {field_name} must be an integer")
+        if not isinstance(data["provenance"], Mapping):
+            raise ApplicationEventContractError("application event provenance must be a mapping")
         return cls(
-            event_id=str(data["event_id"]),
-            schema_version=int(data.get("schema_version", 1)),
-            source_app=str(data["source_app"]),
-            event_type=str(data["event_type"]),
-            channel=str(data["channel"]),
+            event_id=data["event_id"],
+            schema_version=data["schema_version"],
+            source_app=data["source_app"],
+            event_type=data["event_type"],
+            channel=data["channel"],
             payload=decode_value(data["payload"]),
-            source_timestamp=datetime.fromisoformat(str(data["source_timestamp"])),
-            received_timestamp=datetime.fromisoformat(str(data["received_timestamp"])),
-            session_id=str(data["session_id"]),
-            peer_id=str(data["peer_id"]),
-            sequence=int(data["sequence"]),
-            raw_hash=str(data["raw_hash"]),
-            provenance=decode_value(data.get("provenance", {})),
+            source_timestamp=datetime.fromisoformat(data["source_timestamp"]),
+            received_timestamp=datetime.fromisoformat(data["received_timestamp"]),
+            session_id=data["session_id"],
+            peer_id=data["peer_id"],
+            sequence=data["sequence"],
+            raw_hash=data["raw_hash"],
+            provenance=decode_value(data["provenance"]),
         )

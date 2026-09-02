@@ -109,15 +109,37 @@ class Event:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Event":
+        required = {
+            "stream_id",
+            "kind",
+            "source",
+            "occurred_at",
+            "received_at",
+            "payload",
+            "event_id",
+            "schema_version",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("event fields do not match the contract")
+        for field_name in ("stream_id", "kind", "source", "event_id"):
+            if not isinstance(data[field_name], str):
+                raise ValueError(f"event {field_name} must be a string")
+        for field_name in ("occurred_at", "received_at"):
+            if not isinstance(data[field_name], str):
+                raise ValueError(f"event {field_name} must be an ISO datetime")
+        if not isinstance(data["schema_version"], int) or isinstance(data["schema_version"], bool):
+            raise ValueError("event schema_version must be an integer")
+        if not isinstance(data["payload"], Mapping):
+            raise ValueError("event payload must be a mapping")
         return cls(
-            stream_id=str(data["stream_id"]),
-            kind=str(data["kind"]),
-            source=str(data["source"]),
-            occurred_at=datetime.fromisoformat(str(data["occurred_at"])),
-            received_at=datetime.fromisoformat(str(data["received_at"])),
-            payload=data.get("payload", {}),
-            event_id=str(data["event_id"]),
-            schema_version=int(data.get("schema_version", 1)),
+            stream_id=data["stream_id"],
+            kind=data["kind"],
+            source=data["source"],
+            occurred_at=datetime.fromisoformat(data["occurred_at"]),
+            received_at=datetime.fromisoformat(data["received_at"]),
+            payload=data["payload"],
+            event_id=data["event_id"],
+            schema_version=data["schema_version"],
         )
 
     @property
@@ -141,7 +163,13 @@ class EventRecord:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "EventRecord":
-        return cls(sequence=int(data["sequence"]), event=Event.from_dict(data["event"]))
+        if not isinstance(data, Mapping) or set(data) != {"sequence", "event"}:
+            raise ValueError("event record fields do not match the contract")
+        if not isinstance(data["sequence"], int) or isinstance(data["sequence"], bool):
+            raise ValueError("event record sequence must be an integer")
+        if not isinstance(data["event"], Mapping):
+            raise ValueError("event record event must be a mapping")
+        return cls(sequence=data["sequence"], event=Event.from_dict(data["event"]))
 
 
 @dataclass(frozen=True, slots=True)

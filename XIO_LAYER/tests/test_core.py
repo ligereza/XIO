@@ -47,6 +47,34 @@ def make_event(event_id: str, value: int, occurred_offset: int = 0, received_off
 
 
 class EventAndReplayTests(unittest.TestCase):
+    def test_event_restore_requires_exact_typed_contract(self):
+        event = make_event("event-restore", 1)
+        wire = event.to_dict()
+        invalid_payloads = []
+
+        missing_payload = dict(wire)
+        missing_payload.pop("payload")
+        invalid_payloads.append(missing_payload)
+
+        extra_field = dict(wire)
+        extra_field["extra"] = True
+        invalid_payloads.append(extra_field)
+
+        wrong_sequence_schema = dict(wire)
+        wrong_sequence_schema["schema_version"] = True
+        invalid_payloads.append(wrong_sequence_schema)
+
+        wrong_timestamp = dict(wire)
+        wrong_timestamp["received_at"] = 7
+        invalid_payloads.append(wrong_timestamp)
+
+        for invalid in invalid_payloads:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    Event.from_dict(invalid)
+
+        self.assertEqual(Event.from_dict(wire).to_dict(), wire)
+
     def test_persistent_event_log_assigns_unique_sequences_across_processes(self):
         events = [make_event(f"event-{number}", number) for number in range(1, 5)]
         with tempfile.TemporaryDirectory() as directory:

@@ -156,6 +156,8 @@ It validates the exact message and endpoint fields, timestamps, sequence and
 scalar types without sending anything. Handoff restoration delegates to this
 method, so LUCIDA/MULTI and local handoff replay cannot drift into separate
 wire parsers.
+The application-event parser applies the same exact-field and scalar-type rule
+to the event envelope before the bridge accepts it.
 
 ### Consumo por LUCIDA/MULTI
 
