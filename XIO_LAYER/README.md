@@ -44,6 +44,8 @@ XIO_LAYER/
 caller obtains a deterministic route plan, selects one declared candidate,
 then prepares a privacy-projected LUCIDA/MULTI message. Preparation is not
 delivery: no transport `send`, socket, discovery or action execution occurs.
+Registry lookups, routing records and caller-supplied plans are validated before
+adapter lookup or conversion; malformed inputs cannot invoke an adapter.
 The default allowlist exports no payload or provenance keys and anonymizes
 session and peer ids. `AuditLedger` receives only safe selection and fingerprint
 metadata; the resulting event remains replayable through `ApplicationEventLog`.

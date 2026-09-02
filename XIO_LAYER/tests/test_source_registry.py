@@ -272,6 +272,26 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         self.assertEqual(registry.source_apps(), before)
         self.assertEqual(record["sequence"], 1)
 
+    def test_registry_public_inputs_fail_closed_before_adapter_lookup_or_call(self):
+        registry = SourceAdapterRegistry()
+        adapter = TestSourceAdapter()
+        registry.register(adapter)
+
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.get_adapter([])
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.declaration("")
+        with self.assertRaises(TypeError):
+            registry.route("adobe", "timeline.cue", object())
+        with self.assertRaises(TypeError):
+            registry.select_candidate(
+                source_app="adobe",
+                event_type="timeline.cue",
+                caller_id="operator-1",
+                plan=[],
+            )
+        self.assertEqual(adapter.calls, [])
+
     def test_registered_declaration_is_immutable_after_adapter_metadata_changes(self):
         registry = SourceAdapterRegistry()
         adapter = TestSourceAdapter()

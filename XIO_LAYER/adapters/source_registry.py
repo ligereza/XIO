@@ -150,12 +150,14 @@ class SourceAdapterRegistry:
         return declaration
 
     def get_adapter(self, source_app: str) -> SourceAdapter:
+        _validate_identifier(source_app, "source_app")
         registered = self._adapters.get(source_app)
         if registered is None:
             raise UnknownSourceAdapterError(source_app)
         return registered.adapter
 
     def declaration(self, source_app: str) -> SourceAdapterDeclaration:
+        _validate_identifier(source_app, "source_app")
         registered = self._adapters.get(source_app)
         if registered is None:
             raise UnknownSourceAdapterError(source_app)
@@ -234,6 +236,8 @@ class SourceAdapterRegistry:
 
         _validate_identifier(source_app, "source_app")
         _validate_identifier(caller_id, "caller_id")
+        if plan is not None and not isinstance(plan, Mapping):
+            raise TypeError("plan must be a mapping or None")
         required = _read_query_identifiers(required_capabilities)
         current_plan = self.route_plan(event_type, required)
         if plan is not None and dict(plan) != current_plan:
@@ -279,6 +283,10 @@ class SourceAdapterRegistry:
         event_type: str,
         record: Mapping[str, Any],
     ) -> ApplicationEvent:
+        _validate_identifier(source_app, "source_app")
+        _validate_identifier(event_type, "event_type")
+        if not isinstance(record, Mapping):
+            raise TypeError("record must be a mapping")
         registered = self._adapters.get(source_app)
         if registered is None:
             raise UnknownSourceAdapterError(source_app)
