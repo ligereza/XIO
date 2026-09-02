@@ -24,7 +24,13 @@ from .handoff import (
     deliver_adapter_handoff,
     prepare_adapter_handoff,
 )
-from .handoff_store import DuplicateHandoffError, HandoffStoreError, JsonLineHandoffStore
+from .handoff_store import (
+    DuplicateHandoffError,
+    HANDOFF_STORE_SCHEMA_VERSION,
+    HandoffIntegrityError,
+    HandoffStoreError,
+    JsonLineHandoffStore,
+)
 from .local_source import (
     DuplicateLocalEventError,
     LocalAdapterEventSource,
@@ -60,6 +66,8 @@ __all__ = [
     "CandidateNotAvailableError",
     "DuplicateLocalEventError",
     "DuplicateHandoffError",
+    "HANDOFF_STORE_SCHEMA_VERSION",
+    "HandoffIntegrityError",
     "HandoffStoreError",
     "LucidaApplicationEnvelope",
     "LucidaBridgeError",

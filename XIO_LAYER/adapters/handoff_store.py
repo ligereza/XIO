@@ -12,12 +12,20 @@ from ..core.contracts import content_hash
 from .handoff import AdapterHandoff, AdapterHandoffError
 
 
+HANDOFF_STORE_SCHEMA_VERSION = 1
+HANDOFF_STORE_GENESIS = "GENESIS"
+
+
 class HandoffStoreError(ValueError):
     """Raised when a prepared handoff store is malformed."""
 
 
 class DuplicateHandoffError(HandoffStoreError):
     """Raised when one handoff id is reused with different prepared content."""
+
+
+class HandoffIntegrityError(HandoffStoreError):
+    """Raised when a persisted handoff record fails its hash chain."""
 
 
 class JsonLineHandoffStore:
@@ -32,14 +40,23 @@ class JsonLineHandoffStore:
             raise TypeError("handoff must be an AdapterHandoff")
         wire = handoff.to_dict()
         fingerprint = _stable_fingerprint(wire)
-        for existing in self._read_wires():
-            if existing.get("handoff_id") != handoff.handoff_id:
+        entries = self._read_entries()
+        for existing in entries:
+            existing_handoff = existing["handoff"]
+            if existing_handoff.get("handoff_id") != handoff.handoff_id:
                 continue
-            if _stable_fingerprint(existing) != fingerprint:
+            if _stable_fingerprint(existing_handoff) != fingerprint:
                 raise DuplicateHandoffError(handoff.handoff_id)
             return False
+        previous_hash = entries[-1]["record_hash"] if entries else HANDOFF_STORE_GENESIS
+        entry = {
+            "schema_version": HANDOFF_STORE_SCHEMA_VERSION,
+            "handoff": wire,
+            "previous_hash": previous_hash,
+        }
+        entry["record_hash"] = _record_hash(entry)
         try:
-            encoded = json.dumps(wire, ensure_ascii=False, sort_keys=True, allow_nan=False)
+            encoded = json.dumps(entry, ensure_ascii=False, sort_keys=True, allow_nan=False)
         except (TypeError, ValueError) as exc:
             raise HandoffStoreError("handoff is not JSON-safe") from exc
         try:
@@ -56,7 +73,8 @@ class JsonLineHandoffStore:
 
         restored: dict[str, AdapterHandoff] = {}
         fingerprints: dict[str, str] = {}
-        for wire in self._read_wires():
+        for entry in self._read_entries():
+            wire = entry["handoff"]
             try:
                 handoff = AdapterHandoff.from_dict(wire, caller_id=caller_id)
             except AdapterHandoffError as exc:
@@ -80,11 +98,16 @@ class JsonLineHandoffStore:
             )
         )
 
-    def _read_wires(self) -> tuple[dict[str, Any], ...]:
+    def _read_entries(self) -> tuple[dict[str, Any], ...]:
         if not self.path.exists():
             return ()
-        wires: list[dict[str, Any]] = []
-        for line_number, line in enumerate(self.path.read_text(encoding="utf-8").splitlines(), 1):
+        entries: list[dict[str, Any]] = []
+        try:
+            lines = self.path.read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            raise HandoffStoreError("handoff store could not be read") from exc
+        previous_hash = HANDOFF_STORE_GENESIS
+        for line_number, line in enumerate(lines, 1):
             if not line.strip():
                 continue
             try:
@@ -93,8 +116,10 @@ class JsonLineHandoffStore:
                 raise HandoffStoreError(f"invalid handoff JSONL line {line_number}") from exc
             if not isinstance(value, dict):
                 raise HandoffStoreError(f"handoff JSONL line {line_number} must be an object")
-            wires.append(value)
-        return tuple(wires)
+            _validate_entry(value, line_number, previous_hash)
+            entries.append(value)
+            previous_hash = value["record_hash"]
+        return tuple(entries)
 
 
 def _stable_fingerprint(wire: dict[str, Any]) -> str:
@@ -103,8 +128,33 @@ def _stable_fingerprint(wire: dict[str, Any]) -> str:
     return content_hash(stable)
 
 
+def _record_hash(entry: dict[str, Any]) -> str:
+    unsigned = {
+        "schema_version": entry["schema_version"],
+        "handoff": entry["handoff"],
+        "previous_hash": entry["previous_hash"],
+    }
+    return content_hash(unsigned)
+
+
+def _validate_entry(value: dict[str, Any], line_number: int, previous_hash: str) -> None:
+    required = {"schema_version", "handoff", "previous_hash", "record_hash"}
+    if set(value) != required:
+        raise HandoffIntegrityError(f"handoff record fields invalid at line {line_number}")
+    if value["schema_version"] != HANDOFF_STORE_SCHEMA_VERSION:
+        raise HandoffIntegrityError(f"unsupported handoff store schema at line {line_number}")
+    if value["previous_hash"] != previous_hash:
+        raise HandoffIntegrityError(f"handoff hash chain broken at line {line_number}")
+    if not isinstance(value["handoff"], dict):
+        raise HandoffIntegrityError(f"handoff payload invalid at line {line_number}")
+    if value["record_hash"] != _record_hash(value):
+        raise HandoffIntegrityError(f"handoff record tampered at line {line_number}")
+
+
 __all__ = [
     "DuplicateHandoffError",
+    "HANDOFF_STORE_SCHEMA_VERSION",
+    "HandoffIntegrityError",
     "HandoffStoreError",
     "JsonLineHandoffStore",
 ]

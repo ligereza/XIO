@@ -61,7 +61,8 @@ keeping repeated projections fingerprint-identical.
 Prepared handoffs can be restored from their privacy-safe representation; the
 caller must re-inject its identity before any permission-checked delivery.
 `JsonLineHandoffStore` makes that representation append-only and restart-safe,
-with idempotent same-content writes and rejection of same-id content changes.
+with a versioned hash chain, idempotent same-content writes and rejection of
+same-id content changes or tampered/reordered records.
 
 ## Contrato de consumo LUCIDA/MULTI
 

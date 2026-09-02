@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 import tempfile
 import unittest
 
 from XIO_LAYER.adapters import (
     DuplicateHandoffError,
+    HandoffIntegrityError,
     HandoffStoreError,
     JsonLineHandoffStore,
     LocalAdapterEventSource,
@@ -54,6 +56,7 @@ class JsonLineHandoffStoreTests(unittest.TestCase):
             self.assertFalse(store.append(handoffs[0]))
             content = store.path.read_text(encoding="utf-8")
             restored = JsonLineHandoffStore(store.path).replay(caller_id="operator-1")
+            self.assertFalse(JsonLineHandoffStore(store.path).append(handoffs[0]))
 
         self.assertNotIn("operator-1", content)
         self.assertEqual(
@@ -80,6 +83,30 @@ class JsonLineHandoffStoreTests(unittest.TestCase):
             store.append(handoff)
             with self.assertRaises(HandoffStoreError):
                 store.replay(caller_id="")
+
+    def test_tampered_handoff_record_is_rejected_by_integrity_chain(self):
+        handoff = prepared_handoffs()[0]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoffs.jsonl"
+            store = JsonLineHandoffStore(path)
+            store.append(handoff)
+            entry = json.loads(path.read_text(encoding="utf-8"))
+            entry["handoff"]["event"]["payload"]["cue"] = "tampered"
+            path.write_text(json.dumps(entry, sort_keys=True) + "\n", encoding="utf-8")
+            with self.assertRaises(HandoffIntegrityError):
+                store.replay(caller_id="operator-1")
+
+    def test_reordered_handoff_records_are_rejected(self):
+        handoffs = prepared_handoffs()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "handoffs.jsonl"
+            store = JsonLineHandoffStore(path)
+            for handoff in handoffs:
+                store.append(handoff)
+            lines = path.read_text(encoding="utf-8").splitlines()
+            path.write_text("\n".join(reversed(lines)) + "\n", encoding="utf-8")
+            with self.assertRaises(HandoffIntegrityError):
+                JsonLineHandoffStore(path).replay(caller_id="operator-1")
 
 
 if __name__ == "__main__":

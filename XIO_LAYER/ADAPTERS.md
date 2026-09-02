@@ -122,8 +122,9 @@ files.
 `JsonLineHandoffStore` persists prepared handoffs without `caller_id`. Appending
 the same handoff id and stable prepared content is idempotent; changing that
 content is rejected as `DuplicateHandoffError`. Replay requires an explicit
-caller id and restores `prepared` handoffs only. The store never delivers a
-message.
+caller id and restores `prepared` handoffs only. Each JSONL line has a versioned
+envelope with a previous hash and record hash; tampering or reordering is
+rejected before reconstruction. The store never delivers a message.
 
 ## Replayable local source
 
