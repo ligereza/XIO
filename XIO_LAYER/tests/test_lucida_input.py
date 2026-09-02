@@ -14,7 +14,7 @@ from XIO_LAYER.adapters import (
     LucidaInputRecord,
     PrivacyPolicy,
 )
-from XIO_LAYER.core.events import ApplicationEvent
+from XIO_LAYER.core.events import ApplicationEvent, ApplicationEventLog
 
 
 T0 = datetime(2026, 9, 2, 12, 0, tzinfo=timezone.utc)
@@ -141,6 +141,59 @@ class LucidaInputLogTests(unittest.TestCase):
             log.append(record)
             with self.assertRaises(LucidaInputContractError):
                 log.replace(record.event_id, record)
+
+    def test_storage_replay_rejects_invalid_payload_shape_and_target(self):
+        summary = make_record("unused", 1).data_summary
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lucida-input.jsonl"
+            storage = ApplicationEventLog(path)
+            malformed_payload = ApplicationEvent(
+                event_id="malformed-payload",
+                source_app="fixture-source",
+                event_type="fixture.value",
+                channel="lucida.input",
+                payload=["data_summary"],
+                source_timestamp=T0,
+                received_timestamp=T0,
+                session_id="lucida-input",
+                peer_id="xio-layer",
+                sequence=1,
+                provenance={
+                    "capability": "observe.value",
+                    "contract": "lucida-input-v1",
+                    "privacy_status": "summary_only",
+                    "source_version": "fixture-1",
+                },
+            )
+            storage.append(malformed_payload)
+            with self.assertRaises(LucidaInputContractError):
+                LucidaInputLog(path).replay()
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lucida-input.jsonl"
+            storage = ApplicationEventLog(path)
+            missing_target = ApplicationEvent(
+                event_id="missing-target-replacement",
+                source_app="fixture-source",
+                event_type="fixture.value",
+                channel="lucida.input",
+                payload={"data_summary": summary},
+                source_timestamp=T0,
+                received_timestamp=T0,
+                session_id="lucida-input",
+                peer_id="xio-layer",
+                sequence=1,
+                provenance={
+                    "capability": "observe.value",
+                    "contract": "lucida-input-v1",
+                    "privacy_status": "summary_only",
+                    "source_version": "fixture-1",
+                    "replaces": "missing-input",
+                },
+            )
+            storage.append(missing_target)
+            with self.assertRaises(LucidaInputContractError):
+                LucidaInputLog(path).replay()
 
 
 if __name__ == "__main__":

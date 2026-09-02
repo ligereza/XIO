@@ -177,9 +177,18 @@ class LucidaInputLog:
         def reducer(state: Mapping[str, Any], event: ApplicationEvent) -> Mapping[str, Any]:
             records = list(state.get("records", []))
             replacement_for = event.provenance.get("replaces")
+            record = _from_storage_event(event)
             if replacement_for is not None:
+                previous = next(
+                    (item for item in records if item["event_id"] == replacement_for),
+                    None,
+                )
+                if previous is None:
+                    raise LucidaInputContractError("replacement target is not present")
+                if record.sequence <= previous["sequence"]:
+                    raise LucidaInputContractError("replacement sequence must follow the replaced input")
                 records = [item for item in records if item["event_id"] != replacement_for]
-            records.append(_from_storage_event(event).to_dict())
+            records.append(record.to_dict())
             return {"records": records}
 
         result = self._events.replay(reducer, {"records": []})
@@ -214,7 +223,7 @@ def _to_storage_event(record: LucidaInputRecord, *, replaces: str | None = None)
 def _from_storage_event(event: ApplicationEvent) -> LucidaInputRecord:
     if event.channel != LUCIDA_INPUT_CHANNEL:
         raise LucidaInputContractError("storage event channel is not lucida.input")
-    if set(event.payload) != {"data_summary"}:
+    if not isinstance(event.payload, Mapping) or set(event.payload) != {"data_summary"}:
         raise LucidaInputContractError("storage event payload does not match the contract")
     required = {"capability", "contract", "privacy_status", "source_version"}
     if not isinstance(event.provenance, Mapping) or not required.issubset(event.provenance):
