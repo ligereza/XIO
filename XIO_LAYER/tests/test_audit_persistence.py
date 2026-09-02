@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -11,6 +13,36 @@ from XIO_LAYER.core.audit import (
 
 
 class JsonLineAuditLedgerTests(unittest.TestCase):
+    def test_concurrent_processes_preserve_audit_hash_chain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audit.jsonl"
+            script = (
+                "import sys\n"
+                "from XIO_LAYER.core.audit import JsonLineAuditLedger\n"
+                "ledger = JsonLineAuditLedger(sys.argv[1])\n"
+                "ledger.append('probe', 'subject-' + sys.argv[2], 'recorded', {'worker': sys.argv[2]})\n"
+            )
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path), str(index)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for index in range(4)
+            ]
+            for process in processes:
+                stdout, stderr = process.communicate()
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertEqual(stdout, "")
+
+            loaded = JsonLineAuditLedger(path)
+            lock_exists = path.with_name(path.name + ".lock").exists()
+
+        self.assertEqual(len(loaded.entries()), 4)
+        self.assertTrue(loaded.verify())
+        self.assertTrue(lock_exists)
+
     def test_entries_survive_restart_and_hash_chain_continues(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "audit.jsonl"

@@ -66,6 +66,8 @@ same-id content changes or tampered/reordered records. Calls sharing one store
 instance and separate processes are serialized through a sidecar lock file.
 `TransportMessage.from_dict()` is the shared strict wire parser used by both
 transport and handoff restoration.
+`core/file_lock.py` provides the same portable sidecar locking primitive to
+both persistent stores.
 
 ## Contrato de consumo LUCIDA/MULTI
 

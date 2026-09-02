@@ -10,6 +10,7 @@ from typing import Any, Mapping
 from uuid import uuid4
 
 from ..contracts import AuditEntry, content_hash, utc_now
+from ..file_lock import exclusive_file_lock
 
 
 class AuditLedger:
@@ -99,7 +100,9 @@ class JsonLineAuditLedger(AuditLedger):
         super().__init__()
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._entries = self._load_entries()
+        self._lock_path = self.path.with_name(self.path.name + ".lock")
+        with exclusive_file_lock(self._lock_path):
+            self._entries = self._load_entries()
 
     def append(
         self,
@@ -110,23 +113,25 @@ class JsonLineAuditLedger(AuditLedger):
         actor_id: str | None = None,
     ) -> AuditEntry:
         with self._lock:
-            try:
-                entry = self._build_entry_locked(event_type, subject_id, outcome, details, actor_id)
-            except (TypeError, ValueError) as exc:
-                raise AuditLedgerPersistenceError("audit entry cannot be represented safely") from exc
-            try:
-                encoded = json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False)
-            except (TypeError, ValueError) as exc:
-                raise AuditLedgerPersistenceError("audit entry is not JSON-safe") from exc
-            try:
-                with self.path.open("a", encoding="utf-8", newline="\n") as stream:
-                    stream.write(encoded + "\n")
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except OSError as exc:
-                raise AuditLedgerPersistenceError("audit entry could not be persisted") from exc
-            self._entries.append(entry)
-            return entry
+            with exclusive_file_lock(self._lock_path):
+                try:
+                    self._entries = self._load_entries()
+                    entry = self._build_entry_locked(event_type, subject_id, outcome, details, actor_id)
+                except (TypeError, ValueError) as exc:
+                    raise AuditLedgerPersistenceError("audit entry cannot be represented safely") from exc
+                try:
+                    encoded = json.dumps(entry.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False)
+                except (TypeError, ValueError) as exc:
+                    raise AuditLedgerPersistenceError("audit entry is not JSON-safe") from exc
+                try:
+                    with self.path.open("a", encoding="utf-8", newline="\n") as stream:
+                        stream.write(encoded + "\n")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                except OSError as exc:
+                    raise AuditLedgerPersistenceError("audit entry could not be persisted") from exc
+                self._entries.append(entry)
+                return entry
 
     def _load_entries(self) -> list[AuditEntry]:
         if not self.path.exists():

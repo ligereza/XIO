@@ -117,7 +117,9 @@ restored message.
 `JsonLineAuditLedger` is the restart-safe local implementation of that port:
 it writes one JSONL entry at a time, fsyncs before exposing the entry in memory,
 revalidates the full hash chain on startup, and rejects malformed or tampered
-files.
+files. Its append path reloads the current ledger while holding a sidecar file
+lock, so separate processes extend one hash chain instead of using stale
+in-memory state.
 
 `JsonLineHandoffStore` persists prepared handoffs without `caller_id`. Appending
 the same handoff id and stable prepared content is idempotent; changing that
