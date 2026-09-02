@@ -106,6 +106,23 @@ class EventAndReplayTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Checkpoint(stream_id="demo", sequence=True, state={}, source_event_id=None, captured_at=T0)
 
+    def test_proposal_constructor_rejects_ambiguous_inputs(self):
+        valid = {
+            "stream_id": "demo",
+            "action_type": "device.write",
+            "parameters": {},
+            "created_at": T0,
+            "reason": "explicit test proposal",
+        }
+        with self.assertRaises(ValueError):
+            Proposal(**{**valid, "stream_id": 7})
+        with self.assertRaises(ValueError):
+            Proposal(**{**valid, "parameters": []})
+        with self.assertRaises(ValueError):
+            Proposal(**{**valid, "source_event_ids": "event-1"})
+        with self.assertRaises(ValueError):
+            Proposal(**{**valid, "source_event_ids": ["", "event-2"]})
+
     def test_event_restore_requires_exact_typed_contract(self):
         event = make_event("event-restore", 1)
         wire = event.to_dict()

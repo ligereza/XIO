@@ -234,13 +234,23 @@ class Proposal:
     proposal_id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
+        for field_name in ("stream_id", "action_type", "reason", "proposal_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.parameters, Mapping):
+            raise ValueError("parameters must be a mapping")
         object.__setattr__(self, "created_at", require_utc(self.created_at, "created_at"))
         object.__setattr__(self, "parameters", _json_copy(self.parameters))
-        object.__setattr__(self, "source_event_ids", tuple(self.source_event_ids))
-        if not self.action_type.strip():
-            raise ValueError("action_type cannot be empty")
-        if not self.reason.strip():
-            raise ValueError("reason cannot be empty")
+        if isinstance(self.source_event_ids, (str, bytes, Mapping)):
+            raise ValueError("source_event_ids must be a collection of strings")
+        try:
+            source_event_ids = tuple(self.source_event_ids)
+        except TypeError as exc:
+            raise ValueError("source_event_ids must be a collection of strings") from exc
+        if any(not isinstance(event_id, str) or not event_id.strip() for event_id in source_event_ids):
+            raise ValueError("source_event_ids must contain non-empty strings")
+        object.__setattr__(self, "source_event_ids", source_event_ids)
 
 
 @dataclass(frozen=True, slots=True)
