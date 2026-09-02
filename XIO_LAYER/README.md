@@ -94,6 +94,8 @@ state hash emitted by `Checkpoint.to_dict()`.
 `JsonLineAuditLedger` persists the handoff audit chain across restarts and
 rejects malformed or tampered entries on reload. `AuditEntry.from_dict()` also
 requires exact serialized fields and scalar types before hash verification.
+Direct `AuditEntry` construction applies the same identity, actor, outcome and
+hash invariants, so in-memory and restored audit records cannot diverge.
 Delivery is a distinct caller action through `deliver_adapter_handoff`; its
 receipt is audited, it requires a current `PermissionRegistry` grant, and a
 blocked, revoked or idempotency-conflicting delivery is not retried or

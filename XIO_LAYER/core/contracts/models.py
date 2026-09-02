@@ -314,8 +314,23 @@ class AuditEntry:
     entry_hash: str
 
     def __post_init__(self) -> None:
+        for field_name in (
+            "audit_id",
+            "event_type",
+            "subject_id",
+            "outcome",
+            "previous_hash",
+            "entry_hash",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.actor_id is not None and not isinstance(self.actor_id, str):
+            raise ValueError("actor_id must be a string or null")
         object.__setattr__(self, "recorded_at", require_utc(self.recorded_at, "recorded_at"))
         object.__setattr__(self, "details", _json_copy(self.details))
+        if self.entry_hash != content_hash(self.unsigned_dict()):
+            raise ValueError("entry_hash does not match audit entry")
 
     def unsigned_dict(self) -> dict[str, Any]:
         return {

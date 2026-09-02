@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
@@ -219,6 +220,22 @@ class EventAndReplayTests(unittest.TestCase):
 
 
 class PermissionAuditAndTransportTests(unittest.TestCase):
+    def test_audit_entry_and_ledger_reject_invalid_direct_contracts(self):
+        ledger = AuditLedger()
+        with self.assertRaises(ValueError):
+            ledger.append("", "subject-1", "recorded")
+        with self.assertRaises(ValueError):
+            ledger.append("probe", "subject-1", "recorded", actor_id=[])
+        self.assertEqual(ledger.entries(), ())
+
+        entry = AuditLedger().append("probe", "subject-1", "recorded", {"safe": True}, "actor-1")
+        with self.assertRaises(ValueError):
+            replace(entry, outcome="")
+        with self.assertRaises(ValueError):
+            replace(entry, actor_id=7)
+        with self.assertRaises(ValueError):
+            replace(entry, entry_hash="not-the-entry-hash")
+
     def test_permission_api_rejects_invalid_inputs_before_registry_mutation(self):
         permissions = PermissionRegistry()
 
