@@ -78,6 +78,23 @@ class EventAndReplayTests(unittest.TestCase):
             with self.assertRaisesRegex(TypeError, "checkpoints"):
                 RecoveryManager(object())
 
+    def test_snapshot_projection_rejects_cross_stream_inputs(self):
+        projector = SnapshotProjector(add_reducer)
+        event = make_event("event-foreign", 1)
+        foreign_event = replace(event, stream_id="other-stream")
+        foreign_record = EventRecord(sequence=1, event=foreign_event)
+        with self.assertRaisesRegex(ValueError, "stream_id"):
+            projector.project("demo", [foreign_record])
+
+        foreign_snapshot = Snapshot(
+            stream_id="other-stream",
+            version=0,
+            state={},
+            captured_at=T0,
+        )
+        with self.assertRaisesRegex(ValueError, "stream_id"):
+            projector.project("demo", (), base_snapshot=foreign_snapshot)
+
     def test_event_log_append_rejects_wrong_type_before_mutation(self):
         log = EventLog()
 

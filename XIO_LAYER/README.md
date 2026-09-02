@@ -14,7 +14,8 @@ event → snapshot → proposal → explicit_action → result → audit
 ```
 
 - `event`: observación con tiempo de origen y tiempo de recepción.
-- `snapshot`: estado materializado por un reducer puro.
+- `snapshot`: estado materializado por un reducer puro sobre un único stream;
+  registros y snapshots de otro stream se rechazan.
 - `proposal`: sugerencia explicable, con parámetros e IDs de eventos validados,
   pero sin autoridad de ejecución.
 - `explicit_action`: confirmación explícita de un actor.
