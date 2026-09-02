@@ -187,6 +187,32 @@ class ApplicationEventContractTests(unittest.TestCase):
         self.assertEqual(event.payload["universe"], 4)
         self.assertEqual(event.provenance["protocol"], "artnet")
 
+    def test_protocol_adapter_rejects_explicit_false_like_optional_values(self):
+        envelope = OscEnvelope("/xio/test", ("cue",))
+        adapter = ProtocolEventAdapter("source-app", "session-1", "peer-1")
+
+        with self.assertRaises(TimestampError):
+            adapter.from_osc(
+                envelope,
+                channel="signals",
+                sequence=1,
+                source_timestamp=0,
+            )
+        with self.assertRaises(TimestampError):
+            adapter.from_osc(
+                envelope,
+                channel="signals",
+                sequence=1,
+                received_timestamp=0,
+            )
+        with self.assertRaises(TypeError):
+            adapter.from_osc(
+                envelope,
+                channel="signals",
+                sequence=1,
+                provenance=0,
+            )
+
     def test_invalid_contract_is_rejected(self):
         with self.assertRaises(TimestampError):
             ApplicationEvent(

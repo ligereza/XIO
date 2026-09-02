@@ -263,7 +263,7 @@ class SourceAdapterRegistry:
             required_capabilities=tuple(sorted(required)),
             plan_fingerprint=content_hash(current_plan),
             caller_id=caller_id,
-            selected_at=selected_at or utc_now(),
+            selected_at=utc_now() if selected_at is None else selected_at,
         )
 
     def validate_selection(self, selection: AdapterSelection) -> None:

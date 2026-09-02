@@ -96,7 +96,7 @@ def application_event_to_transport(
         destination=destination,
         channel=APPLICATION_EVENT_CHANNEL,
         payload=event.to_dict(),
-        sent_at=sent_at or event.received_timestamp,
+        sent_at=event.received_timestamp if sent_at is None else sent_at,
         message_id=event.event_id if message_id is None else message_id,
         sequence=event.sequence,
         idempotency_key=event.event_id,

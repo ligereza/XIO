@@ -19,6 +19,7 @@ from XIO_LAYER.core.transport import (
     InMemoryTransport,
     TransportMessage,
 )
+from XIO_LAYER.core.contracts import TimestampError
 
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "lucida_application_events.jsonl"
@@ -131,6 +132,17 @@ class LucidaBridgeTests(unittest.TestCase):
                 source="lucida",
                 destination=DESTINATION,
                 message_id="",
+            )
+
+    def test_bridge_rejects_explicit_false_like_sent_at(self):
+        event = transport_to_application_event(fixture_messages()[0])
+
+        with self.assertRaises(TimestampError):
+            application_event_to_transport(
+                event,
+                source="lucida",
+                destination=DESTINATION,
+                sent_at=0,
             )
 
 

@@ -530,3 +530,57 @@ next_checkpoint: Run focused handoff/bridge identity tests and the complete XIO_
 previous_action: audit optional identity generation across XIO_LAYER
 decision_delta: extend strict None-only generation from ApplicationEvent to handoff and bridge message IDs
 verification_signal: explicit empty handoff_id and message_id raise; omitted values retain generated/default identities.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Optional timestamps and optional mappings must default only when omitted; explicit invalid values must reach the contract validator and fail.
+current_state: Handoff and bridge IDs use None-only defaults. Several adapter boundaries still use truthiness fallbacks for selected_at, sent_at, protocol timestamps and provenance.
+verified_evidence: selected_at=0 falls back to utc_now instead of failing; bridge sent_at=0 falls back to the event timestamp; protocol adapter received_timestamp=0 and provenance=0 are silently replaced/defaulted.
+assumptions: None is the declared omission marker for optional values; false-like non-None inputs are caller data and must not be ignored.
+strongest_failure_mode: Invalid timing or provenance metadata is replaced by host-generated/default data, making replay and audit differ from the supplied observation.
+highest_consequence_error: An event can be accepted with fabricated timestamps or missing provenance while appearing to preserve the source record.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: medium
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Replace truthiness defaults with explicit None checks at the selected-at, bridge sent-at and protocol adapter boundaries.
+    reversibility: high
+    evidence_needed: None retains default behavior; explicit invalid values fail and valid values remain unchanged.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the bypass is directly reproducible from local code.
+    reversibility: high
+    evidence_needed: External guidance would not alter Python truthiness or the declared optional types.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Preserve silent metadata replacement at several input boundaries.
+    reversibility: high
+    evidence_needed: Acceptance that false-like caller values may be treated as omission.
+
+search_gap:
+  uncertainty: Whether any caller intentionally passes false-like values to request defaults.
+  consequence: Low; valid callers pass None for omission and valid timestamps/mappings remain unchanged.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: The same None-only rule is already established by event, handoff and bridge ID contracts.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Add focused optional-field regressions, run the complete XIO_LAYER suite and publish only the scoped adapter, test and ledger changes.
+previous_action: audit optional identity generation across XIO_LAYER
+decision_delta: broaden strict None-only handling from correlation IDs to optional temporal and provenance inputs
+verification_signal: selected_at=0, sent_at=0, protocol received_timestamp=0 and provenance=0 are rejected instead of replaced.

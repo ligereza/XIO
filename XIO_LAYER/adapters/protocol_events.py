@@ -64,13 +64,16 @@ class ProtocolEventAdapter:
         received_timestamp: datetime | None = None,
         provenance: Mapping[str, Any] | None = None,
     ) -> ApplicationEvent:
-        received = received_timestamp or utc_now()
+        received = utc_now() if received_timestamp is None else received_timestamp
+        source = source_timestamp
+        if source is None:
+            source = envelope.timetag if envelope.timetag is not None else received
         return ApplicationEvent(
             source_app=self.source_app,
             event_type="osc.message",
             channel=channel,
             payload=envelope.to_dict(),
-            source_timestamp=source_timestamp or envelope.timetag or received,
+            source_timestamp=source,
             received_timestamp=received,
             session_id=self.session_id,
             peer_id=self.peer_id,
@@ -79,7 +82,7 @@ class ProtocolEventAdapter:
                 "adapter": "osc",
                 "protocol": "osc",
                 "envelope": envelope.to_dict(),
-                **dict(provenance or {}),
+                **(dict(provenance) if provenance is not None else {}),
             },
         )
 
@@ -93,7 +96,7 @@ class ProtocolEventAdapter:
         received_timestamp: datetime | None = None,
         provenance: Mapping[str, Any] | None = None,
     ) -> ApplicationEvent:
-        received = received_timestamp or utc_now()
+        received = utc_now() if received_timestamp is None else received_timestamp
         return ApplicationEvent(
             source_app=self.source_app,
             event_type="artnet.frame",
@@ -108,6 +111,6 @@ class ProtocolEventAdapter:
                 "adapter": "artnet",
                 "protocol": "artnet",
                 "envelope": envelope.to_dict(),
-                **dict(provenance or {}),
+                **(dict(provenance) if provenance is not None else {}),
             },
         )

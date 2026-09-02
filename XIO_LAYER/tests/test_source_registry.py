@@ -15,7 +15,7 @@ from XIO_LAYER.adapters import (
     UndeclaredEventTypeError,
     UnknownSourceAdapterError,
 )
-from XIO_LAYER.core.contracts import content_hash
+from XIO_LAYER.core.contracts import TimestampError, content_hash
 from XIO_LAYER.core.events import ApplicationEvent
 from XIO_LAYER.core.transport import ArtNetEnvelope, OscEnvelope
 
@@ -359,6 +359,18 @@ class SourceAdapterRegistryTests(unittest.TestCase):
             caller_id="operator-1",
         )
         self.assertTrue(generated.selection_id)
+
+    def test_selection_rejects_explicit_false_like_timestamp(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("adobe"))
+
+        with self.assertRaises(TimestampError):
+            registry.select_candidate(
+                source_app="adobe",
+                event_type="timeline.cue",
+                caller_id="operator-1",
+                selected_at=0,
+            )
 
     def test_selection_restore_rejects_non_string_timestamp(self):
         registry = SourceAdapterRegistry()

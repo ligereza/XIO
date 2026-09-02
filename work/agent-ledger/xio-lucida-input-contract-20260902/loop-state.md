@@ -41,6 +41,8 @@ completed:
     evidence: ApplicationEvent now generates an event_id only when event_id is None; empty and falsy supplied values are rejected, with the complete XIO_LAYER suite passing 169 tests.
   - item: Handoff and bridge correlation IDs use None-only generation.
     evidence: prepare_adapter_handoff and application_event_to_transport now preserve explicit IDs for validation; empty supplied IDs fail, with focused regressions and the complete XIO_LAYER suite passing 171 tests.
+  - item: Optional adapter timestamps and provenance no longer use truthiness fallbacks.
+    evidence: ProtocolEventAdapter, AdapterSelection and the LUCIDA bridge now default only on None; false-like explicit values are rejected, with focused regressions and the complete XIO_LAYER suite passing 174 tests.
 
 current_state:
   files_or_resources:
@@ -49,10 +51,10 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/critique.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 171 tests; focused stale-handshake, handshake-contract, explicit-event-identity and adapter-correlation regressions pass; adapter/handoff integration subset passes 40 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key, selection-identity, adapter-isolation and strict-restoration regressions pass; compileall, technical ASCII and diff checks pass.
+  tests_and_checks: XIO_LAYER suite passes 174 tests; focused stale-handshake, handshake-contract, explicit-event-identity, adapter-correlation and optional-field regressions pass; adapter/handoff integration subset passes 40 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key, selection-identity, adapter-isolation and strict-restoration regressions pass; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.
   blockers: []
-  next_action: Reassess the next XIO signal, transport or input-contract boundary after publishing this bounded adapter-correlation fix; preserve unrelated root changes and never reopen the archived extraction.
+  next_action: Reassess the next XIO signal, transport or input-contract boundary after publishing this bounded optional-field fix; preserve unrelated root changes and never reopen the archived extraction.
   next_checkpoint_trigger: before resuming autonomous work or publishing any XIO code change
