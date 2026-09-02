@@ -24,6 +24,7 @@ from .handoff import (
     deliver_adapter_handoff,
     prepare_adapter_handoff,
 )
+from .handoff_store import DuplicateHandoffError, HandoffStoreError, JsonLineHandoffStore
 from .local_source import (
     DuplicateLocalEventError,
     LocalAdapterEventSource,
@@ -58,11 +59,14 @@ __all__ = [
     "AdapterSelection",
     "CandidateNotAvailableError",
     "DuplicateLocalEventError",
+    "DuplicateHandoffError",
+    "HandoffStoreError",
     "LucidaApplicationEnvelope",
     "LucidaBridgeError",
     "LocalAdapterEventSource",
     "LocalEventRecord",
     "LocalEventSourceError",
+    "JsonLineHandoffStore",
     "NoRouteMatchError",
     "PrivacyPolicy",
     "PrivacyPolicyError",

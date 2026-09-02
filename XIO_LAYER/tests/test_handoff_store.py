@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from datetime import datetime, timezone
+from pathlib import Path
+import tempfile
+import unittest
+
+from XIO_LAYER.adapters import (
+    DuplicateHandoffError,
+    HandoffStoreError,
+    JsonLineHandoffStore,
+    LocalAdapterEventSource,
+    PrivacyPolicy,
+    SourceAdapterRegistry,
+)
+from XIO_LAYER.core.audit import AuditLedger
+from XIO_LAYER.core.transport import Endpoint
+from XIO_LAYER.tests.test_handoff import CountingAdapter
+
+
+T0 = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "lucida_handoff_records.jsonl"
+
+
+def prepared_handoffs():
+    registry = SourceAdapterRegistry()
+    registry.register(CountingAdapter("fixture-app"))
+    selection = registry.select_candidate(
+        source_app="fixture-app",
+        event_type="cue.event",
+        caller_id="operator-1",
+        plan=registry.route_plan("cue.event"),
+        selected_at=T0,
+        selection_id="fixture-selection",
+    )
+    return LocalAdapterEventSource(FIXTURE_PATH).prepare_handoffs(
+        registry,
+        selection,
+        source="xio-layer",
+        destination=Endpoint("memory", "lucida-store"),
+        audit=AuditLedger(),
+        privacy_policy=PrivacyPolicy(allowed_payload_keys=frozenset({"cue"})),
+    )
+
+
+class JsonLineHandoffStoreTests(unittest.TestCase):
+    def test_append_is_idempotent_and_replay_restores_without_caller_storage(self):
+        handoffs = prepared_handoffs()
+        with tempfile.TemporaryDirectory() as directory:
+            store = JsonLineHandoffStore(Path(directory) / "handoffs.jsonl")
+            self.assertTrue(store.append(handoffs[0]))
+            self.assertTrue(store.append(handoffs[1]))
+            self.assertFalse(store.append(handoffs[0]))
+            content = store.path.read_text(encoding="utf-8")
+            restored = JsonLineHandoffStore(store.path).replay(caller_id="operator-1")
+
+        self.assertNotIn("operator-1", content)
+        self.assertEqual(
+            [item.message.fingerprint for item in restored],
+            [item.message.fingerprint for item in handoffs],
+        )
+
+    def test_same_id_with_different_prepared_content_is_rejected(self):
+        handoff = prepared_handoffs()[0]
+        conflicting = replace(
+            handoff,
+            privacy_policy=PrivacyPolicy(expose_peer_id=True),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            store = JsonLineHandoffStore(Path(directory) / "handoffs.jsonl")
+            self.assertTrue(store.append(handoff))
+            with self.assertRaises(DuplicateHandoffError):
+                store.append(conflicting)
+
+    def test_public_store_requires_caller_identity_for_replay(self):
+        handoff = prepared_handoffs()[0]
+        with tempfile.TemporaryDirectory() as directory:
+            store = JsonLineHandoffStore(Path(directory) / "handoffs.jsonl")
+            store.append(handoff)
+            with self.assertRaises(HandoffStoreError):
+                store.replay(caller_id="")
+
+
+if __name__ == "__main__":
+    unittest.main()

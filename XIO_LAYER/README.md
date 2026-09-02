@@ -60,6 +60,8 @@ Local replay derives stable handoff ids from the selected route and event id,
 keeping repeated projections fingerprint-identical.
 Prepared handoffs can be restored from their privacy-safe representation; the
 caller must re-inject its identity before any permission-checked delivery.
+`JsonLineHandoffStore` makes that representation append-only and restart-safe,
+with idempotent same-content writes and rejection of same-id content changes.
 
 ## Contrato de consumo LUCIDA/MULTI
 

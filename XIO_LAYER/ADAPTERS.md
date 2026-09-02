@@ -119,6 +119,12 @@ it writes one JSONL entry at a time, fsyncs before exposing the entry in memory,
 revalidates the full hash chain on startup, and rejects malformed or tampered
 files.
 
+`JsonLineHandoffStore` persists prepared handoffs without `caller_id`. Appending
+the same handoff id and stable prepared content is idempotent; changing that
+content is rejected as `DuplicateHandoffError`. Replay requires an explicit
+caller id and restores `prepared` handoffs only. The store never delivers a
+message.
+
 ## Replayable local source
 
 `LocalAdapterEventSource` reads a caller-owned JSONL file as a read-only source.
