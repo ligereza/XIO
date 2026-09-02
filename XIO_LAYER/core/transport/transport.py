@@ -260,6 +260,24 @@ class DeliveryReceipt:
     delivered_at: datetime | None = None
 
     def __post_init__(self) -> None:
+        _require_transport_text(self.message_id, "message_id")
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        if not isinstance(self.duplicate, bool):
+            raise ValueError("duplicate must be a boolean")
+        if self.sequence is not None and (
+            isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 1
+        ):
+            raise ValueError("sequence must be a positive integer or null")
+        if self.latency_ms is not None and (
+            isinstance(self.latency_ms, bool)
+            or not isinstance(self.latency_ms, (int, float))
+            or not math.isfinite(self.latency_ms)
+            or self.latency_ms < 0
+        ):
+            raise ValueError("latency_ms must be a finite non-negative number or null")
+        if self.error is not None and not isinstance(self.error, str):
+            raise ValueError("error must be a string or null")
         if self.delivered_at is not None:
             object.__setattr__(self, "delivered_at", require_utc(self.delivered_at, "delivered_at"))
 

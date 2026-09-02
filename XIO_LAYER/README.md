@@ -62,6 +62,8 @@ The direct constructors enforce the same invariants, so restored and
 programmatically created transport observations cannot diverge in type rules.
 The event and snapshot constructors enforce the same temporal rule: boolean
 values cannot masquerade as schema versions or replay sequences.
+Transport receipts apply the same fail-closed rule to result flags, sequences
+and latency values before a delivery status is exposed.
 `ExplicitAction` requires a real boolean confirmation and mapping parameters;
 truthy strings cannot bypass the explicit-action gate.
 `ActionGate` serializes the current permission check with the handler call:

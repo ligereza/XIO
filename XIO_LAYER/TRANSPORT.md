@@ -26,6 +26,10 @@ and router reports use the same `medium`, `scope`, `state`, optional latency and
 loss counters, timestamp and reason. `ConnectionState.UNKNOWN` means that the
 host has not established a known state; it is not a guessed measurement.
 
+`DeliveryReceipt` also validates its direct result contract: boolean flags must
+be real booleans, sequence values must be positive integers when present, and
+latency must be finite and non-negative before status mapping.
+
 `probe_connectivity` validates the returned status and endpoint, then returns
 the host report unchanged. It does not create fallback values, open sockets,
 scan, discover peers or turn an exception into a synthetic status. The host

@@ -8,6 +8,7 @@ from XIO_LAYER.core.transport import (
     ArtNetEnvelope,
     ConnectionState,
     ConnectionStatus,
+    DeliveryReceipt,
     DeliveryStatus,
     Endpoint,
     InMemoryTransport,
@@ -58,6 +59,16 @@ class TransportTests(unittest.TestCase):
                 checked_at=T0,
                 latency_ms=float("nan"),
             )
+        with self.assertRaises(ValueError):
+            DeliveryReceipt(message_id="receipt", accepted=1)
+        with self.assertRaises(ValueError):
+            DeliveryReceipt(message_id="receipt", accepted=True, duplicate="yes")
+        with self.assertRaises(ValueError):
+            DeliveryReceipt(message_id="receipt", accepted=True, sequence=True)
+        with self.assertRaises(ValueError):
+            DeliveryReceipt(message_id="receipt", accepted=True, latency_ms=float("nan"))
+        with self.assertRaises(ValueError):
+            DeliveryReceipt(message_id="receipt", accepted=True, latency_ms=-1)
 
     def test_message_wire_round_trip_is_strict_and_does_not_send(self):
         endpoint = Endpoint("memory", "queue")
