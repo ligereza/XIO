@@ -5,6 +5,8 @@ import unittest
 
 from XIO_LAYER.core.sessions import (
     AckStatus,
+    DeliveryAck,
+    HandshakeAck,
     HandshakeRequest,
     PeerDescriptor,
     PeerSessionManager,
@@ -43,6 +45,132 @@ def connected_pair(alice: PeerDescriptor | None = None, bob: PeerDescriptor | No
     attempt = alice_session.initiate_handshake("bob")
     ack = bob_session.accept_handshake(attempt.request)
     return alice_session, bob_session, transport, ack, attempt
+
+
+class SessionContractTests(unittest.TestCase):
+    def test_session_records_round_trip_with_exact_wire_shape(self):
+        descriptor = peer("alice")
+        request = HandshakeRequest(
+            peer=descriptor,
+            session_id="session-1",
+            request_id="request-1",
+            requested_at=T0,
+        )
+        ack = HandshakeAck(
+            request_id=request.request_id,
+            session_id=request.session_id,
+            responder_peer_id="bob",
+            protocol_version="1.0",
+            accepted=True,
+            capabilities=frozenset({"signal.observe"}),
+            responded_at=T0,
+            ack_id="ack-1",
+        )
+        signal = SignalEnvelope(
+            source_peer_id="alice",
+            session_id=request.session_id,
+            channel="signals",
+            sequence=1,
+            payload={"value": 7},
+            created_at=T0,
+            message_id="signal-1",
+            idempotency_key="signal-key-1",
+            protocol_envelope={"protocol": "custom", "value": 1},
+            metadata={"source": "fixture"},
+        )
+        delivery_ack = DeliveryAck(
+            peer_id="bob",
+            message_id=signal.message_id,
+            accepted=True,
+            status=AckStatus.ACCEPTED.value,
+            sequence=signal.sequence,
+            fingerprint=signal.fingerprint,
+            received_at=T0,
+        )
+
+        self.assertEqual(PeerDescriptor.from_dict(descriptor.to_dict()).to_dict(), descriptor.to_dict())
+        self.assertEqual(HandshakeRequest.from_dict(request.to_dict()).to_dict(), request.to_dict())
+        self.assertEqual(HandshakeAck.from_dict(ack.to_dict()).to_dict(), ack.to_dict())
+        self.assertEqual(SignalEnvelope.from_dict(signal.to_dict()).to_dict(), signal.to_dict())
+        self.assertEqual(DeliveryAck.from_dict(delivery_ack.to_dict()).to_dict(), delivery_ack.to_dict())
+
+    def test_session_restore_rejects_missing_extra_and_coercible_values(self):
+        descriptor = peer("alice")
+        request = HandshakeRequest(peer=descriptor, session_id="session-1", request_id="request-1", requested_at=T0)
+        ack = HandshakeAck(
+            request_id="request-1",
+            session_id="session-1",
+            responder_peer_id="bob",
+            protocol_version="1.0",
+            accepted=True,
+            capabilities=frozenset({"signal.observe"}),
+            responded_at=T0,
+            ack_id="ack-1",
+        )
+        signal = SignalEnvelope(
+            source_peer_id="alice",
+            session_id="session-1",
+            channel="signals",
+            sequence=1,
+            payload={"value": 7},
+            created_at=T0,
+            message_id="signal-1",
+        )
+        delivery_ack = DeliveryAck(
+            peer_id="bob",
+            message_id="signal-1",
+            accepted=True,
+            status=AckStatus.ACCEPTED.value,
+            sequence=1,
+            received_at=T0,
+        )
+
+        cases = [
+            (PeerDescriptor.from_dict, {**descriptor.to_dict(), "peer_id": 7}),
+            (PeerDescriptor.from_dict, {key: value for key, value in descriptor.to_dict().items() if key != "endpoint"}),
+            (HandshakeRequest.from_dict, {**request.to_dict(), "request_id": 7}),
+            (HandshakeRequest.from_dict, {**request.to_dict(), "extra": True}),
+            (HandshakeAck.from_dict, {**ack.to_dict(), "accepted": 1}),
+            (HandshakeAck.from_dict, {**ack.to_dict(), "capabilities": "signal.observe"}),
+            (SignalEnvelope.from_dict, {**signal.to_dict(), "sequence": True}),
+            (SignalEnvelope.from_dict, {**signal.to_dict(), "payload": []}),
+            (SignalEnvelope.from_dict, {**signal.to_dict(), "protocol_envelope": []}),
+            (DeliveryAck.from_dict, {**delivery_ack.to_dict(), "accepted": "true"}),
+            (DeliveryAck.from_dict, {**delivery_ack.to_dict(), "received_at": 7}),
+        ]
+        for parser, invalid in cases:
+            with self.subTest(parser=parser.__qualname__, invalid=invalid):
+                with self.assertRaises(ValueError):
+                    parser(invalid)
+
+    def test_direct_session_constructors_reject_coercible_types(self):
+        descriptor = peer("alice")
+        with self.assertRaises(ValueError):
+            PeerDescriptor(peer_id=7, protocol_version="1.0", endpoint=descriptor.endpoint)
+        with self.assertRaises(ValueError):
+            HandshakeAck(
+                request_id="request-1",
+                session_id="session-1",
+                responder_peer_id="bob",
+                protocol_version="1.0",
+                accepted=1,
+            )
+        with self.assertRaises(ValueError):
+            SignalEnvelope(
+                source_peer_id="alice",
+                session_id="session-1",
+                channel="signals",
+                sequence=True,
+                payload={},
+            )
+        with self.assertRaises(ValueError):
+            DeliveryAck(
+                peer_id="bob",
+                message_id="signal-1",
+                accepted=True,
+                status=AckStatus.ACCEPTED.value,
+                sequence=False,
+            )
 
 
 class HandshakeTests(unittest.TestCase):

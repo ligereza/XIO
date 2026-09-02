@@ -59,13 +59,39 @@ class AckStatus(str, Enum):
 
 
 def _endpoint_from_dict(data: Mapping[str, Any]) -> Endpoint:
+    if not isinstance(data, Mapping) or set(data) != {"scheme", "address", "medium", "scope", "port"}:
+        raise ValueError("endpoint fields do not match the contract")
+    for field_name in ("scheme", "address", "medium", "scope"):
+        _require_text(data[field_name], f"endpoint.{field_name}")
+    port = data["port"]
+    if port is not None and (
+        isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535
+    ):
+        raise ValueError("endpoint.port must be between 1 and 65535")
     return Endpoint(
-        scheme=str(data["scheme"]),
-        address=str(data["address"]),
-        medium=data.get("medium"),
-        scope=data.get("scope"),
-        port=data.get("port"),
+        scheme=data["scheme"],
+        address=data["address"],
+        medium=data["medium"],
+        scope=data["scope"],
+        port=port,
     )
+
+
+def _require_text(value: Any, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
+
+
+def _capabilities(value: Any, field_name: str) -> frozenset[str]:
+    if isinstance(value, (str, bytes, Mapping)):
+        raise ValueError(f"{field_name} must be a collection of strings")
+    try:
+        values = tuple(value)
+    except TypeError as exc:
+        raise ValueError(f"{field_name} must be a collection of strings") from exc
+    if any(not isinstance(item, str) or not item.strip() for item in values):
+        raise ValueError(f"{field_name} must contain non-empty strings")
+    return frozenset(values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,11 +102,11 @@ class PeerDescriptor:
     capabilities: frozenset[str] = frozenset()
 
     def __post_init__(self) -> None:
-        if not self.peer_id.strip():
-            raise ValueError("peer_id cannot be empty")
-        if not self.protocol_version.strip():
-            raise ValueError("protocol_version cannot be empty")
-        object.__setattr__(self, "capabilities", frozenset(self.capabilities))
+        _require_text(self.peer_id, "peer_id")
+        _require_text(self.protocol_version, "protocol_version")
+        if not isinstance(self.endpoint, Endpoint):
+            raise ValueError("endpoint must be an Endpoint")
+        object.__setattr__(self, "capabilities", _capabilities(self.capabilities, "capabilities"))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,10 +118,17 @@ class PeerDescriptor:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "PeerDescriptor":
+        required = {"peer_id", "protocol_version", "capabilities", "endpoint"}
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("peer descriptor fields do not match the contract")
+        _require_text(data["peer_id"], "peer_id")
+        _require_text(data["protocol_version"], "protocol_version")
+        if not isinstance(data["capabilities"], list):
+            raise ValueError("capabilities must be a list")
         return cls(
-            peer_id=str(data["peer_id"]),
-            protocol_version=str(data["protocol_version"]),
-            capabilities=frozenset(data.get("capabilities", ())),
+            peer_id=data["peer_id"],
+            protocol_version=data["protocol_version"],
+            capabilities=_capabilities(data["capabilities"], "capabilities"),
             endpoint=_endpoint_from_dict(data["endpoint"]),
         )
 
@@ -108,6 +141,10 @@ class HandshakeRequest:
     requested_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.peer, PeerDescriptor):
+            raise ValueError("peer must be a PeerDescriptor")
+        _require_text(self.session_id, "session_id")
+        _require_text(self.request_id, "request_id")
         object.__setattr__(self, "requested_at", require_utc(self.requested_at, "requested_at"))
 
     def to_dict(self) -> dict[str, Any]:
@@ -120,10 +157,19 @@ class HandshakeRequest:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "HandshakeRequest":
+        required = {"request_id", "session_id", "requested_at", "peer"}
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("handshake request fields do not match the contract")
+        _require_text(data["request_id"], "request_id")
+        _require_text(data["session_id"], "session_id")
+        if not isinstance(data["requested_at"], str):
+            raise ValueError("requested_at must be an ISO datetime")
+        if not isinstance(data["peer"], Mapping):
+            raise ValueError("peer must be a mapping")
         return cls(
-            request_id=str(data["request_id"]),
-            session_id=str(data["session_id"]),
-            requested_at=datetime.fromisoformat(str(data["requested_at"])),
+            request_id=data["request_id"],
+            session_id=data["session_id"],
+            requested_at=datetime.fromisoformat(data["requested_at"]),
             peer=PeerDescriptor.from_dict(data["peer"]),
         )
 
@@ -142,8 +188,21 @@ class HandshakeAck:
     ack_id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
+        for field_name in (
+            "request_id",
+            "session_id",
+            "responder_peer_id",
+            "protocol_version",
+            "status",
+            "ack_id",
+        ):
+            _require_text(getattr(self, field_name), field_name)
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        if self.reason is not None and not isinstance(self.reason, str):
+            raise ValueError("reason must be a string or null")
         object.__setattr__(self, "responded_at", require_utc(self.responded_at, "responded_at"))
-        object.__setattr__(self, "capabilities", frozenset(self.capabilities))
+        object.__setattr__(self, "capabilities", _capabilities(self.capabilities, "capabilities"))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -158,6 +217,52 @@ class HandshakeAck:
             "reason": self.reason,
             "responded_at": self.responded_at.isoformat(),
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "HandshakeAck":
+        required = {
+            "ack_id",
+            "request_id",
+            "session_id",
+            "responder_peer_id",
+            "protocol_version",
+            "accepted",
+            "capabilities",
+            "status",
+            "reason",
+            "responded_at",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("handshake ack fields do not match the contract")
+        for field_name in (
+            "ack_id",
+            "request_id",
+            "session_id",
+            "responder_peer_id",
+            "protocol_version",
+            "status",
+        ):
+            _require_text(data[field_name], field_name)
+        if not isinstance(data["accepted"], bool):
+            raise ValueError("accepted must be a boolean")
+        if not isinstance(data["capabilities"], list):
+            raise ValueError("capabilities must be a list")
+        if data["reason"] is not None and not isinstance(data["reason"], str):
+            raise ValueError("reason must be a string or null")
+        if not isinstance(data["responded_at"], str):
+            raise ValueError("responded_at must be an ISO datetime")
+        return cls(
+            ack_id=data["ack_id"],
+            request_id=data["request_id"],
+            session_id=data["session_id"],
+            responder_peer_id=data["responder_peer_id"],
+            protocol_version=data["protocol_version"],
+            accepted=data["accepted"],
+            capabilities=_capabilities(data["capabilities"], "capabilities"),
+            status=data["status"],
+            reason=data["reason"],
+            responded_at=datetime.fromisoformat(data["responded_at"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,13 +281,25 @@ class SignalEnvelope:
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        for field_name in ("source_peer_id", "session_id", "channel", "message_id"):
+            _require_text(getattr(self, field_name), field_name)
+        if not isinstance(self.sequence, int) or isinstance(self.sequence, bool) or self.sequence < 1:
+            raise ValueError("sequence must be a positive integer")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a mapping")
+        if self.idempotency_key is not None and not isinstance(self.idempotency_key, str):
+            raise ValueError("idempotency_key must be a string or null")
+        if (
+            self.protocol_envelope is not None
+            and not isinstance(self.protocol_envelope, Mapping)
+            and not hasattr(self.protocol_envelope, "to_dict")
+        ):
+            raise ValueError("protocol_envelope must be a mapping, serializable envelope or null")
+        if not isinstance(self.metadata, Mapping):
+            raise ValueError("metadata must be a mapping")
         object.__setattr__(self, "created_at", require_utc(self.created_at, "created_at"))
         object.__setattr__(self, "payload", dict(self.payload))
         object.__setattr__(self, "metadata", dict(self.metadata))
-        if not self.source_peer_id.strip() or not self.session_id.strip() or not self.channel.strip():
-            raise ValueError("source_peer_id, session_id and channel cannot be empty")
-        if self.sequence < 1:
-            raise ValueError("signal sequence must be positive")
 
     @property
     def fingerprint(self) -> str:
@@ -216,6 +333,56 @@ class SignalEnvelope:
             envelope=self.protocol_envelope,
         )
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "SignalEnvelope":
+        required = {
+            "message_id",
+            "source_peer_id",
+            "session_id",
+            "channel",
+            "sequence",
+            "payload",
+            "created_at",
+            "idempotency_key",
+            "protocol_envelope",
+            "metadata",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("signal envelope fields do not match the contract")
+        for field_name in ("message_id", "source_peer_id", "session_id", "channel"):
+            _require_text(data[field_name], field_name)
+        if (
+            not isinstance(data["sequence"], int)
+            or isinstance(data["sequence"], bool)
+            or data["sequence"] < 1
+        ):
+            raise ValueError("sequence must be a positive integer")
+        if not isinstance(data["payload"], Mapping):
+            raise ValueError("payload must be a mapping")
+        if not isinstance(data["created_at"], str):
+            raise ValueError("created_at must be an ISO datetime")
+        if data["idempotency_key"] is not None and not isinstance(data["idempotency_key"], str):
+            raise ValueError("idempotency_key must be a string or null")
+        if (
+            data["protocol_envelope"] is not None
+            and not isinstance(data["protocol_envelope"], Mapping)
+        ):
+            raise ValueError("protocol_envelope must be a mapping or null")
+        if not isinstance(data["metadata"], Mapping):
+            raise ValueError("metadata must be a mapping")
+        return cls(
+            message_id=data["message_id"],
+            source_peer_id=data["source_peer_id"],
+            session_id=data["session_id"],
+            channel=data["channel"],
+            sequence=data["sequence"],
+            payload=data["payload"],
+            created_at=datetime.fromisoformat(data["created_at"]),
+            idempotency_key=data["idempotency_key"],
+            protocol_envelope=data["protocol_envelope"],
+            metadata=data["metadata"],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class DeliveryAck:
@@ -229,7 +396,72 @@ class DeliveryAck:
     received_at: datetime = field(default_factory=utc_now)
 
     def __post_init__(self) -> None:
+        _require_text(self.peer_id, "peer_id")
+        _require_text(self.message_id, "message_id")
+        _require_text(self.status, "status")
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a boolean")
+        if self.sequence is not None and (
+            isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 1
+        ):
+            raise ValueError("sequence must be a positive integer or null")
+        for field_name in ("fingerprint", "error"):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, str):
+                raise ValueError(f"{field_name} must be a string or null")
         object.__setattr__(self, "received_at", require_utc(self.received_at, "received_at"))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "peer_id": self.peer_id,
+            "message_id": self.message_id,
+            "accepted": self.accepted,
+            "status": self.status,
+            "sequence": self.sequence,
+            "fingerprint": self.fingerprint,
+            "error": self.error,
+            "received_at": self.received_at.isoformat(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "DeliveryAck":
+        required = {
+            "peer_id",
+            "message_id",
+            "accepted",
+            "status",
+            "sequence",
+            "fingerprint",
+            "error",
+            "received_at",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("delivery ack fields do not match the contract")
+        _require_text(data["peer_id"], "peer_id")
+        _require_text(data["message_id"], "message_id")
+        _require_text(data["status"], "status")
+        if not isinstance(data["accepted"], bool):
+            raise ValueError("accepted must be a boolean")
+        sequence = data["sequence"]
+        if sequence is not None and (
+            isinstance(sequence, bool) or not isinstance(sequence, int) or sequence < 1
+        ):
+            raise ValueError("sequence must be a positive integer or null")
+        for field_name in ("fingerprint", "error"):
+            if data[field_name] is not None and not isinstance(data[field_name], str):
+                raise ValueError(f"{field_name} must be a string or null")
+        if not isinstance(data["received_at"], str):
+            raise ValueError("received_at must be an ISO datetime")
+        return cls(
+            peer_id=data["peer_id"],
+            message_id=data["message_id"],
+            accepted=data["accepted"],
+            status=data["status"],
+            sequence=sequence,
+            fingerprint=data["fingerprint"],
+            error=data["error"],
+            received_at=datetime.fromisoformat(data["received_at"]),
+        )
 
 
 @dataclass(frozen=True, slots=True)

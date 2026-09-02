@@ -196,6 +196,11 @@ caller registers peer + endpoint
 - `PeerDescriptor` contains `peer_id`, `protocol_version`, `capabilities` and
   the caller-provided endpoint;
 - `HandshakeRequest` and `HandshakeAck` carry `session_id` and explicit status;
+- session records have exact `to_dict()`/`from_dict()` contracts: missing or
+  extra fields, coercible scalar values and boolean sequence/acceptance values
+  are rejected before a session can be changed;
+- `SignalEnvelope.from_dict()` restores only JSON-shaped protocol envelopes;
+  restoring a signal never creates an action or delivers a message;
 - only authorized peers can connect; unknown peers are rejected;
 - major protocol version mismatch is rejected; minor versions may interoperate;
 - `SignalEnvelope` preserves `message_id`, `sequence`, source/session metadata

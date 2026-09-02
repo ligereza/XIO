@@ -93,6 +93,10 @@ instance and separate processes are serialized through a sidecar lock file.
 transport and handoff restoration.
 `core/file_lock.py` provides the same portable sidecar locking primitive to
 both persistent stores.
+`core/sessions` applies the same fail-closed rule to peer descriptors,
+handshake records, signal envelopes and delivery acknowledgements; session
+wire restoration rejects missing, extra or coercible fields before any state
+transition.
 
 ## Contrato de consumo LUCIDA/MULTI
 
