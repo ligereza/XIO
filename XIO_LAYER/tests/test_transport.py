@@ -69,6 +69,14 @@ class TransportTests(unittest.TestCase):
             DeliveryReceipt(message_id="receipt", accepted=True, latency_ms=float("nan"))
         with self.assertRaises(ValueError):
             DeliveryReceipt(message_id="receipt", accepted=True, latency_ms=-1)
+        with self.assertRaises(ValueError):
+            TransportPolicy(allow_network="false")
+        with self.assertRaises(ValueError):
+            TransportPolicy(allowed_schemes="tcp")
+        with self.assertRaises(ValueError):
+            TransportPolicy(allowed_peers=[7])
+        with self.assertRaises(ValueError):
+            TransportPolicy(allowed_scopes=[True])
 
     def test_message_wire_round_trip_is_strict_and_does_not_send(self):
         endpoint = Endpoint("memory", "queue")

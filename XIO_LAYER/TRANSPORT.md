@@ -29,6 +29,9 @@ host has not established a known state; it is not a guessed measurement.
 `DeliveryReceipt` also validates its direct result contract: boolean flags must
 be real booleans, sequence values must be positive integers when present, and
 latency must be finite and non-negative before status mapping.
+`TransportPolicy` rejects ambiguous boolean values and malformed allowlists at
+construction time; a string such as `"false"` cannot silently enable network
+delivery.
 
 `probe_connectivity` validates the returned status and endpoint, then returns
 the host report unchanged. It does not create fallback values, open sockets,

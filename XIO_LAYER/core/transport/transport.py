@@ -301,6 +301,18 @@ def _require_transport_text(value: Any, field_name: str) -> None:
         raise ValueError(f"{field_name} must be a non-empty string")
 
 
+def _require_string_collection(value: Any, field_name: str) -> tuple[str, ...]:
+    if isinstance(value, (str, bytes, Mapping)):
+        raise ValueError(f"{field_name} must be a collection of strings")
+    try:
+        values = tuple(value)
+    except TypeError as exc:
+        raise ValueError(f"{field_name} must be a collection of strings") from exc
+    if any(not isinstance(item, str) or not item.strip() for item in values):
+        raise ValueError(f"{field_name} must contain non-empty strings")
+    return values
+
+
 @dataclass(frozen=True, slots=True)
 class ConnectionStatus:
     endpoint: Endpoint
@@ -451,9 +463,16 @@ class TransportPolicy:
     allow_network: bool = True
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "allowed_schemes", frozenset(s.lower() for s in self.allowed_schemes))
-        object.__setattr__(self, "allowed_media", frozenset(NetworkMedium(m) for m in self.allowed_media))
-        object.__setattr__(self, "allowed_scopes", frozenset(NetworkScope(s) for s in self.allowed_scopes))
+        if not isinstance(self.allow_network, bool):
+            raise ValueError("allow_network must be a boolean")
+        schemes = _require_string_collection(self.allowed_schemes, "allowed_schemes")
+        peers = _require_string_collection(self.allowed_peers, "allowed_peers")
+        media = _require_string_collection(self.allowed_media, "allowed_media")
+        scopes = _require_string_collection(self.allowed_scopes, "allowed_scopes")
+        object.__setattr__(self, "allowed_schemes", frozenset(s.lower() for s in schemes))
+        object.__setattr__(self, "allowed_peers", frozenset(peers))
+        object.__setattr__(self, "allowed_media", frozenset(NetworkMedium(m) for m in media))
+        object.__setattr__(self, "allowed_scopes", frozenset(NetworkScope(s) for s in scopes))
 
     def validate(self, endpoint: Endpoint) -> None:
         if endpoint.scheme not in self.allowed_schemes:
