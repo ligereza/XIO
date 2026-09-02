@@ -32,6 +32,7 @@ class AuditLedger:
         details: Mapping[str, Any] | None = None,
         actor_id: str | None = None,
     ) -> AuditEntry:
+        _validate_audit_append_inputs(event_type, subject_id, outcome, details, actor_id)
         with self._lock:
             entry = self._build_entry_locked(event_type, subject_id, outcome, details, actor_id)
             self._entries.append(entry)
@@ -112,6 +113,7 @@ class JsonLineAuditLedger(AuditLedger):
         details: Mapping[str, Any] | None = None,
         actor_id: str | None = None,
     ) -> AuditEntry:
+        _validate_audit_append_inputs(event_type, subject_id, outcome, details, actor_id)
         with self._lock:
             with exclusive_file_lock(self._lock_path):
                 try:
@@ -150,6 +152,26 @@ class JsonLineAuditLedger(AuditLedger):
         if not self._verify_entries(entries):
             raise AuditLedgerPersistenceError("audit ledger hash chain verification failed")
         return entries
+
+
+def _validate_audit_append_inputs(
+    event_type: str,
+    subject_id: str,
+    outcome: str,
+    details: Mapping[str, Any] | None,
+    actor_id: str | None,
+) -> None:
+    for value, field_name in (
+        (event_type, "event_type"),
+        (subject_id, "subject_id"),
+        (outcome, "outcome"),
+    ):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{field_name} must be a non-empty string")
+    if actor_id is not None and not isinstance(actor_id, str):
+        raise ValueError("actor_id must be a string or null")
+    if details is not None and not isinstance(details, Mapping):
+        raise TypeError("details must be a mapping or null")
 
 
 __all__ = [

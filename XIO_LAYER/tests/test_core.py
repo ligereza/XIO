@@ -226,6 +226,8 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
             ledger.append("", "subject-1", "recorded")
         with self.assertRaises(ValueError):
             ledger.append("probe", "subject-1", "recorded", actor_id=[])
+        with self.assertRaises(TypeError):
+            ledger.append("probe", "subject-1", "recorded", details=[("safe", True)])
         self.assertEqual(ledger.entries(), ())
 
         entry = AuditLedger().append("probe", "subject-1", "recorded", {"safe": True}, "actor-1")

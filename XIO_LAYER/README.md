@@ -96,6 +96,8 @@ rejects malformed or tampered entries on reload. `AuditEntry.from_dict()` also
 requires exact serialized fields and scalar types before hash verification.
 Direct `AuditEntry` construction applies the same identity, actor, outcome and
 hash invariants, so in-memory and restored audit records cannot diverge.
+Both audit ledgers also require `details` to be a mapping and validate the
+record identity fields before acquiring their locks or mutating state.
 Delivery is a distinct caller action through `deliver_adapter_handoff`; its
 receipt is audited, it requires a current `PermissionRegistry` grant, and a
 blocked, revoked or idempotency-conflicting delivery is not retried or

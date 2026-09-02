@@ -114,6 +114,16 @@ class JsonLineAuditLedgerTests(unittest.TestCase):
             self.assertEqual(ledger.entries(), ())
             self.assertFalse(path.exists())
 
+    def test_non_mapping_details_do_not_change_persisted_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audit.jsonl"
+            ledger = JsonLineAuditLedger(path)
+            with self.assertRaises(TypeError):
+                ledger.append("handoff", "handoff-1", "prepared", [("safe", True)])
+
+            self.assertEqual(ledger.entries(), ())
+            self.assertFalse(path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
