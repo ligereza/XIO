@@ -27,6 +27,8 @@ completed:
     evidence: A temporary version-2 overwrite previously replaced total 3 with total 99; it now raises SnapshotConflictError and preserves the accepted snapshot. Documentation is synchronized.
   - item: Core JSON boundaries reject coercive object keys and audit invalid handler output.
     evidence: Event, ActionResult and TransportMessage reject integer mapping keys; ActionGate turns an invalid handler mapping into a failed, hash-verifiable audit entry. Documentation is synchronized.
+  - item: Source selection preserves explicit identity semantics.
+    evidence: select_candidate now rejects an explicitly empty selection_id, generates only when selection_id is None, and imports uuid4 for that valid path. Focused and full-suite tests pass.
 
 current_state:
   files_or_resources:
@@ -35,7 +37,7 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/critique.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 163 tests; transport-focused suite passes 11 tests; event-log, snapshot and JSON-key regressions pass; compileall, technical ASCII and diff checks pass.
+  tests_and_checks: XIO_LAYER suite passes 164 tests; transport-focused suite passes 11 tests; event-log, snapshot, JSON-key and selection-identity regressions pass; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.

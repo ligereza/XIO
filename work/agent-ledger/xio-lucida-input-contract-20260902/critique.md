@@ -157,3 +157,49 @@ next_checkpoint: Verify strict key rejection across core, transport and ActionGa
 previous_action: audit permission and audit transition invariants
 decision_delta: broadened the fix from permission-only behavior to the shared JSON contract after direct reproduction
 verification_signal: Non-string mapping keys must be rejected before serialization, and invalid handler output must be audited as failed.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Explicit selection identity must be preserved or rejected; omitted identity may be generated, but an invalid supplied value must not be silently replaced.
+current_state: JSON coercion is fixed and published. SourceAdapterRegistry.select_candidate uses selection_id or uuid4(), so an explicitly empty selection_id is silently replaced.
+verified_evidence: A source registry selection call with selection_id="" returns a valid selection with a newly generated id instead of raising.
+assumptions: Empty selection_id is invalid under AdapterSelection and should have the same fail-closed behavior at the factory boundary.
+strongest_failure_mode: A caller loses correlation with the selection it requested and cannot reliably reconcile audit or retry records.
+highest_consequence_error: A retry or handoff keyed by the caller's empty identifier can be treated as a different selection, weakening idempotency and audit traceability.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Reject explicit empty IDs while retaining generated IDs for omitted values.
+    reversibility: high
+    evidence_needed: Focused selection factory regression and full suite.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: medium
+    context_cost: low
+    expected_benefit: Preserve compatibility at the cost of silent identity drift.
+    reversibility: high
+    evidence_needed: An explicit contract allowing empty IDs, which is absent.
+
+search_gap:
+  uncertainty: Whether any caller intentionally passes an empty selection_id to request generation.
+  consequence: Low to medium; callers should use None for omission, while strict rejection exposes misuse early.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: AdapterSelection already rejects empty IDs and the factory should not bypass that invariant.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Validate selection_id only when supplied, add regression, then publish if the full suite remains green.
+previous_action: audit explicit selection identity boundary
+decision_delta: change from observed silent generation to fail-closed factory input handling
+verification_signal: selection_id="" must raise InvalidSourceAdapterError while selection_id=None still generates an ID.
+verification_note: The first focused run exposed a pre-existing NameError on the valid None path because uuid4 was not imported; the import is part of this bounded correction.

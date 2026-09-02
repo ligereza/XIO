@@ -307,6 +307,25 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         with self.assertRaises(InvalidSourceAdapterError):
             AdapterSelection(**selection_args, required_capabilities={"source.observe": True})
 
+    def test_selection_id_is_generated_only_when_omitted(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("adobe"))
+
+        with self.assertRaises(InvalidSourceAdapterError):
+            registry.select_candidate(
+                source_app="adobe",
+                event_type="timeline.cue",
+                caller_id="operator-1",
+                selection_id="",
+            )
+
+        generated = registry.select_candidate(
+            source_app="adobe",
+            event_type="timeline.cue",
+            caller_id="operator-1",
+        )
+        self.assertTrue(generated.selection_id)
+
     def test_registered_declaration_is_immutable_after_adapter_metadata_changes(self):
         registry = SourceAdapterRegistry()
         adapter = TestSourceAdapter()

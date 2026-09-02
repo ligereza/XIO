@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping, Protocol
+from uuid import uuid4
 
 from ..core.contracts import content_hash, require_utc, utc_now
 from ..core.events import ApplicationEvent
@@ -250,8 +251,10 @@ class SourceAdapterRegistry:
             raise CandidateNotAvailableError(
                 f"source adapter is not a current candidate: {source_app}"
             )
+        if selection_id is not None:
+            _validate_identifier(selection_id, "selection_id")
         return AdapterSelection(
-            selection_id=selection_id or str(uuid4()),
+            selection_id=selection_id if selection_id is not None else str(uuid4()),
             source_app=source_app,
             event_type=event_type,
             required_capabilities=tuple(sorted(required)),
