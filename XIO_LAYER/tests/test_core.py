@@ -10,7 +10,7 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Event, ExplicitAction, Proposal, Snapshot, TimestampError
+from XIO_LAYER.core.contracts import Checkpoint, Event, ExplicitAction, Proposal, Snapshot, TimestampError
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
 from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
@@ -210,6 +210,41 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_checkpoint_restore_requires_exact_typed_and_hashed_contract(self):
+        checkpoint = Checkpoint(
+            stream_id="demo",
+            sequence=2,
+            state={"total": 3},
+            captured_at=T0,
+            source_event_id="event-2",
+            checkpoint_id="checkpoint-2",
+        )
+        wire = checkpoint.to_dict()
+        invalid_payloads = []
+
+        missing_hash = dict(wire)
+        missing_hash.pop("state_hash")
+        invalid_payloads.append(missing_hash)
+
+        extra_field = dict(wire)
+        extra_field["extra"] = True
+        invalid_payloads.append(extra_field)
+
+        wrong_sequence_type = dict(wire)
+        wrong_sequence_type["sequence"] = True
+        invalid_payloads.append(wrong_sequence_type)
+
+        wrong_hash = dict(wire)
+        wrong_hash["state_hash"] = "not-the-state-hash"
+        invalid_payloads.append(wrong_hash)
+
+        for invalid in invalid_payloads:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    Checkpoint.from_dict(invalid)
+
+        self.assertEqual(Checkpoint.from_dict(wire).to_dict(), wire)
+
     def test_semantically_inconsistent_checkpoint_falls_back_to_full_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             event_path = Path(directory) / "events.jsonl"

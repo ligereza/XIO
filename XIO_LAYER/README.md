@@ -58,6 +58,8 @@ an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a
 checkpoint against the event-log prefix before using it; an inconsistent
 checkpoint is reported and replaced by a full state-only replay.
+Checkpoint restoration requires the exact serialized fields, scalar types and
+state hash emitted by `Checkpoint.to_dict()`.
 `JsonLineAuditLedger` persists the handoff audit chain across restarts and
 rejects malformed or tampered entries on reload.
 Delivery is a distinct caller action through `deliver_adapter_handoff`; its

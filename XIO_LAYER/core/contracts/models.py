@@ -362,15 +362,39 @@ class Checkpoint:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "Checkpoint":
+        required = {
+            "stream_id",
+            "sequence",
+            "state",
+            "source_event_id",
+            "captured_at",
+            "checkpoint_id",
+            "state_hash",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ValueError("checkpoint fields do not match the contract")
+        if not isinstance(data["stream_id"], str):
+            raise ValueError("checkpoint stream_id must be a string")
+        if not isinstance(data["sequence"], int) or isinstance(data["sequence"], bool):
+            raise ValueError("checkpoint sequence must be an integer")
+        if not isinstance(data["state"], Mapping):
+            raise ValueError("checkpoint state must be a mapping")
+        if data["source_event_id"] is not None and not isinstance(data["source_event_id"], str):
+            raise ValueError("checkpoint source_event_id must be a string or null")
+        if not isinstance(data["captured_at"], str):
+            raise ValueError("checkpoint captured_at must be a string")
+        if not isinstance(data["checkpoint_id"], str):
+            raise ValueError("checkpoint checkpoint_id must be a string")
+        if not isinstance(data["state_hash"], str):
+            raise ValueError("checkpoint state_hash must be a string")
         checkpoint = cls(
-            stream_id=str(data["stream_id"]),
-            sequence=int(data["sequence"]),
+            stream_id=data["stream_id"],
+            sequence=data["sequence"],
             state=data["state"],
             source_event_id=data.get("source_event_id"),
-            captured_at=datetime.fromisoformat(str(data["captured_at"])),
-            checkpoint_id=str(data["checkpoint_id"]),
+            captured_at=datetime.fromisoformat(data["captured_at"]),
+            checkpoint_id=data["checkpoint_id"],
         )
-        expected = str(data.get("state_hash", ""))
-        if expected and expected != checkpoint.state_hash:
+        if data["state_hash"] != checkpoint.state_hash:
             raise ValueError("checkpoint state hash mismatch")
         return checkpoint
