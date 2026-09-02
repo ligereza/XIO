@@ -65,7 +65,19 @@ class LocalEventSourceTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             audit = JsonLineAuditLedger(Path(directory) / "handoff-audit.jsonl")
-            handoffs = LocalAdapterEventSource(FIXTURE_PATH).prepare_handoffs(
+            source = LocalAdapterEventSource(FIXTURE_PATH)
+            handoffs = source.prepare_handoffs(
+                registry,
+                selection,
+                source="xio-layer",
+                destination=DESTINATION,
+                audit=audit,
+                privacy_policy=PrivacyPolicy(
+                    allowed_payload_keys=frozenset({"cue"}),
+                    allowed_provenance_keys=frozenset({"origin"}),
+                ),
+            )
+            replayed_handoffs = source.prepare_handoffs(
                 registry,
                 selection,
                 source="xio-layer",
@@ -77,6 +89,9 @@ class LocalEventSourceTests(unittest.TestCase):
                 ),
             )
             events = tuple(transport_to_application_event(item.message) for item in handoffs)
+            replayed_events = tuple(
+                transport_to_application_event(item.message) for item in replayed_handoffs
+            )
             log = ApplicationEventLog(Path(directory) / "lucida-events.jsonl")
             for event in events:
                 self.assertTrue(log.append(event))
@@ -90,11 +105,19 @@ class LocalEventSourceTests(unittest.TestCase):
 
         self.assertEqual(len(handoffs), 2)
         self.assertEqual([event.sequence for event in events], [1, 2])
+        self.assertEqual(
+            [item.handoff_id for item in handoffs],
+            [item.handoff_id for item in replayed_handoffs],
+        )
+        self.assertEqual(
+            [event.fingerprint for event in events],
+            [event.fingerprint for event in replayed_events],
+        )
         self.assertEqual([event.payload for event in events], [{"cue": "intro"}, {"cue": "outro"}])
         self.assertNotIn("private_note", json.dumps([event.to_dict() for event in events], sort_keys=True))
-        self.assertEqual(len(adapter.calls), 2)
+        self.assertEqual(len(adapter.calls), 4)
         self.assertEqual(replay.state, {"count": 2, "last_cue": "outro"})
-        self.assertEqual(len(persisted_audit.entries()), 2)
+        self.assertEqual(len(persisted_audit.entries()), 4)
         self.assertTrue(persisted_audit.verify())
 
     def test_source_refuses_records_outside_the_caller_selected_route(self):

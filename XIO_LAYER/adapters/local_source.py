@@ -171,6 +171,7 @@ class LocalAdapterEventSource:
                     destination=destination,
                     audit=audit,
                     privacy_policy=privacy,
+                    handoff_id=_replay_handoff_id(selection, local_record.event_id),
                 )
             )
         return tuple(prepared)
@@ -188,6 +189,10 @@ def _validate_identifier(value: Any, field_name: str) -> None:
         raise LocalEventSourceError(f"{field_name} must be a non-empty ASCII identifier")
     if not value[0].isalnum() or any(not (char.isalnum() or char in "._-") for char in value):
         raise LocalEventSourceError(f"{field_name} contains unsupported characters")
+
+
+def _replay_handoff_id(selection: AdapterSelection, event_id: str) -> str:
+    return f"handoff-{content_hash({'selection_id': selection.selection_id, 'event_id': event_id})[:24]}"
 
 
 __all__ = [

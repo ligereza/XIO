@@ -56,6 +56,8 @@ Delivery is a distinct caller action through `deliver_adapter_handoff`; its
 receipt is audited, it requires a current `PermissionRegistry` grant, and a
 blocked, revoked or idempotency-conflicting delivery is not retried or
 rerouted; idempotency conflict remains distinguishable as a terminal result.
+Local replay derives stable handoff ids from the selected route and event id,
+keeping repeated projections fingerprint-identical.
 
 ## Contrato de consumo LUCIDA/MULTI
 

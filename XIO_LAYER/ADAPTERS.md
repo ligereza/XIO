@@ -121,3 +121,6 @@ source or event type. It prepares one handoff per record and never delivers or
 executes them. The fixture
 `tests/fixtures/lucida_handoff_records.jsonl` covers source replay, redaction,
 the LUCIDA/MULTI envelope, audit and application-event replay together.
+Replay-derived handoff ids are deterministic for a given selection and event,
+so repeating the same source cannot alter provenance or manufacture an
+idempotency conflict.
