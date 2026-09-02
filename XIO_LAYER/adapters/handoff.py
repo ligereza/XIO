@@ -39,8 +39,8 @@ class PrivacyPolicy:
     expose_peer_id: bool = False
 
     def __post_init__(self) -> None:
-        payload_keys = frozenset(self.allowed_payload_keys)
-        provenance_keys = frozenset(self.allowed_provenance_keys)
+        payload_keys = _read_policy_keys(self.allowed_payload_keys, "allowed_payload_keys")
+        provenance_keys = _read_policy_keys(self.allowed_provenance_keys, "allowed_provenance_keys")
         for key in payload_keys:
             _validate_key(key, "allowed_payload_key")
         for key in provenance_keys:
@@ -533,6 +533,18 @@ def _validate_key(value: Any, field_name: str) -> None:
         raise PrivacyPolicyError(f"{field_name} must be a non-empty ASCII key")
     if not value[0].isalnum() or any(not (char.isalnum() or char in "._-") for char in value):
         raise PrivacyPolicyError(f"{field_name} contains unsupported characters")
+
+
+def _read_policy_keys(value: Any, field_name: str) -> frozenset[str]:
+    if isinstance(value, (str, bytes, Mapping)) or value is None:
+        raise PrivacyPolicyError(f"{field_name} must be a collection of keys")
+    try:
+        values = frozenset(value)
+    except TypeError as exc:
+        raise PrivacyPolicyError(f"{field_name} must be a collection of keys") from exc
+    if any(not isinstance(item, str) for item in values):
+        raise PrivacyPolicyError(f"{field_name} must contain strings")
+    return values
 
 
 def handoff_id_is_valid(value: Any) -> bool:

@@ -264,6 +264,14 @@ class AdapterHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(AdapterHandoffError, "do not match"):
             replace(handoff, event=mismatched_event)
 
+    def test_privacy_policy_rejects_ambiguous_key_collections(self):
+        with self.assertRaisesRegex(PrivacyPolicyError, "allowed_payload_keys"):
+            PrivacyPolicy(allowed_payload_keys="safe")
+        with self.assertRaisesRegex(PrivacyPolicyError, "allowed_provenance_keys"):
+            PrivacyPolicy(allowed_provenance_keys={"origin": True})
+        with self.assertRaisesRegex(PrivacyPolicyError, "allowed_payload_keys"):
+            PrivacyPolicy(allowed_payload_keys=["safe", 7])
+
     def test_delivery_result_constructor_rejects_incoherent_receipts(self):
         with self.assertRaisesRegex(TypeError, "DeliveryReceipt"):
             AdapterHandoffDelivery("handoff-1", "accepted", object(), T0)
