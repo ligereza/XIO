@@ -24,18 +24,24 @@ class PermissionRegistry:
         return self._revision
 
     def grant(self, actor_id: str, permission: str) -> int:
+        _require_permission_text(actor_id, "actor_id")
+        _require_permission_text(permission, "permission")
         with self._lock:
             self._grants.add((actor_id, permission))
             self._revision += 1
             return self._revision
 
     def revoke(self, actor_id: str, permission: str) -> int:
+        _require_permission_text(actor_id, "actor_id")
+        _require_permission_text(permission, "permission")
         with self._lock:
             self._grants.discard((actor_id, permission))
             self._revision += 1
             return self._revision
 
     def allows(self, actor_id: str, permission: str) -> bool:
+        _require_permission_text(actor_id, "actor_id")
+        _require_permission_text(permission, "permission")
         with self._lock:
             return (actor_id, permission) in self._grants
 
@@ -47,6 +53,10 @@ class PermissionRegistry:
     ) -> tuple[bool, Any]:
         """Run one already explicit operation while holding the permission lock."""
 
+        _require_permission_text(actor_id, "actor_id")
+        _require_permission_text(permission, "permission")
+        if not callable(handler):
+            raise TypeError("handler must be callable")
         with self._lock:
             if (actor_id, permission) not in self._grants:
                 return False, None
@@ -68,6 +78,7 @@ class ActionGate:
     ) -> ActionResult:
         if not isinstance(action, ExplicitAction):
             raise TypeError("ActionGate accepts ExplicitAction, never Proposal or Event")
+        _require_permission_text(required_permission, "required_permission")
 
         started = utc_now()
         if not action.explicitly_confirmed:
@@ -153,3 +164,8 @@ class ActionGate:
             action.actor_id,
         )
         return result
+
+
+def _require_permission_text(value: Any, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")

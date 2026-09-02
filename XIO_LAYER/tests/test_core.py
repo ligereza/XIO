@@ -219,6 +219,39 @@ class EventAndReplayTests(unittest.TestCase):
 
 
 class PermissionAuditAndTransportTests(unittest.TestCase):
+    def test_permission_api_rejects_invalid_inputs_before_registry_mutation(self):
+        permissions = PermissionRegistry()
+
+        with self.assertRaises(ValueError):
+            permissions.grant([], "device.write")
+        with self.assertRaises(ValueError):
+            permissions.revoke("user-1", "")
+        with self.assertRaises(ValueError):
+            permissions.allows("user-1", [])
+        with self.assertRaises(TypeError):
+            permissions.run_if_allowed("user-1", "device.write", object())
+
+        self.assertEqual(permissions.revision, 0)
+        self.assertFalse(permissions.allows("user-1", "device.write"))
+
+    def test_action_gate_rejects_invalid_permission_before_execution(self):
+        permissions = PermissionRegistry()
+        audit = AuditLedger()
+        gate = ActionGate(permissions, audit)
+        action = ExplicitAction(
+            proposal_id="proposal-invalid-permission",
+            action_type="device.write",
+            parameters={},
+            actor_id="user-1",
+            requested_at=T0,
+            explicitly_confirmed=True,
+        )
+
+        with self.assertRaises(ValueError):
+            gate.execute(action, [], lambda _: {"unexpected": True})
+
+        self.assertEqual(audit.entries(), ())
+
     def test_truthy_non_boolean_confirmation_is_rejected(self):
         with self.assertRaises(ValueError):
             ExplicitAction(

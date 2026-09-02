@@ -77,6 +77,9 @@ truthy strings cannot bypass the explicit-action gate.
 `ActionGate` serializes the current permission check with the handler call:
 revocation waits for an already-authorized operation to finish, while later
 operations observe the revoked grant and are denied.
+Permission registry operations validate actor, permission and callable inputs
+before lock acquisition; invalid permission data cannot mutate the registry or
+create an audit result.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a
