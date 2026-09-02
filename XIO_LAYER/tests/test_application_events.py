@@ -90,6 +90,18 @@ class ApplicationEventContractTests(unittest.TestCase):
         with self.assertRaises(ApplicationEventContractError):
             ApplicationEvent(**{**arguments, "payload": {}, "provenance": {"unsafe": object()}})
 
+    def test_restore_rejects_malformed_reversible_values_with_contract_error(self):
+        event = make_event("event-malformed-values", 1, 10)
+        invalid_bytes = event.to_dict()
+        invalid_bytes["payload"] = {"blob": {"__xio_type__": "bytes", "base64": "%%%"}}
+        invalid_datetime = event.to_dict()
+        invalid_datetime["payload"] = {"when": {"__xio_type__": "datetime", "value": "not-a-date"}}
+
+        for invalid in (invalid_bytes, invalid_datetime):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ApplicationEventContractError):
+                    ApplicationEvent.from_dict(invalid)
+
     def test_restore_requires_exact_typed_application_event_contract(self):
         event = make_event("event-restore", 1, 10)
         wire = event.to_dict()

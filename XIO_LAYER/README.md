@@ -65,6 +65,8 @@ before replay or LUCIDA/MULTI restoration.
 `ApplicationEvent` also rejects non-finite numbers and unsupported provenance
 values at construction, so a built event is already safe to fingerprint and
 serialize.
+Its reversible bytes/datetime decoder reports malformed persisted values as
+`ApplicationEventContractError` instead of leaking parser-specific exceptions.
 `ConnectionStatus.from_dict()` applies the same fail-closed rule to measured
 connectivity state, including endpoint fields, counters, latency and sequence.
 The direct constructors enforce the same invariants, so restored and

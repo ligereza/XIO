@@ -50,9 +50,19 @@ def decode_value(value: Any) -> Any:
     if isinstance(value, dict):
         marker = value.get("__xio_type__")
         if marker == "bytes":
-            return base64.b64decode(value["base64"], validate=True)
+            if set(value) != {"__xio_type__", "base64"} or not isinstance(value["base64"], str):
+                raise ApplicationEventContractError("encoded bytes value is malformed")
+            try:
+                return base64.b64decode(value["base64"], validate=True)
+            except (ValueError, TypeError) as exc:
+                raise ApplicationEventContractError("encoded bytes value is malformed") from exc
         if marker == "datetime":
-            return datetime.fromisoformat(value["value"])
+            if set(value) != {"__xio_type__", "value"} or not isinstance(value["value"], str):
+                raise ApplicationEventContractError("encoded datetime value is malformed")
+            try:
+                return require_utc(datetime.fromisoformat(value["value"]), "encoded datetime")
+            except (TypeError, ValueError) as exc:
+                raise ApplicationEventContractError("encoded datetime value is malformed") from exc
         return {key: decode_value(item) for key, item in value.items()}
     return value
 
