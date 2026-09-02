@@ -360,6 +360,20 @@ class SourceAdapterRegistryTests(unittest.TestCase):
         )
         self.assertTrue(generated.selection_id)
 
+    def test_selection_restore_rejects_non_string_timestamp(self):
+        registry = SourceAdapterRegistry()
+        registry.register(TestSourceAdapter("adobe"))
+        selection = registry.select_candidate(
+            source_app="adobe",
+            event_type="timeline.cue",
+            caller_id="operator-1",
+            selection_id="selection-timestamp",
+            selected_at=T0,
+        )
+        invalid = {**selection.to_dict(), "selected_at": T0}
+        with self.assertRaises(InvalidSourceAdapterError):
+            AdapterSelection.from_dict(invalid)
+
     def test_registered_declaration_is_immutable_after_adapter_metadata_changes(self):
         registry = SourceAdapterRegistry()
         adapter = TestSourceAdapter()

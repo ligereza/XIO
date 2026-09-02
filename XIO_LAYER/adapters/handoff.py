@@ -193,7 +193,9 @@ class AdapterHandoff:
             selection = AdapterSelection.from_dict(selection_data)
             event = ApplicationEvent.from_dict(data["event"])
             message = _transport_from_dict(data["message"])
-            prepared_at = datetime.fromisoformat(str(data["prepared_at"]))
+            if not isinstance(data["prepared_at"], str):
+                raise AdapterHandoffError("prepared_at must be an ISO datetime string")
+            prepared_at = datetime.fromisoformat(data["prepared_at"])
             privacy = _privacy_from_dict(data["privacy_policy"])
         except (TypeError, ValueError, KeyError) as exc:
             raise AdapterHandoffError("adapter handoff could not be restored") from exc

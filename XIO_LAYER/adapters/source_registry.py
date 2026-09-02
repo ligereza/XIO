@@ -117,9 +117,11 @@ class AdapterSelection:
         capabilities = data["required_capabilities"]
         if isinstance(capabilities, str) or not isinstance(capabilities, (list, tuple)):
             raise InvalidSourceAdapterError("required_capabilities must be a list")
+        if not isinstance(data["selected_at"], str):
+            raise InvalidSourceAdapterError("selected_at must be an ISO datetime string")
         try:
-            selected_at = datetime.fromisoformat(str(data["selected_at"]))
-        except (TypeError, ValueError) as exc:
+            selected_at = datetime.fromisoformat(data["selected_at"])
+        except ValueError as exc:
             raise InvalidSourceAdapterError("selected_at must be an ISO datetime") from exc
         return cls(
             selection_id=data["selection_id"],

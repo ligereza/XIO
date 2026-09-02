@@ -259,3 +259,58 @@ decision_delta: change from accepting routed output to fail-closed validation of
 verification_signal: The broken adapter must raise SourceAdapterRegistryError and the caller record must remain unchanged.
 verification_note: The first full-suite run exposed nine local-source integration errors because JSON ISO timestamp strings were compared directly with adapter datetime values; temporal comparison now normalizes the representation without relaxing identity checks.
 verification_note_2: The focused rerun exposed one existing test adapter that replaced fixture timestamps with T0; the fixture now preserves provided timestamp instants and retains T0 only when the field is absent.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: Wire restoration must accept only serialized ISO timestamp strings and reject direct non-string values before constructing contracts.
+current_state: Adapter output preservation is published. Three restoration paths still call datetime.fromisoformat(str(value)) and can coerce arbitrary direct inputs.
+verified_evidence: TransportMessage.from_dict, AdapterSelection.from_dict and AdapterHandoff.from_dict each stringify the supplied timestamp before parsing; a direct datetime or custom stringifiable object can therefore bypass the wire type rule.
+assumptions: from_dict is a wire boundary and its timestamp fields are strings, consistent with every serializer and the stricter local/application event parsers.
+strongest_failure_mode: Non-wire objects are accepted into replay or handoff restoration, creating divergent validation behavior between direct and persisted inputs.
+highest_consequence_error: A caller can inject a value that is not representable by the declared wire schema and still obtain a trusted restored message or selection.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: low
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Add explicit string checks to all three restoration boundaries and regression coverage.
+    reversibility: high
+    evidence_needed: Focused restore tests and full XIO_LAYER suite.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; serializers and sibling parsers already define the local rule.
+    reversibility: high
+    evidence_needed: External guidance would not change the declared wire type.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: medium
+    context_cost: low
+    expected_benefit: Preserve an inconsistent restoration boundary.
+    reversibility: high
+    evidence_needed: Acceptance would need to allow direct-object coercion.
+
+search_gap:
+  uncertainty: Whether any caller passes datetime objects directly to from_dict instead of serialized mappings.
+  consequence: Low; such callers violate the wire contract and should fail clearly.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: Local parser conventions already reject non-string timestamp fields.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Add explicit timestamp type checks and verify direct-object rejection without changing ISO string behavior.
+previous_action: audit timestamp restoration boundaries
+decision_delta: change from coercive restoration to strict wire typing
+verification_signal: Non-string sent_at, selected_at and prepared_at values must raise before reconstruction.
+verification_note_2: Focused restoration regressions and the complete XIO_LAYER suite pass; ISO strings remain accepted and direct datetime values are rejected.

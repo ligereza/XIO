@@ -141,6 +141,8 @@ of allowlist keys is required, preventing accidental character-wise or
 ambiguous privacy projections.
 `TransportMessage.from_dict()` is the shared strict wire parser used by both
 transport and handoff restoration.
+Its timestamp fields are accepted only as ISO strings; direct datetime or
+stringifiable objects are rejected at the wire boundary.
 `core/file_lock.py` provides the same portable sidecar locking primitive to
 both persistent stores.
 `core/sessions` applies the same fail-closed rule to peer descriptors,

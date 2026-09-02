@@ -165,7 +165,8 @@ sidecar lock, including the read-before-dedupe step. No replay path creates or
 dispatches an action.
 
 `TransportMessage.from_dict()` is the shared strict wire restoration contract.
-It validates the exact message and endpoint fields, timestamps, sequence and
+It validates the exact message and endpoint fields, requires timestamp fields
+to be ISO strings, and validates sequence and
 scalar types without sending anything. Handoff restoration delegates to this
 method, so LUCIDA/MULTI and local handoff replay cannot drift into separate
 wire parsers.

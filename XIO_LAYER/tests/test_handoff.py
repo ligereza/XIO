@@ -208,6 +208,10 @@ class AdapterHandoffTests(unittest.TestCase):
         invalid_sequence["message"] = {**invalid_sequence["message"], "sequence": True}
         with self.assertRaises(AdapterHandoffError):
             AdapterHandoff.from_dict(invalid_sequence, caller_id="operator-1")
+        invalid_timestamp = handoff.to_dict()
+        invalid_timestamp["prepared_at"] = T0
+        with self.assertRaises(AdapterHandoffError):
+            AdapterHandoff.from_dict(invalid_timestamp, caller_id="operator-1")
 
         permissions = PermissionRegistry()
         permissions.grant("operator-1", "handoff.deliver")

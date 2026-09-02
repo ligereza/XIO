@@ -124,6 +124,9 @@ class TransportTests(unittest.TestCase):
         invalid = {**original.to_dict(), "message_id": 7}
         with self.assertRaises(ValueError):
             TransportMessage.from_dict(invalid)
+        invalid_timestamp = {**original.to_dict(), "sent_at": T0}
+        with self.assertRaises(ValueError):
+            TransportMessage.from_dict(invalid_timestamp)
 
     def test_order_and_timestamps_are_reported(self):
         endpoint = Endpoint(

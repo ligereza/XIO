@@ -232,9 +232,11 @@ class TransportMessage:
             or not 1 <= destination["port"] <= 65535
         ):
             raise ValueError("transport destination port is invalid")
+        if not isinstance(value["sent_at"], str):
+            raise ValueError("transport sent_at must be an ISO datetime string")
         try:
-            sent_at = datetime.fromisoformat(str(value["sent_at"]))
-        except (TypeError, ValueError) as exc:
+            sent_at = datetime.fromisoformat(value["sent_at"])
+        except ValueError as exc:
             raise ValueError("transport sent_at must be an ISO datetime") from exc
         return cls(
             message_id=value["message_id"],
