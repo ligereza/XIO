@@ -19,6 +19,8 @@ completed:
     evidence: The archive operation preserves commit a5a94ba without retaining the LIMEN branch name.
   - item: Local event input restoration rejects coercive field types.
     evidence: Commit 0efe36c is published on codex/xio-lucida-input-contract; LocalEventRecord rejects non-string identifiers and timestamps before constructing a record, with a focused regression.
+  - item: Transport messages reject non-JSON payloads and envelopes.
+    evidence: Transport-focused tests pass (11 tests); the complete XIO_LAYER suite passes 159 tests, and the JSONL writer rejects non-JSON numeric values.
 
 current_state:
   files_or_resources:
@@ -26,7 +28,7 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/loop-state.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: XIO_LAYER suite passes 159 tests; focused local-source suite passes 5 tests; compileall, technical ASCII and diff checks pass; commit 0efe36c is published and local/remote HEADs match.
+  tests_and_checks: XIO_LAYER suite passes 159 tests; transport-focused suite passes 11 tests; compileall, technical ASCII and diff checks pass.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
     - Further work remains bounded to signal, transport and input-contract reliability.

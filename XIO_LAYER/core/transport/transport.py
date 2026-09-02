@@ -7,6 +7,7 @@ socket or discovers peers on its own.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -145,7 +146,12 @@ class TransportMessage:
         if self.idempotency_key is not None and not isinstance(self.idempotency_key, str):
             raise ValueError("idempotency_key must be a string or null")
         object.__setattr__(self, "sent_at", require_utc(self.sent_at, "sent_at"))
-        object.__setattr__(self, "payload", dict(self.payload))
+        payload = deepcopy(dict(self.payload))
+        _ensure_json_safe(payload, "payload")
+        if self.envelope is not None:
+            envelope = self.envelope.to_dict() if hasattr(self.envelope, "to_dict") else self.envelope
+            _ensure_json_safe(envelope, "envelope")
+        object.__setattr__(self, "payload", payload)
         if not self.source.strip() or not self.channel.strip():
             raise ValueError("source and channel cannot be empty")
         if not self.message_id.strip():
@@ -642,6 +648,15 @@ class JsonLineTransport:
 
     def send(self, message: TransportMessage) -> DeliveryReceipt:
         self.policy.validate(message.destination)
-        encoded = (json.dumps(message.to_dict(), ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        encoded = (
+            json.dumps(message.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False) + "\n"
+        ).encode("utf-8")
         self.writer(encoded)
         return DeliveryReceipt(message.message_id, accepted=True, sequence=message.sequence, delivered_at=utc_now())
+
+
+def _ensure_json_safe(value: Any, field_name: str) -> None:
+    try:
+        json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"transport {field_name} must be JSON-safe") from exc

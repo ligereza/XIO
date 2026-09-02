@@ -53,6 +53,21 @@ class TransportTests(unittest.TestCase):
                 payload=[],
             )
         with self.assertRaises(ValueError):
+            TransportMessage(
+                source="xio-layer-test",
+                destination=Endpoint("memory", "queue"),
+                channel="control",
+                payload={"value": float("nan")},
+            )
+        with self.assertRaises(ValueError):
+            TransportMessage(
+                source="xio-layer-test",
+                destination=Endpoint("memory", "queue"),
+                channel="control",
+                payload={},
+                envelope=object(),
+            )
+        with self.assertRaises(ValueError):
             ConnectionStatus(
                 endpoint=Endpoint("memory", "queue"),
                 state=ConnectionState.CONNECTED,
