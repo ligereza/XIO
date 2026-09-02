@@ -111,6 +111,8 @@ Session checkpoints preserve authorization evidence and delivery history for a
 caller-controlled restart while intentionally requiring a fresh handshake.
 Replacing a peer authorization also invalidates stale endpoint and handshake
 state while retaining explicit delivery history.
+Public session operations reject malformed record types and peer identifiers
+before mutating state or calling the injected transport.
 
 ## Contrato de consumo LUCIDA/MULTI
 

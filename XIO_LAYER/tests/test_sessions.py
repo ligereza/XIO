@@ -198,6 +198,46 @@ class SessionContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     SignalEnvelope(**arguments)
 
+    def test_session_manager_rejects_invalid_public_inputs_before_mutation(self):
+        sender = PeerSessionManager(peer("alice"), InMemoryTransport(), authorized_peers=[peer("bob")])
+
+        with self.assertRaises(TypeError):
+            sender.authorize_peer(object())
+        with self.assertRaises(TypeError):
+            sender.accept_handshake(object())
+        with self.assertRaises(TypeError):
+            sender.complete_handshake(object())
+        with self.assertRaises(TypeError):
+            sender.fan_out(object(), ["bob"])
+        with self.assertRaises(ValueError):
+            sender.state([])
+        with self.assertRaises(ValueError):
+            sender.fan_out(
+                SignalEnvelope(
+                    source_peer_id="alice",
+                    session_id="session-1",
+                    channel="signals",
+                    sequence=1,
+                    payload={},
+                    message_id="signal-inputs",
+                ),
+                [[]],
+            )
+        with self.assertRaises(TypeError):
+            sender.receive_signal(object(), "bob")
+        with self.assertRaises(ValueError):
+            sender.receive_signal(
+                SignalEnvelope(
+                    source_peer_id="alice",
+                    session_id="session-1",
+                    channel="signals",
+                    sequence=1,
+                    payload={},
+                    message_id="signal-inputs-2",
+                ),
+                [],
+            )
+
 
 class SessionCheckpointTests(unittest.TestCase):
     def test_checkpoint_round_trip_preserves_idempotency_and_requires_handshake(self):

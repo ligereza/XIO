@@ -225,6 +225,8 @@ caller registers peer + endpoint
 - `PeerSessionManager` serializes handshake, authorization, delivery and
   receive transitions; concurrent identical fan-outs therefore keep one
   per-peer delivery and return a duplicate acknowledgement to later callers;
+- public session methods reject wrong record types and non-text peer ids before
+  touching session state or the injected transport;
 - negotiated capabilities are replaced only by an accepted handshake and are
   cleared on disconnect, revocation, handshake start or handshake failure;
 - revocation changes the peer to `blocked` and prevents later delivery;

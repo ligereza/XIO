@@ -810,6 +810,8 @@ class PeerSessionManager:
 
     @_synchronized
     def authorize_peer(self, peer: PeerDescriptor) -> None:
+        if not isinstance(peer, PeerDescriptor):
+            raise TypeError("authorize_peer accepts PeerDescriptor only")
         if peer.peer_id == self.local_peer.peer_id:
             raise ValueError("local peer cannot authorize itself")
         self.policy.validate(peer.endpoint)
@@ -845,6 +847,7 @@ class PeerSessionManager:
         session.negotiated_capabilities = frozenset()
 
     def _require_peer(self, peer_id: str) -> _PeerSession:
+        _require_text(peer_id, "peer_id")
         if peer_id not in self._peers:
             raise UnknownPeerError(peer_id)
         return self._sessions[peer_id]
@@ -876,6 +879,8 @@ class PeerSessionManager:
 
     @_synchronized
     def accept_handshake(self, request: HandshakeRequest) -> HandshakeAck:
+        if not isinstance(request, HandshakeRequest):
+            raise TypeError("accept_handshake accepts HandshakeRequest only")
         peer_id = request.peer.peer_id
         accepted = True
         status = AckStatus.ACCEPTED
@@ -942,6 +947,8 @@ class PeerSessionManager:
 
     @_synchronized
     def complete_handshake(self, ack: HandshakeAck) -> bool:
+        if not isinstance(ack, HandshakeAck):
+            raise TypeError("complete_handshake accepts HandshakeAck only")
         peer_id = self._pending.pop(ack.request_id, None)
         if peer_id is None:
             raise ValueError("handshake ack is not pending")
@@ -978,14 +985,21 @@ class PeerSessionManager:
         *,
         required_capability: str | None = None,
     ) -> dict[str, DeliveryAck]:
+        if not isinstance(signal, SignalEnvelope):
+            raise TypeError("fan_out accepts SignalEnvelope only")
         if signal.source_peer_id != self.local_peer.peer_id:
             raise ValueError("signal source_peer_id must match local peer")
         if required_capability is not None and not required_capability.strip():
             raise ValueError("required_capability cannot be empty")
-        targets = list(peer_ids) if peer_ids is not None else [
-            peer_id for peer_id, session in self._sessions.items()
-            if session.state is PeerSessionState.CONNECTED and peer_id not in self._revoked
-        ]
+        if peer_ids is not None:
+            targets = list(peer_ids)
+            for peer_id in targets:
+                _require_text(peer_id, "peer_id")
+        else:
+            targets = [
+                peer_id for peer_id, session in self._sessions.items()
+                if session.state is PeerSessionState.CONNECTED and peer_id not in self._revoked
+            ]
         acks: dict[str, DeliveryAck] = {}
         for peer_id in targets:
             session = self._sessions.get(peer_id)
@@ -1068,6 +1082,9 @@ class PeerSessionManager:
 
     @_synchronized
     def receive_signal(self, signal: SignalEnvelope, from_peer_id: str) -> DeliveryAck:
+        if not isinstance(signal, SignalEnvelope):
+            raise TypeError("receive_signal accepts SignalEnvelope only")
+        _require_text(from_peer_id, "from_peer_id")
         session = self._sessions.get(from_peer_id)
         if session is None:
             return self._blocked_or_unknown_ack(from_peer_id, signal.message_id, signal.sequence)
