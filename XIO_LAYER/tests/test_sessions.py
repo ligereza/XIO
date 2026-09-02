@@ -5,6 +5,7 @@ import json
 import threading
 import unittest
 
+from XIO_LAYER.core import sessions as session_api
 from XIO_LAYER.core.sessions import (
     AckStatus,
     DeliveryAck,
@@ -52,6 +53,12 @@ def connected_pair(alice: PeerDescriptor | None = None, bob: PeerDescriptor | No
 
 
 class SessionContractTests(unittest.TestCase):
+    def test_public_session_exports_include_ack_status(self):
+        self.assertIn("AckStatus", session_api.__all__)
+        exported = {}
+        exec("from XIO_LAYER.core.sessions import *", exported)
+        self.assertIs(exported["AckStatus"], AckStatus)
+
     def test_session_records_round_trip_with_exact_wire_shape(self):
         descriptor = peer("alice")
         request = HandshakeRequest(

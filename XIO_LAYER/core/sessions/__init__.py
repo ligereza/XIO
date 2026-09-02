@@ -18,6 +18,7 @@ from .peer_session import (
 )
 
 __all__ = [
+    "AckStatus",
     "DeliveryAck",
     "HandshakeAck",
     "HandshakeAttempt",
