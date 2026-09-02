@@ -114,6 +114,12 @@ class RecoveryManager:
 
     def recover(self, stream_id: str, events: EventLog, projector: SnapshotProjector) -> RecoveryResult:
         checkpoint = self.checkpoints.load_latest(stream_id)
+        issues = list(self.checkpoints.last_issues)
+        if checkpoint is not None:
+            checkpoint_issue = self._checkpoint_consistency_issue(checkpoint, events, projector)
+            if checkpoint_issue is not None:
+                issues.append(checkpoint_issue)
+                checkpoint = None
         records = events.after(checkpoint.sequence, stream_id) if checkpoint else events.records(stream_id)
         replay = replay_events(records, projector.reducer, checkpoint.state if checkpoint else projector.initial_state)
         source_event_id = records[-1].event.event_id if records else (
@@ -131,5 +137,31 @@ class RecoveryManager:
             snapshot=snapshot,
             used_checkpoint=checkpoint is not None,
             replayed_events=replay.applied_events,
-            issues=tuple(self.checkpoints.last_issues),
+            issues=tuple(issues),
         )
+
+    @staticmethod
+    def _checkpoint_consistency_issue(
+        checkpoint: Checkpoint,
+        events: EventLog,
+        projector: SnapshotProjector,
+    ) -> str | None:
+        prefix = tuple(
+            record
+            for record in events.records(checkpoint.stream_id)
+            if record.sequence <= checkpoint.sequence
+        )
+        if checkpoint.sequence == 0:
+            expected_state = dict(projector.initial_state)
+            expected_event_id = None
+        else:
+            if not prefix or prefix[-1].sequence != checkpoint.sequence:
+                return "checkpoint sequence is not backed by event log"
+            replay = replay_events(prefix, projector.reducer, projector.initial_state)
+            expected_state = dict(replay.state)
+            expected_event_id = prefix[-1].event.event_id
+        if dict(checkpoint.state) != expected_state:
+            return "checkpoint state does not match event replay"
+        if checkpoint.source_event_id != expected_event_id:
+            return "checkpoint source event does not match event replay"
+        return None

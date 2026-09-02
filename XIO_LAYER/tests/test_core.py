@@ -210,6 +210,33 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
 
 
 class RecoveryTests(unittest.TestCase):
+    def test_semantically_inconsistent_checkpoint_falls_back_to_full_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            event_path = Path(directory) / "events.jsonl"
+            checkpoint_path = Path(directory) / "checkpoints"
+            log = EventLog(event_path)
+            for number in range(1, 4):
+                log.append(make_event(f"event-{number}", number))
+            projector = SnapshotProjector(add_reducer)
+            checkpoints = CheckpointStore(checkpoint_path)
+            checkpoints.save(
+                Snapshot(
+                    stream_id="demo",
+                    version=2,
+                    state={"total": 999},
+                    captured_at=T0,
+                    source_event_id="event-2",
+                    snapshot_id="inconsistent-checkpoint",
+                )
+            )
+
+            recovered = RecoveryManager(checkpoints).recover("demo", EventLog(event_path), projector)
+
+        self.assertFalse(recovered.used_checkpoint)
+        self.assertEqual(recovered.replayed_events, 3)
+        self.assertEqual(recovered.snapshot.state, {"total": 6})
+        self.assertIn("checkpoint state does not match event replay", recovered.issues)
+
     def test_checkpoint_version_is_idempotent_but_conflicts_are_rejected(self):
         first = Snapshot(
             stream_id="demo",
