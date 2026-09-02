@@ -39,7 +39,12 @@ def require_utc(value: datetime, field_name: str) -> datetime:
 def _json_copy(value: Mapping[str, Any]) -> dict[str, Any]:
     """Copy a JSON-like mapping so callers cannot mutate a contract in place."""
 
-    return deepcopy(dict(value))
+    copied = deepcopy(dict(value))
+    try:
+        json.dumps(copied, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("mapping must be JSON-safe") from exc
+    return copied
 
 
 def canonical_json(value: Any) -> str:

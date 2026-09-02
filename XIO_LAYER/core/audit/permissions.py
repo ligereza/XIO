@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from threading import RLock
 from typing import Any, Callable, Mapping
 
@@ -91,6 +92,11 @@ class ActionGate:
                 output = handler(action)
                 if output is not None and not isinstance(output, Mapping):
                     raise ValueError("action handler output must be a mapping or null")
+                if output is not None:
+                    try:
+                        json.dumps(dict(output), ensure_ascii=False, sort_keys=True, allow_nan=False)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError("action handler output must be JSON-safe") from exc
                 return output
 
             allowed, output = self.permissions.run_if_allowed(

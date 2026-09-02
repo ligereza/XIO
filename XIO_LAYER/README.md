@@ -66,6 +66,8 @@ Transport receipts apply the same fail-closed rule to result flags, sequences
 and latency values before a delivery status is exposed.
 Transport policies reject ambiguous booleans and malformed allowlists before
 they can authorize a transport.
+Core mapping contracts are copied defensively and reject non-JSON values or
+non-finite numbers before they can be hashed, replayed or audited.
 `ExplicitAction` requires a real boolean confirmation and mapping parameters;
 truthy strings cannot bypass the explicit-action gate.
 `ActionGate` serializes the current permission check with the handler call:

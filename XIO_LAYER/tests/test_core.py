@@ -296,6 +296,23 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
         self.assertIn("action handler output must be a mapping", result.error)
         self.assertEqual(audit.entries()[0].outcome, "failed")
         self.assertTrue(audit.verify())
+        nested_action = ExplicitAction(
+            proposal_id="proposal-invalid-json-output",
+            action_type="device.write",
+            parameters={},
+            actor_id="user-1",
+            requested_at=T0,
+            explicitly_confirmed=True,
+        )
+        nested_result = gate.execute(
+            nested_action,
+            "device.write",
+            lambda _: {"value": object()},
+        )
+        self.assertEqual(nested_result.status, "failed")
+        self.assertIn("action handler output must be JSON-safe", nested_result.error)
+        self.assertEqual(audit.entries()[-1].outcome, "failed")
+        self.assertTrue(audit.verify())
         with self.assertRaises(ValueError):
             ActionResult(
                 action_id="action-invalid-output",
@@ -303,6 +320,14 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
                 started_at=T0,
                 finished_at=T0,
                 output=[],
+            )
+        with self.assertRaises(ValueError):
+            ActionResult(
+                action_id="action-invalid-json",
+                status="succeeded",
+                started_at=T0,
+                finished_at=T0,
+                output={"value": float("nan")},
             )
 
     def test_proposal_and_unconfirmed_action_cannot_execute(self):
