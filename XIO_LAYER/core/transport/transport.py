@@ -162,6 +162,71 @@ class TransportMessage:
             "envelope": envelope,
         }
 
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "TransportMessage":
+        """Restore a strict transport wire record without sending it."""
+
+        if not isinstance(value, Mapping):
+            raise ValueError("transport message must be a mapping")
+        required = {
+            "message_id",
+            "source",
+            "destination",
+            "channel",
+            "payload",
+            "sent_at",
+            "sequence",
+            "idempotency_key",
+            "envelope",
+        }
+        if set(value) != required or not isinstance(value["destination"], Mapping):
+            raise ValueError("transport message fields do not match the contract")
+        for field_name in ("message_id", "source", "channel"):
+            _require_transport_text(value[field_name], field_name)
+        if value["sequence"] is not None and (
+            isinstance(value["sequence"], bool)
+            or not isinstance(value["sequence"], int)
+            or value["sequence"] < 1
+        ):
+            raise ValueError("transport message sequence is invalid")
+        if value["idempotency_key"] is not None:
+            _require_transport_text(value["idempotency_key"], "idempotency_key")
+        if not isinstance(value["payload"], Mapping):
+            raise ValueError("transport message payload must be a mapping")
+        destination = value["destination"]
+        destination_required = {"scheme", "address", "medium", "scope", "port"}
+        if set(destination) != destination_required:
+            raise ValueError("transport destination fields do not match the contract")
+        for field_name in ("scheme", "address", "medium", "scope"):
+            _require_transport_text(destination[field_name], f"destination.{field_name}")
+        if destination["port"] is not None and (
+            isinstance(destination["port"], bool)
+            or not isinstance(destination["port"], int)
+            or not 1 <= destination["port"] <= 65535
+        ):
+            raise ValueError("transport destination port is invalid")
+        try:
+            sent_at = datetime.fromisoformat(str(value["sent_at"]))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("transport sent_at must be an ISO datetime") from exc
+        return cls(
+            message_id=value["message_id"],
+            source=value["source"],
+            destination=Endpoint(
+                scheme=destination["scheme"],
+                address=destination["address"],
+                medium=destination["medium"],
+                scope=destination["scope"],
+                port=destination["port"],
+            ),
+            channel=value["channel"],
+            payload=value["payload"],
+            sent_at=sent_at,
+            sequence=value["sequence"],
+            idempotency_key=value["idempotency_key"],
+            envelope=value["envelope"],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class DeliveryReceipt:
@@ -190,6 +255,11 @@ class DeliveryReceipt:
         if self.error == DeliveryStatus.IDEMPOTENCY_CONFLICT.value:
             return DeliveryStatus.IDEMPOTENCY_CONFLICT
         return DeliveryStatus.ERROR
+
+
+def _require_transport_text(value: Any, field_name: str) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string")
 
 
 @dataclass(frozen=True, slots=True)

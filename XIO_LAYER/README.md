@@ -63,6 +63,8 @@ caller must re-inject its identity before any permission-checked delivery.
 `JsonLineHandoffStore` makes that representation append-only and restart-safe,
 with a versioned hash chain, idempotent same-content writes and rejection of
 same-id content changes or tampered/reordered records.
+`TransportMessage.from_dict()` is the shared strict wire parser used by both
+transport and handoff restoration.
 
 ## Contrato de consumo LUCIDA/MULTI
 

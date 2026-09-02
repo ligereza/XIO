@@ -149,6 +149,12 @@ JSONL replay sorts by `sequence`, then received timestamp and event id, skips
 identical duplicate ids, and rejects a conflicting fingerprint. The reducer
 only returns state. No replay path creates or dispatches an action.
 
+`TransportMessage.from_dict()` is the shared strict wire restoration contract.
+It validates the exact message and endpoint fields, timestamps, sequence and
+scalar types without sending anything. Handoff restoration delegates to this
+method, so LUCIDA/MULTI and local handoff replay cannot drift into separate
+wire parsers.
+
 ### Consumo por LUCIDA/MULTI
 
 LUCIDA/MULTI can consume the canonical stream at the event boundary:

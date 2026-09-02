@@ -38,6 +38,17 @@ def message(endpoint, *, sequence=None, envelope=None, message_id="message-1", i
 
 
 class TransportTests(unittest.TestCase):
+    def test_message_wire_round_trip_is_strict_and_does_not_send(self):
+        endpoint = Endpoint("memory", "queue")
+        original = message(endpoint, sequence=1, message_id="round-trip")
+
+        restored = TransportMessage.from_dict(original.to_dict())
+
+        self.assertEqual(restored.to_dict(), original.to_dict())
+        invalid = {**original.to_dict(), "message_id": 7}
+        with self.assertRaises(ValueError):
+            TransportMessage.from_dict(invalid)
+
     def test_order_and_timestamps_are_reported(self):
         endpoint = Endpoint(
             "tcp",
