@@ -95,6 +95,14 @@ class EventAndReplayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stream_id"):
             projector.project("demo", (), base_snapshot=foreign_snapshot)
 
+    def test_incremental_snapshot_projection_rejects_checkpoint_prefix(self):
+        projector = SnapshotProjector(add_reducer)
+        first = EventRecord(sequence=1, event=make_event("event-base", 1))
+        base_snapshot = projector.project("demo", [first])
+
+        with self.assertRaisesRegex(ValueError, "base_snapshot.version"):
+            projector.project("demo", [first], base_snapshot=base_snapshot)
+
     def test_event_log_append_rejects_wrong_type_before_mutation(self):
         log = EventLog()
 

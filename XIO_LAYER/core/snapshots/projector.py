@@ -36,6 +36,8 @@ class SnapshotProjector:
             raise TypeError("records must contain EventRecord values only")
         if any(record.event.stream_id != stream_id for record in records):
             raise ValueError("records must belong to stream_id")
+        if base_snapshot is not None and any(record.sequence <= base_snapshot.version for record in records):
+            raise ValueError("records must follow base_snapshot.version")
         records = tuple(sorted(records, key=lambda item: item.sequence))
         base_state = base_snapshot.state if base_snapshot is not None else self.initial_state
         replay = replay_events(records, self.reducer, base_state)
