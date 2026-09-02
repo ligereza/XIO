@@ -64,6 +64,13 @@ class TransportTests(unittest.TestCase):
                 source="xio-layer-test",
                 destination=Endpoint("memory", "queue"),
                 channel="control",
+                payload={1: "value"},
+            )
+        with self.assertRaises(ValueError):
+            TransportMessage(
+                source="xio-layer-test",
+                destination=Endpoint("memory", "queue"),
+                channel="control",
                 payload={},
                 envelope=object(),
             )

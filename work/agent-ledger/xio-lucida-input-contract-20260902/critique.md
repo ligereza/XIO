@@ -103,3 +103,57 @@ next_checkpoint: Implement same-version idempotency/conflict handling, test it, 
 previous_action: audit equal-version snapshot writes
 decision_delta: change from reproduced overwrite to explicit conflict handling
 verification_signal: A different state at the current version must raise before replacing latest.
+
+---
+
+objective: Maintain XIO as signal, transport and input-contract infrastructure for LUCIDA/MULTI without owning rendering, learning or host actions.
+acceptance_criteria: JSON contracts must round-trip without coercion; invalid action outputs must become audited failed results.
+current_state: EventLog and SnapshotStore integrity fixes are published. Core JSON checks relied on json.dumps, which accepts integer object keys by coercing them to strings.
+verified_evidence: An Event payload with key 1 preserved an integer key in memory but round-tripped through JSON as key "1"; TransportMessage accepted the same shape.
+assumptions: Object keys at every XIO contract boundary must be non-empty or empty strings as dictated by JSON object semantics, never coerced scalar keys.
+strongest_failure_mode: A payload or handler result changes identity across serialization, causing fingerprint mismatch, replay drift or an uncaught ActionResult construction error without an audit result.
+highest_consequence_error: A side-effecting handler can complete while its result cannot be represented or audited consistently.
+
+options:
+  - action: continue
+    setup_cost: low
+    execution_cost: medium
+    verification_cost: low
+    rework_risk: low
+    context_cost: low
+    expected_benefit: Centralize strict recursive JSON validation and reuse it for transport and handler outputs.
+    reversibility: high
+    evidence_needed: Contract, transport and audited-handler regressions plus full suite.
+  - action: search
+    setup_cost: medium
+    execution_cost: medium
+    verification_cost: medium
+    rework_risk: medium
+    context_cost: medium
+    expected_benefit: Low; the coercion is directly observable in the local contract.
+    reversibility: high
+    evidence_needed: External facts would not alter JSON round-trip behavior.
+  - action: stop
+    setup_cost: none
+    execution_cost: none
+    verification_cost: none
+    rework_risk: high
+    context_cost: low
+    expected_benefit: Keep a known identity and audit gap.
+    reversibility: high
+    evidence_needed: Acceptance would need to allow coercive JSON keys.
+
+search_gap:
+  uncertainty: Whether a caller intentionally depends on integer keys in core mappings.
+  consequence: Medium; strict rejection may expose an undocumented caller, but coercion is already lossy.
+  expected_error_reduction: Low from external research.
+  search_cost: Medium.
+  marginal_value: Low.
+  stop_reason: ApplicationEvent already rejects non-string mapping keys, establishing the compatible local rule.
+
+selected_action: continue
+confidence: high
+next_checkpoint: Verify strict key rejection across core, transport and ActionGate, then publish the regression-backed change.
+previous_action: audit permission and audit transition invariants
+decision_delta: broadened the fix from permission-only behavior to the shared JSON contract after direct reproduction
+verification_signal: Non-string mapping keys must be rejected before serialization, and invalid handler output must be audited as failed.

@@ -12,6 +12,7 @@ from .models import (
     TimestampError,
     canonical_json,
     content_hash,
+    ensure_json_safe,
     require_utc,
     utc_now,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "canonical_json",
     "Checkpoint",
     "content_hash",
+    "ensure_json_safe",
     "Event",
     "EventRecord",
     "EventReducer",

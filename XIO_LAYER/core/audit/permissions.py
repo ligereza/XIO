@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from threading import RLock
 from typing import Any, Callable, Mapping
 
-from ..contracts import ActionHandler, ActionResult, ExplicitAction, utc_now
+from ..contracts import ActionHandler, ActionResult, ExplicitAction, ensure_json_safe, utc_now
 from .ledger import AuditLedger
 
 
@@ -105,8 +104,8 @@ class ActionGate:
                     raise ValueError("action handler output must be a mapping or null")
                 if output is not None:
                     try:
-                        json.dumps(dict(output), ensure_ascii=False, sort_keys=True, allow_nan=False)
-                    except (TypeError, ValueError) as exc:
+                        ensure_json_safe(dict(output), "action handler output")
+                    except ValueError as exc:
                         raise ValueError("action handler output must be JSON-safe") from exc
                 return output
 

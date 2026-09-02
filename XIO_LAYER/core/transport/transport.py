@@ -17,7 +17,7 @@ from threading import RLock
 from typing import Any, Callable, Mapping, Protocol
 from uuid import uuid4
 
-from ..contracts import content_hash, require_utc, utc_now
+from ..contracts import content_hash, ensure_json_safe, require_utc, utc_now
 
 
 class NetworkMedium(str, Enum):
@@ -657,6 +657,6 @@ class JsonLineTransport:
 
 def _ensure_json_safe(value: Any, field_name: str) -> None:
     try:
-        json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
-    except (TypeError, ValueError, OverflowError) as exc:
+        ensure_json_safe(value, field_name)
+    except ValueError as exc:
         raise ValueError(f"transport {field_name} must be JSON-safe") from exc

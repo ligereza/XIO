@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from typing import Any, Mapping
 from uuid import uuid4
 
@@ -40,17 +41,37 @@ def _json_copy(value: Mapping[str, Any]) -> dict[str, Any]:
     """Copy a JSON-like mapping so callers cannot mutate a contract in place."""
 
     copied = deepcopy(dict(value))
-    try:
-        json.dumps(copied, ensure_ascii=False, sort_keys=True, allow_nan=False)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("mapping must be JSON-safe") from exc
+    ensure_json_safe(copied, "mapping")
     return copied
+
+
+def ensure_json_safe(value: Any, field_name: str = "value") -> None:
+    """Reject values that cannot round-trip as strict JSON without coercion."""
+
+    if value is None or isinstance(value, (bool, int, str)):
+        return
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError(f"{field_name} must contain finite numbers")
+        return
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{field_name} mapping keys must be strings")
+            ensure_json_safe(item, f"{field_name}.{key}")
+        return
+    if isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            ensure_json_safe(item, f"{field_name}[{index}]")
+        return
+    raise ValueError(f"{field_name} contains unsupported value: {type(value).__name__}")
 
 
 def canonical_json(value: Any) -> str:
     """Serialize contract data deterministically for hashes and idempotency."""
 
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    ensure_json_safe(value)
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def content_hash(value: Any) -> str:

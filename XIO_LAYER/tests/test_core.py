@@ -202,6 +202,26 @@ class EventAndReplayTests(unittest.TestCase):
 
         self.assertEqual(Event.from_dict(wire).to_dict(), wire)
 
+    def test_contract_mappings_reject_non_string_json_keys(self):
+        with self.assertRaises(ValueError):
+            Event(
+                stream_id="demo",
+                kind="sample",
+                source="test-device",
+                occurred_at=T0,
+                received_at=T0,
+                payload={1: "value"},
+                event_id="event-integer-key",
+            )
+        with self.assertRaises(ValueError):
+            ActionResult(
+                action_id="action-integer-key",
+                status="succeeded",
+                started_at=T0,
+                finished_at=T0,
+                output={1: "value"},
+            )
+
     def test_persistent_event_log_assigns_unique_sequences_across_processes(self):
         events = [make_event(f"event-{number}", number) for number in range(1, 5)]
         with tempfile.TemporaryDirectory() as directory:
@@ -493,6 +513,23 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
         )
         self.assertEqual(nested_result.status, "failed")
         self.assertIn("action handler output must be JSON-safe", nested_result.error)
+        self.assertEqual(audit.entries()[-1].outcome, "failed")
+        self.assertTrue(audit.verify())
+        key_action = ExplicitAction(
+            proposal_id="proposal-invalid-key",
+            action_type="device.write",
+            parameters={},
+            actor_id="user-1",
+            requested_at=T0,
+            explicitly_confirmed=True,
+        )
+        key_result = gate.execute(
+            key_action,
+            "device.write",
+            lambda _: {1: "value"},
+        )
+        self.assertEqual(key_result.status, "failed")
+        self.assertIn("action handler output must be JSON-safe", key_result.error)
         self.assertEqual(audit.entries()[-1].outcome, "failed")
         self.assertTrue(audit.verify())
         with self.assertRaises(ValueError):
