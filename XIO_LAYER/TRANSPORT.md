@@ -213,6 +213,9 @@ caller registers peer + endpoint
   connected peer that lacks the requested capability and does not send the
   capability in the negotiated handshake snapshot; omitting the argument
   preserves the existing fan-out behavior;
+- `PeerSessionManager` serializes handshake, authorization, delivery and
+  receive transitions; concurrent identical fan-outs therefore keep one
+  per-peer delivery and return a duplicate acknowledgement to later callers;
 - negotiated capabilities are replaced only by an accepted handshake and are
   cleared on disconnect, revocation, handshake start or handshake failure;
 - revocation changes the peer to `blocked` and prevents later delivery;

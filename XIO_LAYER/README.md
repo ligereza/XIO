@@ -97,6 +97,8 @@ both persistent stores.
 handshake records, signal envelopes and delivery acknowledgements; session
 wire restoration rejects missing, extra or coercible fields before any state
 transition.
+The session manager also serializes its in-memory state transitions, so
+per-peer idempotency is preserved when callers fan out concurrently.
 
 ## Contrato de consumo LUCIDA/MULTI
 

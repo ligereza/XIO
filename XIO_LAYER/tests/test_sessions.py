@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import threading
 import unittest
 
 from XIO_LAYER.core.sessions import (
@@ -15,6 +16,7 @@ from XIO_LAYER.core.sessions import (
 )
 from XIO_LAYER.core.transport import (
     ArtNetEnvelope,
+    DeliveryReceipt,
     DeliveryStatus,
     Endpoint,
     InMemoryTransport,
@@ -368,6 +370,55 @@ class FanOutTests(unittest.TestCase):
         self.assertEqual(second["bob"].status, AckStatus.DUPLICATE.value)
         self.assertEqual(second["carol"].status, AckStatus.DUPLICATE.value)
         self.assertEqual(len(self.transport.messages()), message_count)
+
+    def test_concurrent_fan_out_serializes_idempotency_per_peer(self):
+        class BlockingTransport:
+            def __init__(self):
+                self.messages_seen = []
+                self.lock = threading.Lock()
+                self.first_send_started = threading.Event()
+                self.release_first_send = threading.Event()
+
+            def send(self, message):
+                with self.lock:
+                    self.messages_seen.append(message)
+                    send_number = len(self.messages_seen)
+                    if send_number == 1:
+                        self.first_send_started.set()
+                if send_number == 1:
+                    self.release_first_send.wait(1.0)
+                return DeliveryReceipt(
+                    message_id=message.message_id,
+                    accepted=True,
+                    sequence=message.sequence,
+                    delivered_at=T0,
+                )
+
+        controlled = BlockingTransport()
+        self.sender.transport = controlled
+        signal = self.make_signal(1, "signal-concurrent")
+        results = []
+        first = threading.Thread(
+            target=lambda: results.append(self.sender.fan_out(signal, ["bob"])["bob"])
+        )
+        second = threading.Thread(
+            target=lambda: results.append(self.sender.fan_out(signal, ["bob"])["bob"])
+        )
+        first.start()
+        self.assertTrue(controlled.first_send_started.wait(1.0))
+        second.start()
+        self.assertEqual(len(controlled.messages_seen), 1)
+        controlled.release_first_send.set()
+        first.join(1.0)
+        second.join(1.0)
+
+        self.assertFalse(first.is_alive())
+        self.assertFalse(second.is_alive())
+        self.assertEqual(len(controlled.messages_seen), 1)
+        self.assertEqual(sorted(ack.status for ack in results), [
+            AckStatus.ACCEPTED.value,
+            AckStatus.DUPLICATE.value,
+        ])
 
     def test_conflicting_fingerprint_with_same_message_id_is_rejected(self):
         first = self.make_signal(1, "signal-conflict")

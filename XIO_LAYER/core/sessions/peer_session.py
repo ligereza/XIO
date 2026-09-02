@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from functools import wraps
+from threading import RLock
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
 
@@ -56,6 +58,17 @@ class AckStatus(str, Enum):
     BLOCKED = "blocked"
     CAPABILITY_MISSING = "capability_missing"
     ERROR = "error"
+
+
+def _synchronized(method):
+    """Serialize one manager operation without changing its public contract."""
+
+    @wraps(method)
+    def guarded(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return guarded
 
 
 def _endpoint_from_dict(data: Mapping[str, Any]) -> Endpoint:
@@ -505,6 +518,7 @@ class PeerSessionManager:
         policy: TransportPolicy | None = None,
         authorized_peers: Iterable[PeerDescriptor] = (),
     ) -> None:
+        self._lock = RLock()
         self.local_peer = local_peer
         self.transport = transport
         self.policy = policy or TransportPolicy()
@@ -517,6 +531,7 @@ class PeerSessionManager:
         for peer in authorized_peers:
             self.authorize_peer(peer)
 
+    @_synchronized
     def authorize_peer(self, peer: PeerDescriptor) -> None:
         if peer.peer_id == self.local_peer.peer_id:
             raise ValueError("local peer cannot authorize itself")
@@ -525,6 +540,7 @@ class PeerSessionManager:
         self._revoked.discard(peer.peer_id)
         self._sessions.setdefault(peer.peer_id, _PeerSession(peer=peer, session_id=""))
 
+    @_synchronized
     def revoke_peer(self, peer_id: str) -> None:
         if peer_id not in self._peers:
             raise UnknownPeerError(peer_id)
@@ -533,6 +549,7 @@ class PeerSessionManager:
         session.state = PeerSessionState.BLOCKED
         session.negotiated_capabilities = frozenset()
 
+    @_synchronized
     def disconnect(self, peer_id: str) -> None:
         session = self._require_peer(peer_id)
         session.state = PeerSessionState.DISCONNECTED
@@ -547,6 +564,7 @@ class PeerSessionManager:
         status = AckStatus.BLOCKED if peer_id in self._revoked else AckStatus.UNKNOWN_PEER
         return DeliveryAck(peer_id, message_id, False, status.value, sequence=sequence, error=status.value)
 
+    @_synchronized
     def initiate_handshake(self, peer_id: str) -> HandshakeAttempt:
         session = self._require_peer(peer_id)
         if peer_id in self._revoked:
@@ -567,6 +585,7 @@ class PeerSessionManager:
         )
         return HandshakeAttempt(request=request, receipt=receipt)
 
+    @_synchronized
     def accept_handshake(self, request: HandshakeRequest) -> HandshakeAck:
         peer_id = request.peer.peer_id
         accepted = True
@@ -632,6 +651,7 @@ class PeerSessionManager:
                 pass
         return ack
 
+    @_synchronized
     def complete_handshake(self, ack: HandshakeAck) -> bool:
         peer_id = self._pending.pop(ack.request_id, None)
         if peer_id is None:
@@ -657,9 +677,11 @@ class PeerSessionManager:
         session.negotiated_capabilities = frozenset(ack.capabilities)
         return True
 
+    @_synchronized
     def state(self, peer_id: str) -> PeerSessionState:
         return self._require_peer(peer_id).state
 
+    @_synchronized
     def fan_out(
         self,
         signal: SignalEnvelope,
@@ -755,6 +777,7 @@ class PeerSessionManager:
             received_at=receipt.delivered_at or utc_now(),
         )
 
+    @_synchronized
     def receive_signal(self, signal: SignalEnvelope, from_peer_id: str) -> DeliveryAck:
         session = self._sessions.get(from_peer_id)
         if session is None:
