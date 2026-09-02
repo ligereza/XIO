@@ -97,6 +97,38 @@ class AdapterSelection:
             "selected_at": self.selected_at.isoformat(),
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "AdapterSelection":
+        if not isinstance(data, Mapping):
+            raise InvalidSourceAdapterError("adapter selection must be a mapping")
+        required = {
+            "selection_id",
+            "source_app",
+            "event_type",
+            "required_capabilities",
+            "plan_fingerprint",
+            "caller_id",
+            "selected_at",
+        }
+        if set(data) != required:
+            raise InvalidSourceAdapterError("adapter selection fields do not match the contract")
+        capabilities = data["required_capabilities"]
+        if isinstance(capabilities, str) or not isinstance(capabilities, (list, tuple)):
+            raise InvalidSourceAdapterError("required_capabilities must be a list")
+        try:
+            selected_at = datetime.fromisoformat(str(data["selected_at"]))
+        except (TypeError, ValueError) as exc:
+            raise InvalidSourceAdapterError("selected_at must be an ISO datetime") from exc
+        return cls(
+            selection_id=data["selection_id"],
+            source_app=data["source_app"],
+            event_type=data["event_type"],
+            required_capabilities=tuple(capabilities),
+            plan_fingerprint=data["plan_fingerprint"],
+            caller_id=data["caller_id"],
+            selected_at=selected_at,
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class _RegisteredSourceAdapter:

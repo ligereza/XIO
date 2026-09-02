@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from XIO_LAYER.adapters import (
     AdapterSelection,
     CandidateNotAvailableError,
+    InvalidSourceAdapterError,
     NoRouteMatchError,
     PrivacyPolicy,
     PrivacyPolicyError,
@@ -87,6 +88,9 @@ class AdapterHandoffTests(unittest.TestCase):
 
         self.assertIsInstance(selection, AdapterSelection)
         self.assertEqual(selection.source_app, "second-app")
+        restored = AdapterSelection.from_dict(selection.to_dict())
+        registry.validate_selection(restored)
+        self.assertEqual(restored, selection)
         self.assertEqual(first.calls, [])
         self.assertEqual(second.calls, [])
 
@@ -363,6 +367,19 @@ class AdapterHandoffTests(unittest.TestCase):
     def test_privacy_policy_rejects_non_ascii_keys(self):
         with self.assertRaises(PrivacyPolicyError):
             PrivacyPolicy(allowed_payload_keys=frozenset({"se" + chr(0xF1) + "al"}))
+
+    def test_selection_restore_rejects_extra_fields(self):
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            selection_id="selection-1",
+            selected_at=T0,
+        )
+        invalid = {**selection.to_dict(), "unexpected": True}
+        with self.assertRaises(InvalidSourceAdapterError):
+            AdapterSelection.from_dict(invalid)
 
 
 if __name__ == "__main__":

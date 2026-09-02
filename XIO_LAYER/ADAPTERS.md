@@ -73,6 +73,9 @@ choice as an `AdapterSelection`. The selection contains the caller id, event
 type, required capabilities and a fingerprint of the route plan. If a supplied
 plan is changed, stale, has no candidates, or names a non-candidate source, the
 selection is rejected. No adapter is called during planning or selection.
+`AdapterSelection.to_dict()` and `AdapterSelection.from_dict()` preserve that
+explicit choice across a restart; restored selections still require current
+plan validation before handoff.
 
 `prepare_adapter_handoff(...)` revalidates that selection immediately before
 calling only the selected adapter's `convert()` method. It creates a
