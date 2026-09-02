@@ -738,7 +738,7 @@ class PeerSessionManager:
         self._peers: dict[str, PeerDescriptor] = {}
         self._sessions: dict[str, _PeerSession] = {}
         self._revoked: set[str] = set()
-        self._pending: dict[str, str] = {}
+        self._pending: dict[str, tuple[str, str]] = {}
         self._received: dict[tuple[str, str], str] = {}
         self._sent: dict[tuple[str, str], str] = {}
         for peer in authorized_peers:
@@ -828,7 +828,7 @@ class PeerSessionManager:
         self._pending = {
             request_id: pending_peer_id
             for request_id, pending_peer_id in self._pending.items()
-            if pending_peer_id != peer.peer_id
+            if pending_peer_id[0] != peer.peer_id
         }
 
     @_synchronized
@@ -864,7 +864,7 @@ class PeerSessionManager:
         session.negotiated_capabilities = frozenset()
         self.policy.validate(session.peer.endpoint)
         request = HandshakeRequest(peer=self.local_peer)
-        self._pending[request.request_id] = peer_id
+        self._pending[request.request_id] = (peer_id, request.session_id)
         receipt = self.transport.send(
             TransportMessage(
                 source=self.local_peer.peer_id,
@@ -949,15 +949,20 @@ class PeerSessionManager:
     def complete_handshake(self, ack: HandshakeAck) -> bool:
         if not isinstance(ack, HandshakeAck):
             raise TypeError("complete_handshake accepts HandshakeAck only")
-        peer_id = self._pending.pop(ack.request_id, None)
-        if peer_id is None:
+        pending = self._pending.get(ack.request_id)
+        if pending is None:
             raise ValueError("handshake ack is not pending")
+        peer_id, request_session_id = pending
         session = self._require_peer(peer_id)
         session.negotiated_capabilities = frozenset()
         if ack.responder_peer_id != peer_id:
             session.state = PeerSessionState.ERROR
             raise ValueError("handshake responder does not match requested peer")
+        if ack.session_id != request_session_id:
+            session.state = PeerSessionState.ERROR
+            raise ValueError("handshake ack session does not match request")
         if not ack.accepted:
+            self._pending.pop(ack.request_id, None)
             session.state = (
                 PeerSessionState.BLOCKED
                 if ack.status in {AckStatus.BLOCKED.value, AckStatus.UNKNOWN_PEER.value}
@@ -965,9 +970,11 @@ class PeerSessionManager:
             )
             return False
         if not versions_compatible(self.local_peer.protocol_version, ack.protocol_version):
+            self._pending.pop(ack.request_id, None)
             session.negotiated_capabilities = frozenset()
             session.state = PeerSessionState.ERROR
             raise VersionMismatchError(ack.protocol_version)
+        self._pending.pop(ack.request_id, None)
         session.session_id = ack.session_id
         session.state = PeerSessionState.CONNECTED
         session.negotiated_capabilities = frozenset(ack.capabilities)

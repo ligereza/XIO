@@ -425,6 +425,62 @@ class HandshakeTests(unittest.TestCase):
         self.assertIn("xio.handshake.ack", channels)
         self.assertEqual(attempt.request.peer.peer_id, "alice")
 
+    def test_invalid_responder_ack_does_not_consume_pending_handshake(self):
+        alice = peer("alice")
+        bob = peer("bob")
+        sender = PeerSessionManager(
+            local_peer=alice,
+            transport=InMemoryTransport(),
+            authorized_peers=[bob],
+        )
+        attempt = sender.initiate_handshake("bob")
+        invalid = HandshakeAck(
+            session_id=attempt.request.session_id,
+            responder_peer_id="mallory",
+            request_id=attempt.request.request_id,
+            accepted=True,
+            protocol_version=bob.protocol_version,
+        )
+        with self.assertRaisesRegex(ValueError, "responder"):
+            sender.complete_handshake(invalid)
+
+        valid = HandshakeAck(
+            session_id=attempt.request.session_id,
+            responder_peer_id="bob",
+            request_id=attempt.request.request_id,
+            accepted=True,
+            protocol_version=bob.protocol_version,
+        )
+        self.assertTrue(sender.complete_handshake(valid))
+
+    def test_mismatched_ack_session_does_not_consume_pending_handshake(self):
+        alice = peer("alice")
+        bob = peer("bob")
+        sender = PeerSessionManager(
+            local_peer=alice,
+            transport=InMemoryTransport(),
+            authorized_peers=[bob],
+        )
+        attempt = sender.initiate_handshake("bob")
+        invalid = HandshakeAck(
+            session_id="different-session",
+            responder_peer_id="bob",
+            request_id=attempt.request.request_id,
+            accepted=True,
+            protocol_version=bob.protocol_version,
+        )
+        with self.assertRaisesRegex(ValueError, "session"):
+            sender.complete_handshake(invalid)
+
+        valid = HandshakeAck(
+            session_id=attempt.request.session_id,
+            responder_peer_id="bob",
+            request_id=attempt.request.request_id,
+            accepted=True,
+            protocol_version=bob.protocol_version,
+        )
+        self.assertTrue(sender.complete_handshake(valid))
+
     def test_unknown_peer_is_rejected_by_receiver(self):
         alice = peer("alice")
         bob = peer("bob")

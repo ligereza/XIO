@@ -203,6 +203,9 @@ caller registers peer + endpoint
 - `PeerDescriptor` contains `peer_id`, `protocol_version`, `capabilities` and
   the caller-provided endpoint;
 - `HandshakeRequest` and `HandshakeAck` carry `session_id` and explicit status;
+- an ACK must match the pending request's peer and `session_id`; an invalid
+  responder or cross-session ACK fails closed without consuming that pending
+  handshake, so a later valid ACK can still complete it;
 - session records have exact `to_dict()`/`from_dict()` contracts: missing or
   extra fields, coercible scalar values and boolean sequence/acceptance values
   are rejected before a session can be changed;
