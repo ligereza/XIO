@@ -43,7 +43,7 @@ LIMEN/
 Desde la raíz del repositorio:
 
 ```text
-python -m unittest discover -s LIMEN/tests -v
+python -m unittest discover -s LIMEN/tests -t . -v
 ```
 
 No hay dependencias de Flask, ADB, Termux, Android o servicios externos.
