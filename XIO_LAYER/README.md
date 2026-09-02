@@ -64,6 +64,9 @@ The event and snapshot constructors enforce the same temporal rule: boolean
 values cannot masquerade as schema versions or replay sequences.
 `ExplicitAction` requires a real boolean confirmation and mapping parameters;
 truthy strings cannot bypass the explicit-action gate.
+`ActionGate` serializes the current permission check with the handler call:
+revocation waits for an already-authorized operation to finish, while later
+operations observe the revoked grant and are denied.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a

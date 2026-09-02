@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import RLock
+from typing import Any, Callable
 
 from ..contracts import ActionHandler, ActionResult, ExplicitAction, utc_now
 from .ledger import AuditLedger
@@ -36,6 +37,19 @@ class PermissionRegistry:
     def allows(self, actor_id: str, permission: str) -> bool:
         with self._lock:
             return (actor_id, permission) in self._grants
+
+    def run_if_allowed(
+        self,
+        actor_id: str,
+        permission: str,
+        handler: Callable[[], Any],
+    ) -> tuple[bool, Any]:
+        """Run one already explicit operation while holding the permission lock."""
+
+        with self._lock:
+            if (actor_id, permission) not in self._grants:
+                return False, None
+            return True, handler()
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,25 +86,12 @@ class ActionGate:
             )
             return result
 
-        if not self.permissions.allows(action.actor_id, required_permission):
-            result = ActionResult(
-                action_id=action.action_id,
-                status="denied",
-                started_at=started,
-                finished_at=utc_now(),
-                error="permission_missing_or_revoked",
-            )
-            self.audit.append(
-                "explicit_action.denied",
-                action.action_id,
-                "denied",
-                {"reason": result.error, "permission": required_permission},
-                action.actor_id,
-            )
-            return result
-
         try:
-            output = handler(action) or {}
+            allowed, output = self.permissions.run_if_allowed(
+                action.actor_id,
+                required_permission,
+                lambda: handler(action),
+            )
         except Exception as exc:  # action failures must become inspectable results
             result = ActionResult(
                 action_id=action.action_id,
@@ -108,12 +109,29 @@ class ActionGate:
             )
             return result
 
+        if not allowed:
+            result = ActionResult(
+                action_id=action.action_id,
+                status="denied",
+                started_at=started,
+                finished_at=utc_now(),
+                error="permission_missing_or_revoked",
+            )
+            self.audit.append(
+                "explicit_action.denied",
+                action.action_id,
+                "denied",
+                {"reason": result.error, "permission": required_permission},
+                action.actor_id,
+            )
+            return result
+
         result = ActionResult(
             action_id=action.action_id,
             status="succeeded",
             started_at=started,
             finished_at=utc_now(),
-            output=output,
+            output=output or {},
         )
         self.audit.append(
             "explicit_action.result",

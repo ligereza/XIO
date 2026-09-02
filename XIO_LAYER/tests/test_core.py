@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
@@ -224,6 +225,56 @@ class PermissionAuditAndTransportTests(unittest.TestCase):
         self.assertEqual(called, [])
         self.assertTrue(audit.verify())
         self.assertEqual(audit.entries()[0].outcome, "denied")
+
+    def test_permission_revocation_waits_for_in_flight_authorized_action(self):
+        permissions = PermissionRegistry()
+        audit = AuditLedger()
+        gate = ActionGate(permissions, audit)
+        permissions.grant("user-1", "device.write")
+        handler_started = threading.Event()
+        release_handler = threading.Event()
+        revocation_done = threading.Event()
+        result_holder = []
+
+        def handler(_action):
+            handler_started.set()
+            release_handler.wait(1.0)
+            return {"ok": True}
+
+        def revoke():
+            permissions.revoke("user-1", "device.write")
+            revocation_done.set()
+
+        action = ExplicitAction(
+            proposal_id="proposal-concurrent",
+            action_type="device.write",
+            parameters={"value": 1},
+            actor_id="user-1",
+            requested_at=T0,
+            explicitly_confirmed=True,
+        )
+        action_thread = threading.Thread(
+            target=lambda: result_holder.append(
+                gate.execute(action, "device.write", handler)
+            )
+        )
+        revoke_thread = threading.Thread(target=revoke)
+        action_thread.start()
+        self.assertTrue(handler_started.wait(1.0))
+        revoke_thread.start()
+        self.assertFalse(revocation_done.wait(0.1))
+        release_handler.set()
+        action_thread.join(1.0)
+        revoke_thread.join(1.0)
+
+        self.assertFalse(action_thread.is_alive())
+        self.assertFalse(revoke_thread.is_alive())
+        self.assertEqual(result_holder[0].status, "succeeded")
+        self.assertTrue(revocation_done.is_set())
+        self.assertFalse(permissions.allows("user-1", "device.write"))
+        later = gate.execute(action, "device.write", lambda _: {"unexpected": True})
+        self.assertEqual(later.status, "denied")
+        self.assertEqual(later.error, "permission_missing_or_revoked")
 
     def test_proposal_and_unconfirmed_action_cannot_execute(self):
         permissions = PermissionRegistry()
