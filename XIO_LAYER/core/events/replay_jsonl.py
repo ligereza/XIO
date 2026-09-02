@@ -4,14 +4,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+from threading import RLock
 from typing import Any, Callable, Iterable, Mapping
 
+from ..file_lock import exclusive_file_lock
 from .application import ApplicationEvent, ApplicationEventContractError
 
 
 class DuplicateApplicationEventError(ValueError):
     """The same event id appeared with a different fingerprint."""
+
+
+class ApplicationEventLogPersistenceError(ValueError):
+    """Raised when an application event JSONL log cannot persist safely."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,26 +35,42 @@ class ApplicationEventLog:
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = RLock()
+        self._lock_path = self.path.with_name(self.path.name + ".lock")
 
     def append(self, event: ApplicationEvent) -> bool:
-        for existing in self._read_events():
-            if existing.event_id == event.event_id:
-                if existing.fingerprint != event.fingerprint:
-                    raise DuplicateApplicationEventError(event.event_id)
-                return False
-        with self.path.open("a", encoding="utf-8", newline="\n") as stream:
-            stream.write(json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True) + "\n")
-        return True
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                for existing in self._read_events():
+                    if existing.event_id == event.event_id:
+                        if existing.fingerprint != event.fingerprint:
+                            raise DuplicateApplicationEventError(event.event_id)
+                        return False
+                try:
+                    encoded = json.dumps(event.to_dict(), ensure_ascii=False, sort_keys=True, allow_nan=False)
+                    with self.path.open("a", encoding="utf-8", newline="\n") as stream:
+                        stream.write(encoded + "\n")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                except (OSError, TypeError, ValueError) as exc:
+                    raise ApplicationEventLogPersistenceError(
+                        "application event could not be persisted"
+                    ) from exc
+                return True
 
     def events(self) -> tuple[ApplicationEvent, ...]:
-        return tuple(self._read_events())
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                return tuple(self._read_events())
 
     def replay(
         self,
         reducer: Callable[[Mapping[str, Any], ApplicationEvent], Mapping[str, Any]],
         initial_state: Mapping[str, Any] | None = None,
     ) -> ApplicationReplayResult:
-        return replay_events(self._read_events(), reducer, initial_state)
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                return replay_events(self._read_events(), reducer, initial_state)
 
     def _read_events(self) -> Iterable[ApplicationEvent]:
         if not self.path.exists():

@@ -50,6 +50,9 @@ metadata; the resulting event remains replayable through `ApplicationEventLog`.
 `adapters/local_source.py` supplies a read-only JSONL source that deduplicates
 and replays records by ingestion sequence before handing them to that selected
 route. It does not choose a route or send a message.
+`EventLog` and `ApplicationEventLog` persist records with fsync and the shared
+sidecar lock, reload current state before append, and expose persistence errors
+without changing replay into action execution.
 `JsonLineAuditLedger` persists the handoff audit chain across restarts and
 rejects malformed or tampered entries on reload.
 Delivery is a distinct caller action through `deliver_adapter_handoff`; its

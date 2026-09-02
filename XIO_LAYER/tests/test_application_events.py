@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -119,6 +121,41 @@ class ApplicationEventContractTests(unittest.TestCase):
 
 
 class ApplicationEventReplayTests(unittest.TestCase):
+    def test_concurrent_processes_keep_identical_event_id_idempotent(self):
+        event = make_event("event-1", 1, 10)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            wire_path = Path(directory) / "event.json"
+            wire_path.write_text(json.dumps(event.to_dict()), encoding="utf-8")
+            script = (
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "from XIO_LAYER.core.events import ApplicationEvent, ApplicationEventLog\n"
+                "wire = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))\n"
+                "print(ApplicationEventLog(sys.argv[1]).append(ApplicationEvent.from_dict(wire)))\n"
+            )
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path), str(wire_path)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for _ in range(4)
+            ]
+            results = []
+            for process in processes:
+                stdout, stderr = process.communicate()
+                self.assertEqual(process.returncode, 0, stderr)
+                results.append(stdout.strip() == "True")
+
+            loaded = ApplicationEventLog(path)
+            loaded_events = loaded.events()
+
+        self.assertEqual(results.count(True), 1)
+        self.assertEqual(results.count(False), 3)
+        self.assertEqual([item.to_dict() for item in loaded_events], [event.to_dict()])
+
     def test_jsonl_replay_is_deterministic_by_sequence_and_skips_duplicate(self):
         first = make_event("event-1", 1, 10, received_offset=2)
         second = make_event("event-2", 2, 20, received_offset=1)

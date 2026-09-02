@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -39,6 +42,44 @@ def make_event(event_id: str, value: int, occurred_offset: int = 0, received_off
 
 
 class EventAndReplayTests(unittest.TestCase):
+    def test_persistent_event_log_assigns_unique_sequences_across_processes(self):
+        events = [make_event(f"event-{number}", number) for number in range(1, 5)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            wire_path = Path(directory) / "events.json"
+            wire_path.write_text(json.dumps([event.to_dict() for event in events]), encoding="utf-8")
+            script = (
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "from XIO_LAYER.core.contracts import Event\n"
+                "from XIO_LAYER.core.events import EventLog\n"
+                "wire = json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))\n"
+                "record = EventLog(sys.argv[1]).append(Event.from_dict(wire[int(sys.argv[3])]))\n"
+                "print(record.sequence)\n"
+            )
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-c", script, str(path), str(wire_path), str(index)],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for index in range(4)
+            ]
+            sequences = []
+            for process in processes:
+                stdout, stderr = process.communicate()
+                self.assertEqual(process.returncode, 0, stderr)
+                sequences.append(int(stdout.strip()))
+
+            loaded = EventLog(path)
+            loaded_records = loaded.records()
+            loaded_length = len(loaded)
+
+        self.assertEqual(sorted(sequences), [1, 2, 3, 4])
+        self.assertEqual([record.sequence for record in loaded_records], [1, 2, 3, 4])
+        self.assertEqual(loaded_length, 4)
+
     def test_duplicate_identical_event_is_idempotent_and_conflict_is_rejected(self):
         log = EventLog()
         event = make_event("event-1", 2)

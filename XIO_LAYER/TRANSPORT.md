@@ -147,7 +147,9 @@ and `ArtNetEnvelope`. It does not read a socket or discover an application:
 `core/events/replay_jsonl.py` provides `ApplicationEventLog` and `replay_jsonl`.
 JSONL replay sorts by `sequence`, then received timestamp and event id, skips
 identical duplicate ids, and rejects a conflicting fingerprint. The reducer
-only returns state. No replay path creates or dispatches an action.
+only returns state. Appends are fsynced and serialized through the shared
+sidecar lock, including the read-before-dedupe step. No replay path creates or
+dispatches an action.
 
 `TransportMessage.from_dict()` is the shared strict wire restoration contract.
 It validates the exact message and endpoint fields, timestamps, sequence and
