@@ -255,14 +255,16 @@ class ExplicitAction:
     action_id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
+        for field_name in ("proposal_id", "action_type", "actor_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.parameters, Mapping):
+            raise ValueError("parameters must be a mapping")
         object.__setattr__(self, "requested_at", require_utc(self.requested_at, "requested_at"))
         object.__setattr__(self, "parameters", _json_copy(self.parameters))
-        if not self.proposal_id.strip():
-            raise ValueError("proposal_id cannot be empty")
-        if not self.actor_id.strip():
-            raise ValueError("actor_id cannot be empty")
-        if not self.action_type.strip():
-            raise ValueError("action_type cannot be empty")
+        if not isinstance(self.explicitly_confirmed, bool):
+            raise ValueError("explicitly_confirmed must be a boolean")
 
 
 @dataclass(frozen=True, slots=True)

@@ -181,6 +181,26 @@ class EventAndReplayTests(unittest.TestCase):
 
 
 class PermissionAuditAndTransportTests(unittest.TestCase):
+    def test_truthy_non_boolean_confirmation_is_rejected(self):
+        with self.assertRaises(ValueError):
+            ExplicitAction(
+                proposal_id="proposal-1",
+                action_type="device.write",
+                parameters={},
+                actor_id="user-1",
+                requested_at=T0,
+                explicitly_confirmed="false",
+            )
+        with self.assertRaises(ValueError):
+            ExplicitAction(
+                proposal_id="proposal-1",
+                action_type="device.write",
+                parameters=[],
+                actor_id="user-1",
+                requested_at=T0,
+                explicitly_confirmed=True,
+            )
+
     def test_revoked_permission_denies_pending_explicit_action(self):
         permissions = PermissionRegistry()
         audit = AuditLedger()
