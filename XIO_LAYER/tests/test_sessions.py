@@ -293,6 +293,63 @@ class SessionCheckpointTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             restored.initiate_handshake("bob")
 
+    def test_receiver_checkpoint_preserves_duplicate_conflict_and_sequence_history(self):
+        sender, receiver, _, ack, _ = connected_pair()
+        self.assertTrue(sender.complete_handshake(ack))
+        signal = SignalEnvelope(
+            source_peer_id="alice",
+            session_id="application-session",
+            channel="signals",
+            sequence=1,
+            payload={"value": 7},
+            created_at=T0,
+            message_id="signal-received-persisted",
+        )
+        self.assertTrue(sender.fan_out(signal, ["bob"])["bob"].accepted)
+        self.assertTrue(receiver.receive_signal(signal, "alice").accepted)
+
+        checkpoint = PeerSessionCheckpoint.from_dict(receiver.export_checkpoint().to_dict())
+        fresh_transport = InMemoryTransport()
+        restored_receiver = PeerSessionManager.from_checkpoint(checkpoint, fresh_transport)
+        fresh_sender = PeerSessionManager(
+            peer("alice"),
+            fresh_transport,
+            authorized_peers=[peer("bob")],
+        )
+        attempt = fresh_sender.initiate_handshake("bob")
+        new_ack = restored_receiver.accept_handshake(attempt.request)
+        self.assertTrue(fresh_sender.complete_handshake(new_ack))
+
+        duplicate = restored_receiver.receive_signal(signal, "alice")
+        conflict = SignalEnvelope(
+            source_peer_id="alice",
+            session_id=signal.session_id,
+            channel=signal.channel,
+            sequence=signal.sequence,
+            payload={"value": 99},
+            created_at=signal.created_at,
+            message_id=signal.message_id,
+        )
+        stale = SignalEnvelope(
+            source_peer_id="alice",
+            session_id=signal.session_id,
+            channel=signal.channel,
+            sequence=1,
+            payload={"value": 8},
+            created_at=signal.created_at,
+            message_id="signal-stale-after-restore",
+        )
+
+        self.assertEqual(duplicate.status, AckStatus.DUPLICATE.value)
+        self.assertEqual(
+            restored_receiver.receive_signal(conflict, "alice").status,
+            AckStatus.IDEMPOTENCY_CONFLICT.value,
+        )
+        self.assertEqual(
+            restored_receiver.receive_signal(stale, "alice").status,
+            AckStatus.OUT_OF_SEQUENCE.value,
+        )
+
     def test_checkpoint_restore_rejects_malformed_or_inconsistent_records(self):
         sender, _, _, _, _ = connected_pair()
         wire = sender.export_checkpoint().to_dict()
