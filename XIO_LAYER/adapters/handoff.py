@@ -61,6 +61,10 @@ class PrivacyPolicy:
 
         if not isinstance(event, ApplicationEvent):
             raise PrivacyPolicyError("privacy projection accepts ApplicationEvent only")
+        if not isinstance(selection, AdapterSelection):
+            raise TypeError("selection must be an AdapterSelection")
+        if not handoff_id_is_valid(handoff_id):
+            raise PrivacyPolicyError("handoff_id must be a non-empty ASCII identifier")
         if self.allowed_payload_keys and not isinstance(event.payload, Mapping):
             raise PrivacyPolicyError("allowlisted payload keys require a mapping payload")
         if not isinstance(event.provenance, Mapping):

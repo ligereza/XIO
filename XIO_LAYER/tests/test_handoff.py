@@ -272,6 +272,35 @@ class AdapterHandoffTests(unittest.TestCase):
         with self.assertRaisesRegex(PrivacyPolicyError, "allowed_payload_keys"):
             PrivacyPolicy(allowed_payload_keys=["safe", 7])
 
+    def test_privacy_projection_rejects_invalid_selection_and_handoff_id(self):
+        event = ApplicationEvent(
+            event_id="event-privacy-input",
+            source_app="first-app",
+            event_type="cue.event",
+            channel="signals",
+            payload={"safe": True},
+            source_timestamp=T0,
+            received_timestamp=T0,
+            session_id="private-session",
+            peer_id="private-peer",
+            sequence=1,
+            provenance={},
+        )
+        policy = PrivacyPolicy()
+        with self.assertRaises(TypeError):
+            policy.project(event, selection=object(), handoff_id="handoff-1")
+        registry, _, _ = self.make_registry()
+        selection = registry.select_candidate(
+            source_app="first-app",
+            event_type="cue.event",
+            caller_id="operator-1",
+            plan=registry.route_plan("cue.event"),
+            selection_id="selection-privacy-input",
+            selected_at=T0,
+        )
+        with self.assertRaisesRegex(PrivacyPolicyError, "handoff_id"):
+            policy.project(event, selection=selection, handoff_id="bad id")
+
     def test_delivery_result_constructor_rejects_incoherent_receipts(self):
         with self.assertRaisesRegex(TypeError, "DeliveryReceipt"):
             AdapterHandoffDelivery("handoff-1", "accepted", object(), T0)

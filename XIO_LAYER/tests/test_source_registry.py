@@ -7,6 +7,7 @@ import unittest
 
 from XIO_LAYER.adapters import (
     DuplicateSourceAdapterError,
+    AdapterSelection,
     InvalidSourceAdapterError,
     ProtocolEventAdapter,
     SourceAdapterRegistry,
@@ -291,6 +292,20 @@ class SourceAdapterRegistryTests(unittest.TestCase):
                 plan=[],
             )
         self.assertEqual(adapter.calls, [])
+
+    def test_selection_rejects_ambiguous_capability_collections(self):
+        selection_args = {
+            "selection_id": "selection-1",
+            "source_app": "adobe",
+            "event_type": "timeline.cue",
+            "plan_fingerprint": "plan-fingerprint",
+            "caller_id": "operator-1",
+            "selected_at": T0,
+        }
+        with self.assertRaises(InvalidSourceAdapterError):
+            AdapterSelection(**selection_args, required_capabilities="source.observe")
+        with self.assertRaises(InvalidSourceAdapterError):
+            AdapterSelection(**selection_args, required_capabilities={"source.observe": True})
 
     def test_registered_declaration_is_immutable_after_adapter_metadata_changes(self):
         registry = SourceAdapterRegistry()

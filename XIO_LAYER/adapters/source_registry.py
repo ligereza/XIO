@@ -80,7 +80,7 @@ class AdapterSelection:
         _validate_identifier(self.caller_id, "caller_id")
         if not isinstance(self.plan_fingerprint, str) or not self.plan_fingerprint.strip():
             raise InvalidSourceAdapterError("plan_fingerprint must be a non-empty string")
-        normalized = tuple(sorted(set(self.required_capabilities)))
+        normalized = tuple(sorted(_read_query_identifiers(self.required_capabilities)))
         for value in normalized:
             _validate_identifier(value, "required_capability")
         object.__setattr__(self, "required_capabilities", normalized)
@@ -332,7 +332,7 @@ def _read_identifier_set(adapter: SourceAdapter, field_name: str, *, allow_empty
 
 
 def _read_query_identifiers(values: frozenset[str] | set[str] | tuple[str, ...]) -> frozenset[str]:
-    if isinstance(values, str) or values is None:
+    if isinstance(values, (str, bytes, Mapping)) or values is None:
         raise InvalidSourceAdapterError("required_capabilities must be an iterable of identifiers")
     try:
         normalized = frozenset(values)
