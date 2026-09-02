@@ -7,6 +7,7 @@ import unittest
 from XIO_LAYER.core.transport import (
     ArtNetEnvelope,
     ConnectionState,
+    ConnectionStatus,
     DeliveryStatus,
     Endpoint,
     InMemoryTransport,
@@ -38,6 +39,26 @@ def message(endpoint, *, sequence=None, envelope=None, message_id="message-1", i
 
 
 class TransportTests(unittest.TestCase):
+    def test_direct_contracts_reject_coercible_invalid_types(self):
+        with self.assertRaises(ValueError):
+            Endpoint("memory", "queue", port=True)
+        with self.assertRaises(ValueError):
+            message(Endpoint("memory", "queue"), sequence=True)
+        with self.assertRaises(ValueError):
+            TransportMessage(
+                source="xio-layer-test",
+                destination=Endpoint("memory", "queue"),
+                channel="control",
+                payload=[],
+            )
+        with self.assertRaises(ValueError):
+            ConnectionStatus(
+                endpoint=Endpoint("memory", "queue"),
+                state=ConnectionState.CONNECTED,
+                checked_at=T0,
+                latency_ms=float("nan"),
+            )
+
     def test_message_wire_round_trip_is_strict_and_does_not_send(self):
         endpoint = Endpoint("memory", "queue")
         original = message(endpoint, sequence=1, message_id="round-trip")

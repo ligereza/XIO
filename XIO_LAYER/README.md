@@ -58,6 +58,8 @@ and scalar types emitted by their serializers; malformed records are rejected
 before replay or LUCIDA/MULTI restoration.
 `ConnectionStatus.from_dict()` applies the same fail-closed rule to measured
 connectivity state, including endpoint fields, counters, latency and sequence.
+The direct constructors enforce the same invariants, so restored and
+programmatically created transport observations cannot diverge in type rules.
 `CheckpointStore` keeps atomic checkpoint files under a directory lock, treats
 an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a

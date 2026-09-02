@@ -69,10 +69,16 @@ class Endpoint:
     port: int | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.scheme, str) or not isinstance(self.address, str):
+            raise ValueError("endpoint scheme and address must be strings")
         scheme = self.scheme.strip().lower()
         if not scheme or not self.address.strip():
             raise ValueError("endpoint scheme and address cannot be empty")
         object.__setattr__(self, "scheme", scheme)
+        if self.medium is not None and not isinstance(self.medium, (NetworkMedium, str)):
+            raise ValueError("endpoint medium must be a string")
+        if self.scope is not None and not isinstance(self.scope, (NetworkScope, str)):
+            raise ValueError("endpoint scope must be a string")
         medium = NetworkMedium.UNKNOWN if self.medium is None else NetworkMedium(self.medium)
         scope = (
             NetworkScope.LOCAL
@@ -83,7 +89,9 @@ class Endpoint:
         )
         object.__setattr__(self, "medium", medium)
         object.__setattr__(self, "scope", scope)
-        if self.port is not None and not 1 <= self.port <= 65535:
+        if self.port is not None and (
+            isinstance(self.port, bool) or not isinstance(self.port, int) or not 1 <= self.port <= 65535
+        ):
             raise ValueError("endpoint port must be between 1 and 65535")
 
     @property
@@ -126,13 +134,25 @@ class TransportMessage:
     envelope: Any | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.destination, Endpoint):
+            raise ValueError("destination must be an Endpoint")
+        if not isinstance(self.source, str) or not isinstance(self.channel, str):
+            raise ValueError("source and channel must be strings")
+        if not isinstance(self.payload, Mapping):
+            raise ValueError("payload must be a mapping")
+        if not isinstance(self.message_id, str):
+            raise ValueError("message_id must be a string")
+        if self.idempotency_key is not None and not isinstance(self.idempotency_key, str):
+            raise ValueError("idempotency_key must be a string or null")
         object.__setattr__(self, "sent_at", require_utc(self.sent_at, "sent_at"))
         object.__setattr__(self, "payload", dict(self.payload))
         if not self.source.strip() or not self.channel.strip():
             raise ValueError("source and channel cannot be empty")
         if not self.message_id.strip():
             raise ValueError("message_id cannot be empty")
-        if self.sequence is not None and self.sequence < 1:
+        if self.sequence is not None and (
+            isinstance(self.sequence, bool) or not isinstance(self.sequence, int) or self.sequence < 1
+        ):
             raise ValueError("sequence must be positive")
 
     @property
@@ -277,13 +297,30 @@ class ConnectionStatus:
     reason: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.endpoint, Endpoint):
+            raise ValueError("endpoint must be an Endpoint")
         if not isinstance(self.state, ConnectionState):
             raise ValueError("state must be a ConnectionState")
         object.__setattr__(self, "checked_at", require_utc(self.checked_at, "checked_at"))
-        if self.latency_ms is not None and self.latency_ms < 0:
+        if self.latency_ms is not None and (
+            isinstance(self.latency_ms, bool)
+            or not isinstance(self.latency_ms, (int, float))
+            or not math.isfinite(self.latency_ms)
+            or self.latency_ms < 0
+        ):
             raise ValueError("latency_ms cannot be negative")
-        if min(self.packets_sent, self.packets_received, self.packets_lost) < 0:
-            raise ValueError("packet counters cannot be negative")
+        for field_name in ("packets_sent", "packets_received", "packets_lost"):
+            counter = getattr(self, field_name)
+            if isinstance(counter, bool) or not isinstance(counter, int) or counter < 0:
+                raise ValueError("packet counters must be non-negative integers")
+        if self.last_sequence is not None and (
+            isinstance(self.last_sequence, bool)
+            or not isinstance(self.last_sequence, int)
+            or self.last_sequence < 1
+        ):
+            raise ValueError("last_sequence must be a positive integer or null")
+        if self.last_error is not None and not isinstance(self.last_error, str):
+            raise ValueError("last_error must be a string or null")
         if self.reason is not None and (not isinstance(self.reason, str) or not self.reason.strip()):
             raise ValueError("reason must be a non-empty string when provided")
 
