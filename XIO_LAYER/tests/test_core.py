@@ -7,7 +7,17 @@ import unittest
 
 from XIO_LAYER.adapters.xio import XioAdapter
 from XIO_LAYER.core.audit import ActionGate, AuditLedger, PermissionRegistry
-from XIO_LAYER.core.contracts import Checkpoint, Event, EventRecord, ExplicitAction, Proposal, Snapshot, TimestampError
+from XIO_LAYER.core.contracts import (
+    ActionResult,
+    AuditEntry,
+    Checkpoint,
+    Event,
+    EventRecord,
+    ExplicitAction,
+    Proposal,
+    Snapshot,
+    TimestampError,
+)
 from XIO_LAYER.core.events import DuplicateEventError, EventLog, replay_events
 from XIO_LAYER.core.snapshots import CheckpointStore, RecoveryManager, SnapshotProjector
 from XIO_LAYER.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
@@ -134,6 +144,28 @@ class EventAndReplayTests(unittest.TestCase):
 
 
 class PermissionAuditAndTransportTests(unittest.TestCase):
+    def test_action_and_audit_contracts_reject_ambiguous_types(self):
+        with self.assertRaises(ValueError):
+            Proposal("demo", "device.write", [], T0, "test")
+        with self.assertRaises(ValueError):
+            Proposal("demo", "device.write", {}, T0, "test", source_event_ids="event-1")
+        with self.assertRaises(ValueError):
+            Proposal("demo", "device.write", {}, T0, "test", source_event_ids=(1,))
+        with self.assertRaises(ValueError):
+            ExplicitAction("proposal-1", "device.write", {}, "user-1", T0, explicitly_confirmed=1)
+        with self.assertRaises(ValueError):
+            ActionResult("action-1", "succeeded", T0, T0, output=[])
+
+        audit = AuditLedger()
+        entry = audit.append("test", "subject-1", "recorded", {"safe": True}, "actor-1")
+        wire = entry.to_dict()
+        restored = AuditEntry.from_dict(wire)
+        self.assertEqual(restored, entry)
+        with self.assertRaises(ValueError):
+            AuditEntry.from_dict(dict(wire, details=[]))
+        with self.assertRaises(ValueError):
+            AuditEntry.from_dict(dict(wire, entry_hash="tampered"))
+
     def test_revoked_permission_denies_pending_explicit_action(self):
         permissions = PermissionRegistry()
         audit = AuditLedger()

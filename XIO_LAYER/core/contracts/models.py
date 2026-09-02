@@ -234,13 +234,23 @@ class Proposal:
     proposal_id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
+        for field_name in ("stream_id", "action_type", "reason", "proposal_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.parameters, Mapping):
+            raise ValueError("parameters must be a mapping")
         object.__setattr__(self, "created_at", require_utc(self.created_at, "created_at"))
         object.__setattr__(self, "parameters", _json_copy(self.parameters))
-        object.__setattr__(self, "source_event_ids", tuple(self.source_event_ids))
-        if not self.action_type.strip():
-            raise ValueError("action_type cannot be empty")
-        if not self.reason.strip():
-            raise ValueError("reason cannot be empty")
+        if isinstance(self.source_event_ids, (str, bytes, Mapping)):
+            raise ValueError("source_event_ids must be a collection of strings")
+        try:
+            source_event_ids = tuple(self.source_event_ids)
+        except TypeError as exc:
+            raise ValueError("source_event_ids must be a collection of strings") from exc
+        if any(not isinstance(event_id, str) or not event_id.strip() for event_id in source_event_ids):
+            raise ValueError("source_event_ids must contain non-empty strings")
+        object.__setattr__(self, "source_event_ids", source_event_ids)
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,14 +270,16 @@ class ExplicitAction:
     action_id: str = field(default_factory=lambda: str(uuid4()))
 
     def __post_init__(self) -> None:
+        for field_name in ("proposal_id", "action_type", "actor_id"):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if not isinstance(self.parameters, Mapping):
+            raise ValueError("parameters must be a mapping")
         object.__setattr__(self, "requested_at", require_utc(self.requested_at, "requested_at"))
         object.__setattr__(self, "parameters", _json_copy(self.parameters))
-        if not self.proposal_id.strip():
-            raise ValueError("proposal_id cannot be empty")
-        if not self.actor_id.strip():
-            raise ValueError("actor_id cannot be empty")
-        if not self.action_type.strip():
-            raise ValueError("action_type cannot be empty")
+        if not isinstance(self.explicitly_confirmed, bool):
+            raise ValueError("explicitly_confirmed must be a boolean")
 
 
 @dataclass(frozen=True, slots=True)
@@ -282,11 +294,17 @@ class ActionResult:
     error: str | None = None
 
     def __post_init__(self) -> None:
+        if not isinstance(self.action_id, str) or not self.action_id.strip():
+            raise ValueError("action_id must be a non-empty string")
+        if not isinstance(self.status, str) or self.status not in {"succeeded", "failed", "denied"}:
+            raise ValueError("status must be succeeded, failed or denied")
+        if not isinstance(self.output, Mapping):
+            raise ValueError("output must be a mapping")
+        if self.error is not None and not isinstance(self.error, str):
+            raise ValueError("error must be a string or null")
         object.__setattr__(self, "started_at", require_utc(self.started_at, "started_at"))
         object.__setattr__(self, "finished_at", require_utc(self.finished_at, "finished_at"))
         object.__setattr__(self, "output", _json_copy(self.output))
-        if self.status not in {"succeeded", "failed", "denied"}:
-            raise ValueError("status must be succeeded, failed or denied")
         if self.finished_at < self.started_at:
             raise TimestampError("finished_at cannot precede started_at")
 
@@ -306,8 +324,23 @@ class AuditEntry:
     entry_hash: str
 
     def __post_init__(self) -> None:
+        for field_name in (
+            "audit_id",
+            "event_type",
+            "subject_id",
+            "outcome",
+            "previous_hash",
+            "entry_hash",
+        ):
+            value = getattr(self, field_name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field_name} must be a non-empty string")
+        if self.actor_id is not None and not isinstance(self.actor_id, str):
+            raise ValueError("actor_id must be a string or null")
         object.__setattr__(self, "recorded_at", require_utc(self.recorded_at, "recorded_at"))
         object.__setattr__(self, "details", _json_copy(self.details))
+        if self.entry_hash != content_hash(self.unsigned_dict()):
+            raise ValueError("entry_hash does not match audit entry")
 
     def unsigned_dict(self) -> dict[str, Any]:
         return {
@@ -325,6 +358,42 @@ class AuditEntry:
         data = self.unsigned_dict()
         data["entry_hash"] = self.entry_hash
         return data
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "AuditEntry":
+        if not isinstance(data, Mapping):
+            raise ValueError("audit entry must be a mapping")
+        required = {
+            "audit_id",
+            "recorded_at",
+            "event_type",
+            "subject_id",
+            "actor_id",
+            "outcome",
+            "details",
+            "previous_hash",
+            "entry_hash",
+        }
+        if set(data) != required:
+            raise ValueError("audit entry fields do not match the contract")
+        for field_name in ("audit_id", "recorded_at", "event_type", "subject_id", "outcome", "previous_hash", "entry_hash"):
+            if not isinstance(data[field_name], str) or not data[field_name].strip():
+                raise ValueError(f"audit entry {field_name} must be a non-empty string")
+        if data["actor_id"] is not None and not isinstance(data["actor_id"], str):
+            raise ValueError("audit entry actor_id must be a string or null")
+        if not isinstance(data["details"], Mapping):
+            raise ValueError("audit entry details must be a mapping")
+        return cls(
+            audit_id=data["audit_id"],
+            recorded_at=datetime.fromisoformat(data["recorded_at"]),
+            event_type=data["event_type"],
+            subject_id=data["subject_id"],
+            actor_id=data["actor_id"],
+            outcome=data["outcome"],
+            details=data["details"],
+            previous_hash=data["previous_hash"],
+            entry_hash=data["entry_hash"],
+        )
 
 
 @dataclass(frozen=True, slots=True)
