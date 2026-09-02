@@ -48,6 +48,8 @@ class SnapshotStore:
         self._lock = RLock()
 
     def save(self, snapshot: Snapshot) -> Snapshot:
+        if not isinstance(snapshot, Snapshot):
+            raise TypeError("save accepts Snapshot only")
         with self._lock:
             current = self._snapshots.get(snapshot.stream_id)
             if current is not None and snapshot.version < current.version:

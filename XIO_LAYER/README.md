@@ -80,6 +80,8 @@ an identical stream/version checkpoint as idempotent, and rejects a different
 state at an already occupied version. `RecoveryManager` also validates a
 checkpoint against the event-log prefix before using it; an inconsistent
 checkpoint is reported and replaced by a full state-only replay.
+`SnapshotStore.save()` and `CheckpointStore.save()` reject non-snapshot inputs
+before mutating memory or acquiring the checkpoint file lock.
 Checkpoint restoration requires the exact serialized fields, scalar types and
 state hash emitted by `Checkpoint.to_dict()`.
 `JsonLineAuditLedger` persists the handoff audit chain across restarts and

@@ -45,6 +45,8 @@ class CheckpointStore:
         return self.directory / f"{self._stream_key(checkpoint.stream_id)}-{checkpoint.sequence:020d}.json"
 
     def save(self, snapshot: Snapshot) -> Checkpoint:
+        if not isinstance(snapshot, Snapshot):
+            raise TypeError("save accepts Snapshot only")
         with self._lock:
             with exclusive_file_lock(self._lock_path):
                 checkpoint = Checkpoint.from_snapshot(snapshot)

@@ -17,6 +17,7 @@ from XIO_LAYER.core.snapshots import (
     CheckpointConflictError,
     CheckpointStore,
     RecoveryManager,
+    SnapshotStore,
     SnapshotProjector,
 )
 from XIO_LAYER.core.transport import Endpoint, InMemoryTransport, TransportMessage, TransportPolicy
@@ -48,6 +49,18 @@ def make_event(event_id: str, value: int, occurred_offset: int = 0, received_off
 
 
 class EventAndReplayTests(unittest.TestCase):
+    def test_snapshot_stores_reject_wrong_type_before_mutation(self):
+        in_memory = SnapshotStore()
+        with self.assertRaisesRegex(TypeError, "Snapshot"):
+            in_memory.save(object())
+        self.assertIsNone(in_memory.latest("demo"))
+
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoints = CheckpointStore(Path(directory) / "checkpoints")
+            with self.assertRaisesRegex(TypeError, "Snapshot"):
+                checkpoints.save(object())
+            self.assertFalse(any(Path(directory).rglob("*.json")))
+
     def test_event_log_append_rejects_wrong_type_before_mutation(self):
         log = EventLog()
 
