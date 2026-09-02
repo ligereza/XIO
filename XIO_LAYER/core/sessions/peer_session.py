@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from functools import wraps
+import json
 from threading import RLock
 from typing import Any, Iterable, Mapping
 from uuid import uuid4
@@ -105,6 +106,13 @@ def _capabilities(value: Any, field_name: str) -> frozenset[str]:
     if any(not isinstance(item, str) or not item.strip() for item in values):
         raise ValueError(f"{field_name} must contain non-empty strings")
     return frozenset(values)
+
+
+def _require_json_safe(value: Any, field_name: str) -> None:
+    try:
+        json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be JSON-safe") from exc
 
 
 @dataclass(frozen=True, slots=True)
@@ -302,17 +310,24 @@ class SignalEnvelope:
             raise ValueError("payload must be a mapping")
         if self.idempotency_key is not None and not isinstance(self.idempotency_key, str):
             raise ValueError("idempotency_key must be a string or null")
-        if (
-            self.protocol_envelope is not None
-            and not isinstance(self.protocol_envelope, Mapping)
-            and not hasattr(self.protocol_envelope, "to_dict")
-        ):
-            raise ValueError("protocol_envelope must be a mapping, serializable envelope or null")
         if not isinstance(self.metadata, Mapping):
             raise ValueError("metadata must be a mapping")
+        payload = dict(self.payload)
+        metadata = dict(self.metadata)
+        _require_json_safe(payload, "payload")
+        _require_json_safe(metadata, "metadata")
+        protocol_wire = self.protocol_envelope
+        if protocol_wire is not None and hasattr(protocol_wire, "to_dict"):
+            try:
+                protocol_wire = protocol_wire.to_dict()
+            except Exception as exc:
+                raise ValueError("protocol_envelope could not be serialized") from exc
+        if protocol_wire is not None and not isinstance(protocol_wire, Mapping):
+            raise ValueError("protocol_envelope must be a mapping, serializable envelope or null")
+        _require_json_safe(protocol_wire, "protocol_envelope")
         object.__setattr__(self, "created_at", require_utc(self.created_at, "created_at"))
-        object.__setattr__(self, "payload", dict(self.payload))
-        object.__setattr__(self, "metadata", dict(self.metadata))
+        object.__setattr__(self, "payload", payload)
+        object.__setattr__(self, "metadata", metadata)
 
     @property
     def fingerprint(self) -> str:

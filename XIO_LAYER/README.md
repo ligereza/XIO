@@ -99,6 +99,8 @@ wire restoration rejects missing, extra or coercible fields before any state
 transition.
 The session manager also serializes its in-memory state transitions, so
 per-peer idempotency is preserved when callers fan out concurrently.
+Signal payload, metadata and protocol-envelope representations are validated
+as strict JSON before they can participate in fingerprinting or replay.
 
 ## Contrato de consumo LUCIDA/MULTI
 

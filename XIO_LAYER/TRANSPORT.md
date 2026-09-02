@@ -201,6 +201,8 @@ caller registers peer + endpoint
   are rejected before a session can be changed;
 - `SignalEnvelope.from_dict()` restores only JSON-shaped protocol envelopes;
   restoring a signal never creates an action or delivers a message;
+- signal payloads, metadata and serialized protocol envelopes are checked with
+  strict JSON rules at construction time, including rejection of `NaN`;
 - only authorized peers can connect; unknown peers are rejected;
 - major protocol version mismatch is rejected; minor versions may interoperate;
 - `SignalEnvelope` preserves `message_id`, `sequence`, source/session metadata

@@ -174,6 +174,28 @@ class SessionContractTests(unittest.TestCase):
                 sequence=False,
             )
 
+    def test_signal_payload_metadata_and_envelope_must_be_json_safe(self):
+        invalid_signals = [
+            {"payload": {"raw": b"bytes"}},
+            {"payload": {"not_a_number": float("nan")}},
+            {"metadata": {"value": object()}},
+            {"protocol_envelope": {"not_a_number": float("nan")}},
+        ]
+        for overrides in invalid_signals:
+            with self.subTest(overrides=overrides):
+                arguments = {
+                    "source_peer_id": "alice",
+                    "session_id": "session-1",
+                    "channel": "signals",
+                    "sequence": 1,
+                    "payload": {"value": 7},
+                    "created_at": T0,
+                    "message_id": "signal-json-invalid",
+                }
+                arguments.update(overrides)
+                with self.assertRaises(ValueError):
+                    SignalEnvelope(**arguments)
+
 
 class HandshakeTests(unittest.TestCase):
     def test_explicit_handshake_connects_two_authorized_peers(self):
