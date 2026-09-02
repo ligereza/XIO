@@ -229,6 +229,8 @@ caller registers peer + endpoint
   cleared on disconnect, revocation, handshake start or handshake failure;
 - revocation changes the peer to `blocked` and prevents later delivery;
 - disconnect changes the peer to `disconnected` and prevents later delivery;
+- reauthorizing an existing `peer_id` replaces its endpoint, clears negotiated
+  capabilities and invalidates pending handshakes before a fresh connection;
 - `PeerSessionManager.export_checkpoint()` captures authorized peers,
   revocations, delivery fingerprints and sequence counters without writing or
   sending; `from_checkpoint()` restores that evidence but requires a fresh

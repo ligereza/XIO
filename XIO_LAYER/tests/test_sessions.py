@@ -280,6 +280,35 @@ class SessionCheckpointTests(unittest.TestCase):
 
 
 class HandshakeTests(unittest.TestCase):
+    def test_reauthorization_refreshes_endpoint_and_invalidates_pending_handshake(self):
+        alice = peer("alice")
+        old_bob = peer("bob", port=1001)
+        new_bob = peer("bob", port=1002)
+        transport = InMemoryTransport()
+        sender = PeerSessionManager(alice, transport, authorized_peers=[old_bob])
+
+        old_attempt = sender.initiate_handshake("bob")
+        sender.authorize_peer(new_bob)
+
+        self.assertEqual(sender.state("bob"), PeerSessionState.DISCONNECTED)
+        with self.assertRaises(ValueError):
+            sender.complete_handshake(
+                HandshakeAck(
+                    request_id=old_attempt.request.request_id,
+                    session_id=old_attempt.request.session_id,
+                    responder_peer_id="bob",
+                    protocol_version="1.0",
+                    accepted=True,
+                    responded_at=T0,
+                    ack_id="stale-ack",
+                )
+            )
+
+        new_attempt = sender.initiate_handshake("bob")
+
+        self.assertEqual(new_attempt.receipt.status, DeliveryStatus.ACCEPTED)
+        self.assertEqual(transport.messages()[-1].destination.port, 1002)
+
     def test_explicit_handshake_connects_two_authorized_peers(self):
         alice_session, bob_session, transport, ack, attempt = connected_pair()
 

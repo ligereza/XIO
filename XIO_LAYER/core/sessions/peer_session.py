@@ -815,7 +815,19 @@ class PeerSessionManager:
         self.policy.validate(peer.endpoint)
         self._peers[peer.peer_id] = peer
         self._revoked.discard(peer.peer_id)
-        self._sessions.setdefault(peer.peer_id, _PeerSession(peer=peer, session_id=""))
+        session = self._sessions.get(peer.peer_id)
+        if session is None:
+            self._sessions[peer.peer_id] = _PeerSession(peer=peer, session_id="")
+        else:
+            session.peer = peer
+            session.session_id = ""
+            session.state = PeerSessionState.DISCONNECTED
+            session.negotiated_capabilities = frozenset()
+        self._pending = {
+            request_id: pending_peer_id
+            for request_id, pending_peer_id in self._pending.items()
+            if pending_peer_id != peer.peer_id
+        }
 
     @_synchronized
     def revoke_peer(self, peer_id: str) -> None:
