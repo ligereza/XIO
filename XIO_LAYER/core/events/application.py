@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime
 import base64
+import math
 from typing import Any, Mapping
 from uuid import uuid4
 
@@ -18,7 +19,11 @@ class ApplicationEventContractError(ValueError):
 def encode_value(value: Any) -> Any:
     """Encode JSON values and bytes without changing their information."""
 
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ApplicationEventContractError("non-finite numbers are not JSON-safe")
         return value
     if isinstance(value, bytes):
         return {
@@ -90,6 +95,7 @@ class ApplicationEvent:
         self.payload = deepcopy(payload)
         self.provenance = deepcopy(dict(provenance))
         encoded_payload = encode_value(self.payload)
+        encode_value(self.provenance)
         computed_hash = content_hash(encoded_payload)
         if raw_hash is not None and raw_hash != computed_hash:
             raise ApplicationEventContractError("raw_hash does not match payload")

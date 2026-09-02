@@ -73,6 +73,23 @@ class ApplicationEventContractTests(unittest.TestCase):
         with self.assertRaises(ApplicationEventContractError):
             ApplicationEvent(**{**arguments, "sequence": 1, "provenance": []})
 
+    def test_direct_constructor_rejects_non_json_payload_and_provenance(self):
+        arguments = {
+            "source_app": "test-app",
+            "event_type": "test.value",
+            "channel": "signals",
+            "source_timestamp": T0,
+            "received_timestamp": T0,
+            "session_id": "session-1",
+            "peer_id": "peer-1",
+            "sequence": 1,
+            "provenance": {},
+        }
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**arguments, payload={"value": float("nan")})
+        with self.assertRaises(ApplicationEventContractError):
+            ApplicationEvent(**{**arguments, "payload": {}, "provenance": {"unsafe": object()}})
+
     def test_restore_requires_exact_typed_application_event_contract(self):
         event = make_event("event-restore", 1, 10)
         wire = event.to_dict()

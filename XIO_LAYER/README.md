@@ -62,6 +62,9 @@ file lock or touching in-memory or on-disk state.
 `Event.from_dict()` and `ApplicationEvent.from_dict()` require the exact fields
 and scalar types emitted by their serializers; malformed records are rejected
 before replay or LUCIDA/MULTI restoration.
+`ApplicationEvent` also rejects non-finite numbers and unsupported provenance
+values at construction, so a built event is already safe to fingerprint and
+serialize.
 `ConnectionStatus.from_dict()` applies the same fail-closed rule to measured
 connectivity state, including endpoint fields, counters, latency and sequence.
 The direct constructors enforce the same invariants, so restored and
