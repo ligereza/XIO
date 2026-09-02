@@ -22,6 +22,16 @@ class SnapshotProjector:
         records: Iterable[EventRecord],
         base_snapshot: Snapshot | None = None,
     ) -> Snapshot:
+        if not isinstance(stream_id, str) or not stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        if base_snapshot is not None and not isinstance(base_snapshot, Snapshot):
+            raise TypeError("base_snapshot must be a Snapshot or None")
+        try:
+            records = tuple(records)
+        except TypeError as exc:
+            raise TypeError("records must be an iterable of EventRecord") from exc
+        if any(not isinstance(record, EventRecord) for record in records):
+            raise TypeError("records must contain EventRecord values only")
         records = tuple(sorted(records, key=lambda item: item.sequence))
         base_state = base_snapshot.state if base_snapshot is not None else self.initial_state
         replay = replay_events(records, self.reducer, base_state)
@@ -58,5 +68,7 @@ class SnapshotStore:
             return snapshot
 
     def latest(self, stream_id: str) -> Snapshot | None:
+        if not isinstance(stream_id, str) or not stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
         with self._lock:
             return self._snapshots.get(stream_id)

@@ -39,6 +39,8 @@ class CheckpointStore:
 
     @staticmethod
     def _stream_key(stream_id: str) -> str:
+        if not isinstance(stream_id, str) or not stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
         return hashlib.sha256(stream_id.encode("utf-8")).hexdigest()[:24]
 
     def _path(self, checkpoint: Checkpoint) -> Path:
@@ -93,6 +95,7 @@ class CheckpointStore:
         return sorted(self.directory.glob(f"{prefix}*.json"), reverse=True)
 
     def load_latest(self, stream_id: str) -> Checkpoint | None:
+        self._stream_key(stream_id)
         with self._lock:
             with exclusive_file_lock(self._lock_path):
                 self.last_issues = []
@@ -112,9 +115,16 @@ class RecoveryManager:
     """Resume from a valid checkpoint and replay only the remaining events."""
 
     def __init__(self, checkpoints: CheckpointStore):
+        if not isinstance(checkpoints, CheckpointStore):
+            raise TypeError("checkpoints must be a CheckpointStore")
         self.checkpoints = checkpoints
 
     def recover(self, stream_id: str, events: EventLog, projector: SnapshotProjector) -> RecoveryResult:
+        self.checkpoints._stream_key(stream_id)
+        if not isinstance(events, EventLog):
+            raise TypeError("events must be an EventLog")
+        if not isinstance(projector, SnapshotProjector):
+            raise TypeError("projector must be a SnapshotProjector")
         checkpoint = self.checkpoints.load_latest(stream_id)
         issues = list(self.checkpoints.last_issues)
         if checkpoint is not None:

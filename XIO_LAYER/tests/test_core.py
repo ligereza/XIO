@@ -61,6 +61,22 @@ class EventAndReplayTests(unittest.TestCase):
                 checkpoints.save(object())
             self.assertFalse(any(Path(directory).rglob("*.json")))
 
+    def test_recovery_boundaries_reject_invalid_inputs(self):
+        projector = SnapshotProjector(add_reducer)
+        with self.assertRaisesRegex(TypeError, "EventRecord"):
+            projector.project("demo", [object()])
+        with self.assertRaisesRegex(TypeError, "Snapshot"):
+            projector.project("demo", (), base_snapshot=object())
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = CheckpointStore(Path(directory) / "checkpoints")
+            with self.assertRaises(ValueError):
+                store.load_latest("")
+            with self.assertRaisesRegex(TypeError, "EventLog"):
+                RecoveryManager(store).recover("demo", object(), projector)
+            with self.assertRaisesRegex(TypeError, "checkpoints"):
+                RecoveryManager(object())
+
     def test_event_log_append_rejects_wrong_type_before_mutation(self):
         log = EventLog()
 
