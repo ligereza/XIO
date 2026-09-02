@@ -39,6 +39,8 @@ class ApplicationEventLog:
         self._lock_path = self.path.with_name(self.path.name + ".lock")
 
     def append(self, event: ApplicationEvent) -> bool:
+        if not isinstance(event, ApplicationEvent):
+            raise TypeError("append accepts ApplicationEvent only")
         with self._lock:
             with exclusive_file_lock(self._lock_path):
                 for existing in self._read_events():

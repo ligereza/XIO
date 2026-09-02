@@ -46,6 +46,16 @@ def reducer(state, event):
 
 
 class ApplicationEventContractTests(unittest.TestCase):
+    def test_event_log_append_rejects_wrong_type_before_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            log = ApplicationEventLog(path)
+
+            with self.assertRaisesRegex(TypeError, "ApplicationEvent"):
+                log.append(object())
+
+            self.assertFalse(path.exists())
+
     def test_direct_constructor_rejects_boolean_sequence_and_non_mapping_provenance(self):
         arguments = {
             "source_app": "test-app",

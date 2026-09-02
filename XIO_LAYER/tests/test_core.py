@@ -48,6 +48,14 @@ def make_event(event_id: str, value: int, occurred_offset: int = 0, received_off
 
 
 class EventAndReplayTests(unittest.TestCase):
+    def test_event_log_append_rejects_wrong_type_before_mutation(self):
+        log = EventLog()
+
+        with self.assertRaisesRegex(TypeError, "Event"):
+            log.append(object())
+
+        self.assertEqual(len(log), 0)
+
     def test_direct_temporal_contracts_reject_boolean_scalars(self):
         event = make_event("event-temporal", 1)
         with self.assertRaises(ValueError):

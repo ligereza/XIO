@@ -73,6 +73,8 @@ class EventLog:
         self._records.sort(key=lambda item: item.sequence)
 
     def append(self, event: Event) -> EventRecord:
+        if not isinstance(event, Event):
+            raise TypeError("append accepts Event only")
         with self._lock:
             if self.path is not None:
                 assert self._lock_path is not None

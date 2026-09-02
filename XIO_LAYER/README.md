@@ -53,6 +53,8 @@ route. It does not choose a route or send a message.
 `EventLog` and `ApplicationEventLog` persist records with fsync and the shared
 sidecar lock, reload current state before append, and expose persistence errors
 without changing replay into action execution.
+Both append boundaries reject the wrong event record type before acquiring a
+file lock or touching in-memory or on-disk state.
 `Event.from_dict()` and `ApplicationEvent.from_dict()` require the exact fields
 and scalar types emitted by their serializers; malformed records are rejected
 before replay or LUCIDA/MULTI restoration.
