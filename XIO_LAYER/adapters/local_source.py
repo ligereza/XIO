@@ -91,15 +91,21 @@ class LocalEventRecord:
             missing = sorted(required - set(value))
             extra = sorted(set(value) - required)
             raise LocalEventSourceError(f"local record fields invalid; missing={missing}, extra={extra}")
+        for field_name in ("event_id", "source_app", "event_type"):
+            if not isinstance(value[field_name], str):
+                raise LocalEventSourceError(f"local record {field_name} must be a string")
+        for field_name in ("source_timestamp", "received_timestamp"):
+            if not isinstance(value[field_name], str):
+                raise LocalEventSourceError(f"local record {field_name} must be an ISO datetime")
         try:
-            source_timestamp = datetime.fromisoformat(str(value["source_timestamp"]))
-            received_timestamp = datetime.fromisoformat(str(value["received_timestamp"]))
+            source_timestamp = datetime.fromisoformat(value["source_timestamp"])
+            received_timestamp = datetime.fromisoformat(value["received_timestamp"])
         except (TypeError, ValueError) as exc:
             raise LocalEventSourceError("local record timestamps must be ISO datetimes") from exc
         return cls(
-            event_id=str(value["event_id"]),
-            source_app=str(value["source_app"]),
-            event_type=str(value["event_type"]),
+            event_id=value["event_id"],
+            source_app=value["source_app"],
+            event_type=value["event_type"],
             sequence=value["sequence"],
             source_timestamp=source_timestamp,
             received_timestamp=received_timestamp,

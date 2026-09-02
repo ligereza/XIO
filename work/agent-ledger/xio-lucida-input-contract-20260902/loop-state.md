@@ -9,7 +9,7 @@ core_acceptance_criteria:
   - no overlay, camera, LUCIDA reducer, VIZZ/PUPILA policy or host action
 authorized_extensions:
   - bounded signal and transport reliability fixes with reproducible tests
-status: paused
+status: active
 supersedes: xio-source-registry-20260901
 
 completed:
@@ -24,11 +24,10 @@ current_state:
     - work/agent-ledger/xio-lucida-input-contract-20260902/loop-state.md
   branch: codex/xio-lucida-input-contract
   worktree: C:\IA\XIO
-  tests_and_checks: The current XIO_LAYER test command passed before this state-only correction; no technical source files are changed by this correction.
+  tests_and_checks: The current XIO_LAYER test command passed before this iteration; local source strict-restore regression is in progress.
   assumptions: XIO remains the signal and transport owner; LUCIDA consumes declared events through its own adapter boundary.
   open_questions:
-    - The next XIO contract defect must be selected after the user resumes the paused agent.
-  blockers:
-    - Agent execution is paused by the user; do not resume from this state without explicit direction.
-  next_action: Remain paused. When resumed, read this state only, work on the current XIO branch and never reopen LIMEN.
+    - Further work remains bounded to signal, transport and input-contract reliability.
+  blockers: []
+  next_action: Verify and publish the strict LocalEventRecord restore fix on the current XIO branch; never reopen the archived extraction.
   next_checkpoint_trigger: before resuming autonomous work or publishing any XIO code change

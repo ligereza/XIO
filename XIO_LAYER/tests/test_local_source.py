@@ -10,6 +10,7 @@ from XIO_LAYER.adapters import (
     AdapterHandoff,
     DuplicateLocalEventError,
     LocalAdapterEventSource,
+    LocalEventRecord,
     LocalEventSourceError,
     PrivacyPolicy,
     SourceAdapterRegistry,
@@ -50,6 +51,20 @@ class LocalEventSourceTests(unittest.TestCase):
             )
             with self.assertRaises(DuplicateLocalEventError):
                 LocalAdapterEventSource(path).replay()
+
+    def test_restore_rejects_coercive_field_types(self):
+        wire = LocalAdapterEventSource(FIXTURE_PATH).replay()[0].to_dict()
+        invalid_values = (
+            ("event_id", 7),
+            ("source_app", 7),
+            ("event_type", 7),
+            ("source_timestamp", 7),
+            ("received_timestamp", 7),
+        )
+        for field_name, invalid_value in invalid_values:
+            with self.subTest(field_name=field_name):
+                with self.assertRaises(LocalEventSourceError):
+                    LocalEventRecord.from_dict({**wire, field_name: invalid_value})
 
     def test_fixture_connects_selected_adapter_to_lucida_bridge_and_replay(self):
         registry = SourceAdapterRegistry()
