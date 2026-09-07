@@ -12,6 +12,7 @@ from automap import plan as automap_plan  # noqa: E402
 from semantic_light_field import (  # noqa: E402
     LightFieldError,
     SemanticLightField,
+    build_vj_preview_proposal,
     serialize_tape,
     solve_measured_patch,
 )
@@ -126,6 +127,37 @@ class SemanticLightFieldTests(unittest.TestCase):
         self.assertEqual(len(replay["frames"]), len(fixture["frames"]))
         self.assertNotIn("decisions", replay)
         self.assertEqual(field.timeline.status()["fired"], 0)
+
+    def test_mosaik_vj_proposal_companion_is_bounded_and_deterministic(self):
+        fixture = json.loads(REPLAY_FIXTURE.read_text(encoding="utf-8"))
+        field = SemanticLightField(fixture["fixtures"])
+        tape = field.render_tape(
+            fixture["frames"], sample_hz=fixture["sample_hz"])
+        before = field.timeline.status()
+        first = build_vj_preview_proposal(
+            tape, proposal_id="proposal-light-field-001",
+            event_id="event-light-field-001")
+        second = build_vj_preview_proposal(
+            tape, proposal_id="proposal-light-field-001",
+            event_id="event-light-field-001")
+        self.assertEqual(first, second)
+        self.assertEqual(first["operation"], "preview_semantic_light_field")
+        self.assertTrue(first["requires_explicit_approval"])
+        self.assertTrue(first["reversible"])
+        self.assertEqual(first["execution_mode"], "proposal_only")
+        self.assertEqual(len(first["evidence"]), 4)
+        self.assertTrue(first["evidence"][2].startswith("tape_sha256:"))
+        self.assertNotIn("frames", first)
+        self.assertEqual(field.timeline.status(), before)
+        with self.assertRaises(LightFieldError):
+            build_vj_preview_proposal(
+                tape, proposal_id="proposal-light-field-001",
+                event_id="event-light-field-001", phase="unknown")
+        with self.assertRaises(LightFieldError):
+            build_vj_preview_proposal(
+                {**tape, "proposal_only": False},
+                proposal_id="proposal-light-field-001",
+                event_id="event-light-field-001")
 
     def test_measured_automap_and_timeline_are_reused(self):
         channels = [1, 2, 3]

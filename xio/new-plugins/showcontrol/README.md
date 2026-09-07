@@ -38,6 +38,14 @@ serializes it twice, requiring byte-identical output and no timeline decisions.
 The JSON boundary is the consumer point; XIO transport and the LUCIDA/MOSAIK
 surface remain separate concerns.
 
+For the concrete MOSAIK/VJ proposal boundary, call
+`build_vj_preview_proposal(tape, proposal_id=..., event_id=...)`. It returns
+the existing `VJProposal` field set with `requires_explicit_approval: true`,
+`reversible: true`, and `execution_mode: proposal_only`. Its evidence carries
+only the tape schema, SHA-256 and frame count; the tape payload is not copied
+into the proposal. A VJ consumer can validate the proposal and read the tape
+separately. No transport, cue execution or surface mutation occurs here.
+
 This is the active control surface, not the read-only `foh_monitor` or
 `mak_xio_puente/monitor.py`. Its code being present in the repository does not
 prove that the plugin is installed or enabled on the Xiaomi; verify the runtime
