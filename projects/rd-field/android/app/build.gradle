@@ -1,0 +1,40 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "cl.reduciendodano.xiofield"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "cl.reduciendodano.xiofield"
+        minSdk 29
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packaging {
+        resources.excludes += ["/META-INF/{AL2.0,LGPL2.1}"]
+    }
+}
+
+dependencies {
+    implementation "androidx.activity:activity:1.9.2"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "androidx.core:core:1.13.1"
+    testImplementation "junit:junit:4.13.2"
+}
+
+// AndroidX currently brings mixed Kotlin runtime artifacts; keep the APK on one ABI line.
+configurations.configureEach {
+    resolutionStrategy.eachDependency { dependency ->
+        if (dependency.requested.group == "org.jetbrains.kotlin") dependency.useVersion "1.8.22"
+    }
+}

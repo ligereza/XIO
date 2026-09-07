@@ -1,0 +1,9 @@
+<resources>
+    <color name="rd_ink">#0D1215</color>
+    <color name="rd_paper">#0D1215</color>
+    <color name="rd_card">#161D20</color>
+    <color name="rd_teal">#3FAB97</color>
+    <color name="rd_coral">#E1674F</color>
+    <color name="rd_yellow">#E6C96B</color>
+    <color name="rd_muted">#75817B</color>
+</resources>

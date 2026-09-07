@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.XioRdField" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/rd_teal</item>
+        <item name="android:navigationBarColor">@color/rd_ink</item>
+        <item name="android:statusBarColor">@color/rd_ink</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

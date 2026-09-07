@@ -33,3 +33,11 @@ xio/**/*_autosave/
 *.sqlite
 *.sqlite3
 .xio-source.tar
+
+# RD Field local Android build and bridge runtime artifacts
+projects/rd-field/android/.gradle/
+projects/rd-field/android/**/build/
+projects/rd-field/android/local.properties
+projects/rd-field/bridge/*.log
+projects/rd-field/bridge/*.err
+projects/rd-field/bridge/xiaomi_sync.png
