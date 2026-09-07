@@ -44,6 +44,6 @@ nmcli -t -f 802-3-ethernet.wake-on-lan con show lan-kvm   # :magic
 > un barrido posterior que encontro ESTE archivo, que el diagnostico no listaba).
 > Este repo es publico y una MAC identifica hardware. Se resuelven en tiempo de
 > ejecucion desde `MAK_MAC_ETH` / `MAK_MAC_WIFI` o desde `/sys/class/net/<if>/address`
-> -- lo resuelve `energia.py`, que vive en la caja como `~/plataforma/energia.py`
-> y no forma parte de este repositorio. Para verlas en la caja:
+> -- lo resuelve `energia.py`, que vive en MAK como `~/plataforma/energia.py` y
+> no forma parte de este repositorio. Para verlas en MAK:
 > `cat /sys/class/net/enp3s0/address`.
