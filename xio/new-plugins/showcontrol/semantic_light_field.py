@@ -5,6 +5,7 @@ does not send packets, own a clock, or implement camera capture. Optical patch
 measurements are supplied by ``automap.solve`` and verified here by address.
 """
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -25,6 +26,9 @@ PROFILES = {
 MAX_UNIVERSE = 32767
 MAX_CHANNEL = 512
 TAPE_SCHEMA = "farmaxia:semantic-light-field-tape:0.1"
+VJ_PHASES = frozenset(
+    {"preflight", "preparation", "show", "incident", "recovery", "closure"}
+)
 
 
 class LightFieldError(ValueError):
@@ -54,6 +58,37 @@ def serialize_tape(tape):
         )
     except (TypeError, ValueError) as exc:
         raise LightFieldError("tape must contain only finite JSON values") from exc
+
+
+def build_vj_preview_proposal(
+    tape, *, proposal_id, event_id, phase="preparation", risk="low"
+):
+    """Build the minimal MOSAIK/VJ proposal companion for one light-field tape."""
+    encoded = serialize_tape(tape)
+    for value, name in ((proposal_id, "proposal_id"), (event_id, "event_id"),
+                        (risk, "risk")):
+        if not isinstance(value, str) or not value or not value.isascii():
+            raise LightFieldError("%s must be non-empty ASCII text" % name)
+    if phase not in VJ_PHASES:
+        raise LightFieldError("phase must be a supported VJ phase")
+    digest = hashlib.sha256(encoded.encode("ascii")).hexdigest()
+    return {
+        "proposal_id": proposal_id,
+        "event_id": event_id,
+        "phase": phase,
+        "operation": "preview_semantic_light_field",
+        "reason": "Review deterministic semantic light-field tape",
+        "risk": risk,
+        "requires_explicit_approval": True,
+        "reversible": True,
+        "execution_mode": "proposal_only",
+        "evidence": [
+            "consumer:mosaik-vj",
+            "tape_schema:%s" % TAPE_SCHEMA,
+            "tape_sha256:%s" % digest,
+            "frame_count:%d" % len(tape["frames"]),
+        ],
+    }
 
 
 @dataclass(frozen=True)
