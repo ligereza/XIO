@@ -2,6 +2,42 @@
 
 # showcontrol -- the phone as a network show-control node
 
+## Semantic light field (offline render)
+
+`semantic_light_field.py` turns a finite fixture layout into deterministic DMX
+channel arrays and OSC-compatible state. It accepts explicit 2-D/3-D
+positions, `dimmer`/`rgb`/`rgbd` profiles, phase, tempo, energy and an audio
+envelope. It validates channel bounds and patch overlap, but performs no
+network, camera, GUI or hardware I/O. Feed measured optical responses from
+`automap.solve`; the result reports response coverage only, never spatial
+identity or calibrated photometry.
+
+```python
+from semantic_light_field import SemanticLightField
+
+field = SemanticLightField([
+    {"fixture_id": "wash_a", "profile": "rgbd", "universe": 0,
+     "start_address": 1, "position": [0.0, 0.0, 0.0]},
+])
+state = field.render(phase=0.25, time_s=0.0, tempo=120, energy=0.8,
+                     audio_envelope=0.6, wavelength=4.0)
+# state["dmx"]["0"] and state["osc"] are safe to hand to an outer sender.
+```
+
+For an offline preview, call `render_tape(frames, sample_hz=20)`. It reuses
+`render` for every frame and returns a deterministic
+`farmaxia:semantic-light-field-tape:0.1` proposal with `proposal_only: true`.
+Call `serialize_tape(tape)` to produce compact, sorted-key, finite ASCII JSON
+for a later LUCIDA/MOSAIK or XIO-side reader. This module itself never sends
+DMX/OSC, captures a camera, or controls a device.
+
+The reproducible input fixture is
+`fixtures/semantic_light_field_replay.json`. It contains only a validated
+layout and two frame requests. `test_semantic_light_field.py` renders and
+serializes it twice, requiring byte-identical output and no timeline decisions.
+The JSON boundary is the consumer point; XIO transport and the LUCIDA/MOSAIK
+surface remain separate concerns.
+
 This is the active control surface, not the read-only `foh_monitor` or
 `mak_xio_puente/monitor.py`. Its code being present in the repository does not
 prove that the plugin is installed or enabled on the Xiaomi; verify the runtime
@@ -15,13 +51,14 @@ nodes; **auto-maps** DMX fixtures optically; and exposes **live telemetry**.
 
 Everything is **pure stdlib** (`socket` + `struct`) -- no pip, no shell, so there
 is **zero command-injection surface**. Every capability is unit-tested off-device
-(69 tests). This README is the operating manual; you do not need Claude to run it.
+(78 tests, including the semantic light-field contract). This README is the
+operating manual; you do not need Claude to run it.
 
 ## Run the tests (off-device, any machine)
 
 ```bash
 cd xio/new-plugins/showcontrol
-for t in protocols cueengine fabric discovery automap obs timeline auth oscin integration; do
+for t in protocols cueengine fabric discovery automap obs timeline auth oscin integration semantic_light_field; do
   py test_$t.py
 done
 # each prints "ALL N PASSED"

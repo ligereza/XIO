@@ -1,0 +1,38 @@
+{
+  "schema": "farmaxia:semantic-light-field-replay-input:0.1",
+  "sample_hz": 10,
+  "fixtures": [
+    {
+      "fixture_id": "near",
+      "profile": "rgbd",
+      "universe": 0,
+      "start_address": 1,
+      "position": [0.0, 0.0, 0.0]
+    },
+    {
+      "fixture_id": "far",
+      "profile": "dimmer",
+      "universe": 0,
+      "start_address": 10,
+      "position": [3.0, 0.0, 0.0]
+    }
+  ],
+  "frames": [
+    {
+      "phase": 0.0,
+      "time_s": 0.0,
+      "tempo": 120.0,
+      "energy": 0.75,
+      "audio_envelope": 0.5,
+      "focus": [0.0, 0.0, 0.0]
+    },
+    {
+      "phase": 0.25,
+      "time_s": 0.1,
+      "tempo": 120.0,
+      "energy": 0.5,
+      "audio_envelope": 0.75,
+      "focus": [0.5, 0.0, 0.0]
+    }
+  ]
+}
