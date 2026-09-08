@@ -586,11 +586,20 @@ class FohMonitorPlugin(PluginBase):
         tc_address alimentan el canal TIMECODE y devuelven False (NO cuentan
         como actividad del canal osc/VISUAL -- un show con solo TC entrando
         no debe marcar visuales activos)."""
-        info = self._parse_osc(data)
-        if isinstance(info, str) and info.startswith(str(self._cfg("tc_address"))):
-            self._tc_hit(data)
+        messages = self._osc_messages(data)
+        if not messages:
+            return None
+        tc_address = str(self._cfg("tc_address"))
+        visual_addresses = []
+        for message in messages:
+            address = self._parse_osc(message)
+            if isinstance(address, str) and address.startswith(tc_address):
+                self._tc_hit(message)
+            elif address:
+                visual_addresses.append(address)
+        if messages and not visual_addresses:
             return False
-        return info
+        return visual_addresses[0] if visual_addresses else None
 
     def _tc_hit(self, data):
         """Registra un paquete de timecode: primer arg string o float."""
@@ -771,6 +780,33 @@ class FohMonitorPlugin(PluginBase):
             return data[:end].decode("ascii", "replace")
         except Exception:
             return None
+
+    @classmethod
+    def _osc_messages(cls, data, _depth=0):
+        """Return OSC messages contained in one packet or nested bundle.
+
+        FOH only needs the address and first argument, so this intentionally
+        parses bundle framing without becoming a general OSC decoder. A depth
+        limit prevents malformed recursive bundles from consuming the listener.
+        """
+        if not isinstance(data, (bytes, bytearray)) or _depth > 4:
+            return []
+        data = bytes(data)
+        if not data.startswith(b"#bundle\x00"):
+            return [data] if cls._parse_osc(data) else []
+        if len(data) < 16:
+            return []
+        messages = []
+        pos = 16  # '#bundle\\0' + 8-byte NTP timetag
+        while pos + 4 <= len(data):
+            size = struct.unpack(">I", data[pos:pos + 4])[0]
+            pos += 4
+            end = pos + size
+            if size == 0 or end > len(data):
+                return []
+            messages.extend(cls._osc_messages(data[pos:end], _depth + 1))
+            pos = end
+        return messages if pos == len(data) else []
 
     # ── audio best-effort (Termux:API + ffmpeg) ──────────────────────
     def _probe_audio(self):
