@@ -63,3 +63,12 @@ def test_malformed_bundle_is_ignored():
 
     assert plugin._parse_osc_pkt(b"#bundle\0" + b"\0" * 8 + b"\0\0\0\x10bad") is None
     assert plugin._tc["total"] == 0
+
+
+def test_artnet_dmx_declared_length_is_checked_before_counting_packet():
+    header = b"Art-Net\0" + struct.pack("<H", 0x5000) + b"\0\0" + b"\0\0" + struct.pack("<H", 1)
+    truncated = header + struct.pack(">H", 2) + b"\x01"
+    valid = header + struct.pack(">H", 1) + b"\x01"
+
+    assert FohMonitorPlugin._parse_artnet(truncated) is None
+    assert FohMonitorPlugin._parse_artnet(valid) == "OpDmx uni 1"

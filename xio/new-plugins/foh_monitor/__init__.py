@@ -570,6 +570,9 @@ class FohMonitorPlugin(PluginBase):
             return None
         opcode = data[8] | (data[9] << 8)
         if opcode == 0x5000 and len(data) >= 18:  # OpDmx
+            payload_length = (data[16] << 8) | data[17]
+            if payload_length > 512 or len(data) < 18 + payload_length:
+                return None
             uni = data[14] | (data[15] << 8)
             return f"OpDmx uni {uni}"
         return f"op 0x{opcode:04x}"
