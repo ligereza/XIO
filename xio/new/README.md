@@ -38,6 +38,32 @@ python server.py
 # Abre http://localhost:5000
 ```
 
+## RD NODO: plano público separado
+
+RD NODO no publica este controlador. El archivo
+`rd_nodo_public_server.py` levanta un servicio independiente, sólo lectura,
+en `:8088`; no importa Flask, ADB, plugins ni ninguna base de datos.
+
+Preparar el paquete en una máquina autorizada:
+
+```bash
+python rd_nodo_build_pack.py --source /ruta/segura/rd.db \
+  --output /ruta/rd_nodo/public_pack.json \
+  --edition "RD NODO · evento 001"
+```
+
+El archivo queda pendiente de revisión. Después de aprobar su contenido para
+esa edición, se vuelve a generar con `--publish`; XIO no sirve packs que no
+tengan estado `ready`.
+
+En el Xiaomi se copia el `public_pack.json` a
+`/sdcard/xio_termux/rd_nodo/`, se crea el marcador `enabled` y se ejecuta
+`run_server.sh`. El modo RD NODO enlaza el controlador a localhost y arranca
+el servicio público en el puerto 8088. El equipo cambia estados con
+`rd_nodo_admin.py`; no existe escritura pública por HTTP. El proceso público
+tiene su propio supervisor y no reinicia el controlador ADB si sólo falla el
+contenido.
+
 ## Estructura del Proyecto
 
 ```
