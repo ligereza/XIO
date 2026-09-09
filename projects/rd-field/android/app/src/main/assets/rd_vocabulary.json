@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "rd-vocabulary-v0.1",
+  "source": "RD_ONG/database-support/data/rd.db",
+  "sourceRole": "read-only vocabulary and evidence reference",
+  "reactives": [
+    {"name":"Marquis","families":["MDMA / MDA","anfetamina","opiaceos","2C-B","DXM","cocaina"]},
+    {"name":"Mecke","families":["MDMA","opiaceos","2C-B"]},
+    {"name":"Mandelin","families":["ketamina","MDMA","anfetamina","cocaina"]},
+    {"name":"Simon","families":["MDMA (amina 2a)","MDA (amina 1a)"]},
+    {"name":"Froehde","families":["opiaceos","2C-x"]},
+    {"name":"Ehrlich","families":["LSD / indoles","triptaminas"]},
+    {"name":"Liebermann","families":["MDMA","cocaina"]}
+  ],
+  "presentations": ["comprimido_prensado","cristal","polvo","capsula","papel_blotter","liquido","vegetal","residuo","otra"],
+  "note": "Vocabulary does not establish composition. Reagent observations remain presumptive and need operator review."
+}

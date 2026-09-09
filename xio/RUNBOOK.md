@@ -425,11 +425,8 @@ Disparo:
 bash airdrop_push.sh /sdcard/Download/entrega.zip "mensaje corto"
 ```
 Verde = PR `airdrop/<tag>` lista para mergear desde el navegador del telefono.
-Source: xio/new/airdrop_push.sh, presente en este repositorio.
-El detalle del canal (AGENT_AIRDROP_PROTOCOL.md, seccion "Canal sin PC") y el
-workflow airdrop_gate.yml que recibe el push viven en el repositorio de origen
-vibecodeine, no aqui: el token de arriba esta acotado a ese repositorio. El
-unico workflow de este repositorio es .github/workflows/build-xio-apk.yml.
+Detalle del canal: docs/AGENT_AIRDROP_PROTOCOL.md, seccion "Canal sin PC".
+Source: xio/new/airdrop_push.sh + .github/workflows/airdrop_gate.yml
 
 ## 8. Source docs
 

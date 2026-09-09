@@ -163,8 +163,8 @@ Flask, configuración, scheduler, safe_shell, permisos, logger y auditoría.
 | cultura/mak_xio_puente/staged/mak_link.py | Enlace staged MAK↔XIO. | Código y pruebas presentes. |
 | cultura/mak_xio_puente/staged/wake_mak.py | Wake/recovery staged de MAK. | Código y pruebas presentes. |
 | cultura/mak_plataforma/mak-xio.service | Unidad systemd user para el monitor. | Archivo presente; box no verificado. |
-| xio/radio_monitor.py | Radio celular Xiaomi + enlace Windows↔XIO + latencia/consumo. | Ausente en este repositorio; quedó en el monorepo de origen. |
-| xio/PLAN_CONECTIVIDAD_CLARO_2026.md | USB tethering → Windows/ICS/QoS → Ethernet → MAK y plan de evidencia. | Ausente en este repositorio; quedó en el monorepo de origen. |
+| xio/radio_monitor.py | Radio celular Xiaomi + enlace Windows↔XIO + latencia/consumo. | Implementado para PC/ADB; device no conectado. |
+| xio/PLAN_CONECTIVIDAD_CLARO_2026.md | USB tethering → Windows/ICS/QoS → Ethernet → MAK y plan de evidencia. | Documentado; topología pendiente. |
 
 ## Show kit
 
@@ -192,23 +192,15 @@ Flask, configuración, scheduler, safe_shell, permisos, logger y auditoría.
 
 ## RD NODO — proyecto de Reducción de Daño
 
-**Ninguno de los siete componentes de esta sección está en este repositorio.**
-Viven en el monorepo de origen (`C:\IA\flujo`, ver `MATERIAL_ORIGEN.md`) y no
-fueron seleccionados en la extracción a XIO. Se conservan aquí como registro
-del diseño, no como inventario de lo que este repositorio puede operar: un
-`find` de cada nombre no devuelve nada, ni en `main` ni en las ramas
-`codex/xio-*`. La columna de estado describe lo que se sabía en el monorepo,
-que este repositorio no puede verificar ni ejecutar.
-
-| Componente | Función | Estado en el monorepo de origen |
+| Componente | Función | Estado |
 |---|---|---|
-| rd_nodo_public_server.py | Plano público independiente, sólo GET/HEAD, sin Flask/ADB/plugins/SQLite. | Ausente aquí. Allá: implementado; no desplegado. |
-| rd_nodo_build_pack.py | Exporta sólo catálogo reactivos desde rd.db en modo lectura. | Ausente aquí. Allá: ejecutado, 23 entradas, 4,2 KB. |
-| rd_nodo_admin.py | CLI local para estados de zonas y avisos aprobados. | Ausente aquí. Allá: implementado; no ejecutado en Termux. |
-| rd_nodo_start.sh | Inicia :8088 sólo con pack ready. | Ausente aquí. Allá: implementado; no verificado. |
-| rd_nodo_public_supervisor.sh | Recupera sólo el proceso público. | Ausente aquí. Allá: implementado; no verificado. |
-| RD_NODO_ARQUITECTURA_OPERATIVA.md | Capacidad, seguridad, DB, privacidad y operación. | Ausente aquí. Allá: vigente. |
-| rd_nodo_public/public_pack.json | Pack real desde C:/IA/flujo/data/rd.db. | Ausente aquí. Allá: pending_review; no se sirve hasta revisión y --publish. |
+| rd_nodo_public_server.py | Plano público independiente, sólo GET/HEAD, sin Flask/ADB/plugins/SQLite. | Implementado; no desplegado. |
+| rd_nodo_build_pack.py | Exporta sólo catálogo reactivos desde rd.db en modo lectura. | Ejecutado: 23 entradas, 4,2 KB. |
+| rd_nodo_admin.py | CLI local para estados de zonas y avisos aprobados. | Implementado; no ejecutado en Termux. |
+| rd_nodo_start.sh | Inicia :8088 sólo con pack ready. | Implementado; no verificado. |
+| rd_nodo_public_supervisor.sh | Recupera sólo el proceso público. | Implementado; no verificado. |
+| RD_NODO_ARQUITECTURA_OPERATIVA.md | Capacidad, seguridad, DB, privacidad y operación. | Vigente. |
+| rd_nodo_public/public_pack.json | Pack real desde C:/IA/flujo/data/rd.db. | pending_review; no se sirve hasta revisión y --publish. |
 
 Diseño:
 
