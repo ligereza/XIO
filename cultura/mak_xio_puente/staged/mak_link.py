@@ -20,6 +20,7 @@ escriba /home/mak/xio_puente/estado.json con el mismo formato del monitor
 plugin solo loguea el fallo y no molesta.
 """
 import json
+import os
 import threading
 import time
 import urllib.request
@@ -28,7 +29,7 @@ from flask import Blueprint, jsonify
 
 bp = Blueprint("mak_link", __name__, url_prefix="/mak_link")
 
-MAK_HUB = "http://192.168.95.85:8900/api/xio_push"  # IP wifi de MAK
+MAK_HUB = os.environ.get("MAK_HUB_URL", "").strip()
 INTERVALO = 300
 
 
@@ -39,6 +40,10 @@ def ping():
 
 def _reportar():
     while True:
+        if not MAK_HUB:
+            print("[mak_link] push desactivado: configure MAK_HUB_URL")
+            time.sleep(INTERVALO)
+            continue
         try:
             propio = urllib.request.urlopen(
                 "http://127.0.0.1:5000/status", timeout=5).read()

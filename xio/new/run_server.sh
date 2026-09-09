@@ -28,8 +28,19 @@ else
 fi
 
 # Untrusted hosts that must never drive xio (e.g. the local-LLM box that could pull a
-# poisoned model). Comma-separated source IPs. MAK/dell-11m = 192.168.198.85 (hotspot).
-export XIO_DENY_IPS="192.168.198.85"
+# poisoned model). Configure current comma-separated source IPs below.
+# Untrusted hosts that must never drive xio (e.g. a local-LLM box that could pull a
+# poisoned model). Configure the current comma-separated source IPs through the
+# environment or /sdcard/xio_termux/deny_ips.txt; never reuse a stale venue address.
+if [ -z "${XIO_DENY_IPS+x}" ] && [ -f /sdcard/xio_termux/deny_ips.txt ]; then
+  XIO_DENY_IPS="$(tr -d '[:space:]' < /sdcard/xio_termux/deny_ips.txt)"
+fi
+export XIO_DENY_IPS="${XIO_DENY_IPS:-}"
+if [ -n "$XIO_DENY_IPS" ]; then
+  echo "xio denylist configured: $XIO_DENY_IPS"
+else
+  echo "WARNING: XIO_DENY_IPS is empty; no source host is denylisted"
+fi
 
 nohup python server.py > /sdcard/xio_termux/server.log 2>&1 &
 echo "launched pid $! (log: /sdcard/xio_termux/server.log)"

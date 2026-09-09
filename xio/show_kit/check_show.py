@@ -9,16 +9,20 @@ o doble click en check_show.bat.
 Solo stdlib. Cada item imprime [GO] verde o [NO-GO] rojo con el detalle real.
 """
 import json
+import os
 import sys
 import urllib.request
 
-HOST = sys.argv[1] if len(sys.argv) > 1 else "192.168.127.125"
+HOST = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("XIO_HOST", "").strip()
+if not HOST:
+    print("FALTA host: pase IP/nombre como argumento o configure XIO_HOST",
+          file=sys.stderr)
+    sys.exit(2)
 BASE = f"http://{HOST}:5000"
 FOH = f"{BASE}/api/plugins/foh_monitor"
 
 G, R, Y, N = "\033[92m", "\033[91m", "\033[93m", "\033[0m"
 try:
-    import os
     os.system("")  # habilita ANSI en la consola de Windows
 except Exception:
     pass

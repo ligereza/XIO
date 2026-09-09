@@ -27,7 +27,7 @@ set -u
 
 ADB="/c/IA/flujo/xio/actual/platform-tools/adb.exe"
 SERIAL="8299e66f"                       # USB serial (stable across reboots)
-WIFI="192.168.127.125:5555"
+WIFI="${XIO_WIFI_SERIAL:-}"
 LIB="/data/app/~~yX8VZY_1lHCIcZ-fg1no1w==/moe.shizuku.privileged.api-OrtcmTP5ZTXHLD7tYjZJBA==/lib/arm64/libshizuku.so"
 LOG="/c/IA/flujo/xio/new/pc_reboot_watch.log"
 INTERVAL=15
@@ -112,8 +112,12 @@ recover(){
   # 2) restore wifi-adb (on-device watchdogs + LAN reachability)
   MSYS_NO_PATHCONV=1 "$ADB" -s "$SERIAL" tcpip 5555 >/dev/null 2>&1
   sleep 3
-  "$ADB" connect "$WIFI" >/dev/null 2>&1
-  log "tcpip 5555 restored"
+  if [ -n "$WIFI" ]; then
+    "$ADB" connect "$WIFI" >/dev/null 2>&1
+    log "tcpip 5555 restored to $WIFI"
+  else
+    log "wifi-adb target not configured; USB recovery continues without LAN reconnect"
+  fi
   # 3) HOTSPOT FIRST -- it is the user's ONLY internet, and an ntfy only reaches their
   #    iPhone AFTER the hotspot is back (the iPhone needs it). So re-enabling the
   #    hotspot IS the fix; notifying to "go tap it" can never arrive. HyperOS doesn't

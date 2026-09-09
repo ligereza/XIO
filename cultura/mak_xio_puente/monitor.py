@@ -16,11 +16,29 @@ import time
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, "/home/mak/research")
-from research_lib import load_env, ntfy_publish  # noqa: E402
+# The bridge is also useful in a fresh clone.  Research helpers are optional
+# and must be supplied explicitly instead of being discovered through a
+# machine-specific absolute path.
+RESEARCH_LIB_DIR = os.environ.get("RESEARCH_LIB_DIR", "").strip()
+if RESEARCH_LIB_DIR and RESEARCH_LIB_DIR not in sys.path:
+    sys.path.insert(0, RESEARCH_LIB_DIR)
+try:
+    from research_lib import load_env, ntfy_publish  # noqa: E402
+except ImportError:
+    RESEARCH_LIB_AVAILABLE = False
+
+    def load_env():
+        return False
+
+    def ntfy_publish(*_args, **_kwargs):
+        return False
+else:
+    RESEARCH_LIB_AVAILABLE = True
 
 BASE_DIR = "/home/mak/xio_puente"
-XIO_BASE = os.environ.get("XIO_BASE", "http://192.168.95.203:5000")
+load_env()
+BASE_DIR = os.environ.get("XIO_BRIDGE_DIR", BASE_DIR).strip() or BASE_DIR
+XIO_BASE = os.environ.get("XIO_BASE", "").strip().rstrip("/")
 RUTAS_LECTURA = ("/status", "/obs", "/battery/status", "/connectivity/status")
 HISTORIA = os.path.join(BASE_DIR, "historia.jsonl")
 ESTADO = os.path.join(BASE_DIR, "estado.json")
@@ -30,6 +48,8 @@ ANTISPAM_S = 1800
 
 
 def _get(ruta):
+    if not XIO_BASE:
+        return 0, None
     url = XIO_BASE.rstrip("/") + ruta
     headers = {"User-Agent": "mak-xio-puente/1.0"}
     token = os.environ.get("XIO_TOKEN")
@@ -47,6 +67,8 @@ def _get(ruta):
 
 def _alerta(clave, mensaje):
     """ntfy con antispam de 30 min por clave."""
+    if not RESEARCH_LIB_AVAILABLE:
+        return
     try:
         with open(ALERTAS, encoding="utf-8") as f:
             estado = json.load(f)
@@ -152,6 +174,12 @@ def poll(fallos_previos=0):
 def main():
     os.makedirs(BASE_DIR, exist_ok=True)
     load_env()
+    if not XIO_BASE:
+        print("[xio_puente] XIO_BASE no configurado; monitor en modo seguro sin red",
+              file=sys.stderr, flush=True)
+    if not RESEARCH_LIB_AVAILABLE:
+        print("[xio_puente] RESEARCH_LIB_DIR no disponible; alertas ntfy desactivadas",
+              file=sys.stderr, flush=True)
     if "--una-vez" in sys.argv:
         estado, _ = poll()
         print(json.dumps(estado, ensure_ascii=False, indent=1))

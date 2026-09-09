@@ -7,8 +7,8 @@ from flask import Flask, Response, request, jsonify
 
 from xiaomi_controller import XiaomiController
 
-ADB_PATH = r"C:\XPEDR\XiaomiServer\platform-tools\adb.exe"
-DEVICE_SERIAL = "192.168.127.125:5555"
+ADB_PATH = os.environ.get("XIO_ADB_PATH", "adb")
+DEVICE_SERIAL = os.environ.get("XIO_DEVICE_SERIAL", "").strip() or None
 
 app = Flask(__name__)
 controller = XiaomiController(adb_path=ADB_PATH, serial=DEVICE_SERIAL)

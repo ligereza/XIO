@@ -15,12 +15,13 @@ que fluye. Bindea 0.0.0.0 (recibe por cualquier interfaz: el cable de la
 consola incluido); si otro programa ya usa el puerto, lo reporta y sigue con
 el otro puerto.
 """
+import os
 import socket
 import sys
 import threading
 import time
 
-DEST = sys.argv[1] if len(sys.argv) > 1 else "192.168.127.125"
+DEST = os.environ.get("XIO_DEST_HOST", "").strip()
 PORTS = {"Art-Net": 6454, "sACN": 5568}
 counters = {name: 0 for name in PORTS}
 errors = {}
@@ -64,6 +65,13 @@ def local_ips():
 
 
 def main():
+    global DEST
+    if len(sys.argv) > 1:
+        DEST = sys.argv[1]
+    if not DEST:
+        print("FALTA destino: pase HOST como argumento o configure XIO_DEST_HOST",
+              file=sys.stderr)
+        return 2
     print(f"\n== RELAY LUCES: consola (cable) -> {DEST} (WiFi) ==")
     print(f" IPs locales de esta laptop: {', '.join(local_ips()) or '?'}")
     print("   (la consola debe apuntar su salida Art-Net a la IP del CABLE de esta laptop)")
@@ -82,7 +90,8 @@ def main():
     except KeyboardInterrupt:
         stop.set()
         print("\n relay detenido. Total:", dict(counters))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
