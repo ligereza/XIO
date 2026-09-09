@@ -1,32 +1,12 @@
-"""Disposable local HTTP bridge used to exercise the Android client safely.
-
-It loads the deployed RD bridge by path instead of keeping a second copy of
-it here: a stale duplicate would let the client pass against a contract the
-phone no longer implements.
-"""
+"""Disposable local HTTP bridge used to exercise the Android client safely."""
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-BRIDGE = Path(__file__).resolve().parents[3] / "xio" / "new-plugins" / "rd_field" / "bridge.py"
-
-
-def _load_bridge():
-    spec = importlib.util.spec_from_file_location("xio_rd_bridge_testserver", BRIDGE)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"puente RD no disponible: {BRIDGE}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_bridge = _load_bridge()
-bootstrap = _bridge.bootstrap
-ingest = _bridge.ingest
+from xio_ingest import bootstrap, ingest
 
 
 class Handler(BaseHTTPRequestHandler):

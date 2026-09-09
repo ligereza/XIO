@@ -10,8 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Typeface;
 import android.graphics.Shader;
 import android.net.Uri;
@@ -40,21 +38,13 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
-import java.util.Set;
-import java.util.UUID;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
 import cl.reduciendodano.xiofield.core.SampleSessionEngine;
@@ -64,7 +54,6 @@ import cl.reduciendodano.xiofield.data.FlujoGateway;
 import cl.reduciendodano.xiofield.data.RdFieldDb;
 import cl.reduciendodano.xiofield.data.RdFieldExporter;
 import cl.reduciendodano.xiofield.visual.BatchPatternDetector;
-import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 import cl.reduciendodano.xiofield.visual.VisualFeatureExtractor;
 import cl.reduciendodano.xiofield.visual.VisualMemory;
 
@@ -95,16 +84,8 @@ public final class MainActivity extends AppCompatActivity {
     private boolean eventContextPending;
     private int activeTab;
     private int activeTestIndex;
-    private boolean currentWasConfirmed;
-    /** Photos reviewed in tab 1 but not committed until AVANZAR. */
-    private final List<SampleSession.Capture> pendingCaptures = new ArrayList<>();
+    private SampleSession.Capture pendingCapture;
     private final Map<String, String> testColors = new HashMap<>();
-    private final List<String> suggestedMoldDesigns = new ArrayList<>();
-    private final List<JSONObject> remoteSamples = new ArrayList<>();
-    private String remoteSamplesEventRef = "";
-    private boolean remoteSamplesLoading;
-    private boolean remoteSamplesFailed;
-    private int loadedCatalogRevision;
     private String manualReagent = "";
     private static final String[] SUBSTANCE_OPTIONS = {"MDMA", "ÉXTASIS", "COCAÍNA", "LSD", "KETAMINA", "CANNABIS", "OPIOIDE", "BENZODIACEPINA", "ANFETAMINA", "OTRA"};
     private static final String[] COLOR_OPTIONS = {"blanco", "amarillo", "verde", "azul", "morado", "rosado", "rojo", "transparente", "otro"};
@@ -114,80 +95,31 @@ public final class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(@Nullable Bundle state) {
         super.onCreate(state);
         database = new RdFieldDb(this);
-        database.ensureFieldDraft();
-        database.ensureSampleEventRelations();
-        database.repairInvalidCompletedTests();
-        database.recoverInterruptedSampleSyncs();
+        database.ensureDemo();
         photoStore = new PhotoStore(this);
         flujo = new FlujoGateway(this);
         memory = new VisualMemory();
         RdFieldDb.SampleRow row = database.latestSample();
-        loadSampleIntoEngine(row);
-        cleanupUncommittedDraftEvidence();
-        reconcileOrphanCaptureFiles();
-        for (VisualMemory.Entry entry : database.reviewedMemory()) memory.addReviewed(entry);
-        buildShell();
-        render();
-        // The host RD catalog is the source of truth for prior events. Load it
-        // on startup so the field screen does not look like an empty/demo DB.
-        loadBootstrapAndMaybeChoose(false, false);
-        loadApprovedVisualCatalog();
-    }
-
-    private void loadSampleIntoEngine(RdFieldDb.SampleRow row) {
         engine = SampleSessionEngine.createExisting(row.id, row.eventId, row.code, row.createdAt, row.phase, row.paused);
         engine.snapshot().status = row.status == null ? "draft" : row.status;
-        currentWasConfirmed = "confirmed".equalsIgnoreCase(row.status);
         engine.snapshot().declaredSubstance = row.declaredSubstance == null ? "" : row.declaredSubstance;
         engine.snapshot().presentation = row.presentation == null ? "" : row.presentation;
         engine.snapshot().observedColor = row.observedColor == null ? "" : row.observedColor;
-        testColors.clear();
-        activeTestIndex = 0;
         android.content.SharedPreferences contextStore = getSharedPreferences("xio_event_context", MODE_PRIVATE);
-        if (!"pending-event".equals(row.eventId) && database.findEvent(row.eventId) == null) {
-            String storedEventId = contextStore.getString("event_id", "");
-            String storedLabel = storedEventId.equals(row.eventId) ? contextStore.getString("event_label", "") : "";
-            String storedProducer = storedEventId.equals(row.eventId) ? contextStore.getString("event_producer", "") : "";
-            database.upsertEvent(row.eventId, storedLabel.isEmpty() ? row.eventId : storedLabel,
-                    "", storedProducer, "", "", "[]", "{}", "", "", "pending");
-        }
         if (row.eventId.equals(contextStore.getString("event_id", ""))) {
             eventLabel = contextStore.getString("event_label", "");
             eventProducer = contextStore.getString("event_producer", "");
             eventContextPending = contextStore.getBoolean("pending", true);
-        } else {
-            eventLabel = "";
-            eventProducer = "";
-            eventContextPending = true;
         }
         for (SampleSession.Capture capture : database.loadCaptures(row.id)) {
             engine.restoreCapture(capture);
             engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
         }
-        for (SampleSession.TestSession test : database.loadTests(row.id)) {
-            engine.restoreTest(test);
-            if (!test.observations.isEmpty()) testColors.put(test.id, test.observations.get(test.observations.size() - 1).color);
-        }
+        for (SampleSession.TestSession test : database.loadTests(row.id)) engine.restoreTest(test);
         for (SampleSession.Correction correction : database.loadCorrections(row.id)) engine.restoreCorrection(correction);
         for (SampleSession.ActionRecord action : database.loadActions(row.id)) engine.restoreAction(action);
-    }
-
-    private void selectLocalSample(RdFieldDb.SampleRow row) {
-        SampleSession current = engine.snapshot();
-        if (row.id.equals(current.id)) {
-            activeTab = 0;
-            render();
-            return;
-        }
-        if (sampleHasWork(current) && !"confirmed".equalsIgnoreCase(current.status)) {
-            Toast.makeText(this, "Termina o descarta la muestra actual antes de abrir otra", Toast.LENGTH_LONG).show();
-            return;
-        }
-        discardAllPendingCaptures();
-        loadSampleIntoEngine(row);
-        activeTab = 0;
-        manualReagent = "";
-        engine.snapshot().status = "draft";
+        for (VisualMemory.Entry entry : database.reviewedMemory()) memory.addReviewed(entry);
+        buildShell();
         render();
     }
 
@@ -210,28 +142,18 @@ public final class MainActivity extends AppCompatActivity {
         title.setTypeface(null, Typeface.BOLD);
         content.addView(title);
         TextView event = text("● " + eventContextText(sample) + "  ·  " + (sample.paused ? "Ⅱ" : "●"), 10, sample.paused ? AMBER : TEAL);
-        event.setContentDescription("Cambiar evento XIO-RD");
-        event.setOnClickListener(view -> {
-            if (!canChangeEvent()) return;
-            loadBootstrapAndMaybeChoose(true, false);
-        });
+        event.setContentDescription("Cambiar evento FLUJO");
+        event.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
         event.setPadding(0, dp(5), 0, 0); content.addView(event);
         TextView sampleCode = text(sample.code, 28, TEXT);
         sampleCode.setTypeface(null, Typeface.BOLD); content.addView(sampleCode);
         LinearLayout topActions = new LinearLayout(this); topActions.setGravity(Gravity.END);
-        Button host = iconButton("⌂", "Configurar host XIO-RD", SURFACE, AMBER);
-        topActions.addView(host, new LinearLayout.LayoutParams(dp(44), dp(38)));
-        Button sync = iconButton("⇧", "Sincronizar con XIO-RD", SURFACE, TEAL);
-        sync.setEnabled(sampleCanSync(sample));
-        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(dp(44), dp(38)); syncParams.setMargins(dp(5), 0, 0, 0); topActions.addView(sync, syncParams);
-        Button raider = iconButton("▦", "Abrir RAIDER", SURFACE, AMBER);
-        LinearLayout.LayoutParams raiderParams = new LinearLayout.LayoutParams(dp(44), dp(38)); raiderParams.setMargins(dp(5), 0, 0, 0); topActions.addView(raider, raiderParams);
+        Button sync = iconButton("⇧", "Sincronizar con FLUJO", SURFACE, TEAL);
+        topActions.addView(sync, new LinearLayout.LayoutParams(dp(44), dp(38)));
         Button nextSample = iconButton("⊕", "Nueva muestra del mismo evento", SURFACE, TEAL);
         LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(dp(44), dp(38)); nextParams.setMargins(dp(5), 0, 0, 0); topActions.addView(nextSample, nextParams);
         content.addView(topActions, new LinearLayout.LayoutParams(-1, dp(38)));
         sync.setOnClickListener(view -> syncCurrentSample());
-        host.setOnClickListener(view -> showHostDialog());
-        raider.setOnClickListener(view -> openRaider());
         nextSample.setOnClickListener(view -> startNextSample());
         status = text(statusLine(sample), 11, MUTED);
         status.setPadding(0, dp(2), 0, dp(9)); content.addView(status);
@@ -244,12 +166,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private String statusLine(SampleSession sample) {
-        String state = pendingCaptures.isEmpty() ? sample.status : "en revisión";
-        if ("draft".equalsIgnoreCase(state)) state = "borrador";
-        else if ("entry_ready".equalsIgnoreCase(state)) state = "ingreso listo";
-        else if ("tests_ready".equalsIgnoreCase(state)) state = "tests listos";
-        else if ("confirmed".equalsIgnoreCase(state)) state = "confirmada";
-        return "◉ " + sample.captures.size() + "   ⏱ " + applicableTests(sample).size() + "   " + (sample.paused ? "Ⅱ" : "●") + " " + state;
+        return "◉ " + sample.captures.size() + "   ⏱ " + applicableTests(sample).size() + "   " + (sample.paused ? "Ⅱ" : "●") + " guardado";
     }
 
     private LinearLayout phaseBar(SampleSession.Phase active) {
@@ -261,18 +178,7 @@ public final class MainActivity extends AppCompatActivity {
             Button button = actionButton(labels[i], phases[i] == active ? TEAL : SURFACE, phases[i] == active ? BG : MUTED);
             button.setContentDescription(descriptions[i]); button.setTextSize(17);
             SampleSession.Phase phase = phases[i];
-            button.setOnClickListener(view -> {
-                if (phase == SampleSession.Phase.TEST && !entryReadyForTests(engine.snapshot())) {
-                    Toast.makeText(this, entryRequirements(engine.snapshot()), Toast.LENGTH_LONG).show();
-                    return;
-                }
-                if (phase == SampleSession.Phase.REVIEW && !sampleTestsComplete(engine.snapshot())) {
-                    Toast.makeText(this, "completa todos los tests antes de revisar", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                engine.transitionTo(phase);
-                render();
-            });
+            button.setOnClickListener(view -> { engine.transitionTo(phase); persist(); render(); });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(38), 1f); params.setMargins(i == 0 ? 0 : dp(4), 0, 0, 0); bar.addView(button, params);
         }
         return bar;
@@ -289,17 +195,7 @@ public final class MainActivity extends AppCompatActivity {
             Button button = actionButton(icons[i], tab == activeTab ? TEAL : SURFACE, tab == activeTab ? BG : MUTED);
             button.setTextSize(18);
             button.setContentDescription(descriptions[i]);
-            button.setOnClickListener(view -> {
-                if (tab == 1 && !entryReadyForTests(engine.snapshot())) {
-                    Toast.makeText(this, entryRequirements(engine.snapshot()), Toast.LENGTH_LONG).show();
-                    return;
-                }
-                activeTab = tab;
-                if (tab == 0) engine.transitionTo(SampleSession.Phase.OBSERVE);
-                else if (tab == 1) engine.transitionTo(SampleSession.Phase.TEST);
-                else engine.transitionTo(SampleSession.Phase.MEMORY);
-                render();
-            });
+            button.setOnClickListener(view -> { activeTab = tab; if (tab == 0) engine.transitionTo(SampleSession.Phase.OBSERVE); else if (tab == 1) engine.transitionTo(SampleSession.Phase.TEST); else engine.transitionTo(SampleSession.Phase.MEMORY); persist(); render(); });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(42), 1f);
             params.setMargins(i == 0 ? 0 : dp(5), 0, 0, 0);
             bar.addView(button, params);
@@ -307,56 +203,15 @@ public final class MainActivity extends AppCompatActivity {
         return bar;
     }
 
-    private boolean entryReadyForTests(SampleSession sample) {
-        if (sample == null) return false;
-        boolean hasEvent = sample.eventId != null && !sample.eventId.trim().isEmpty() && !"pending-event".equals(sample.eventId);
-        boolean hasPhoto = !sample.captures.isEmpty() || !pendingCaptures.isEmpty();
-        return hasEvent
-                && !sample.declaredSubstance.trim().isEmpty()
-                && !sample.presentation.trim().isEmpty()
-                && !sample.observedColor.trim().isEmpty()
-                && hasPhoto;
-    }
-
-    private boolean sampleHasWork(SampleSession sample) {
-        if (sample == null) return false;
-        return !sample.captures.isEmpty()
-                || !sample.tests.isEmpty()
-                || !sample.declaredSubstance.trim().isEmpty()
-                || !sample.presentation.trim().isEmpty()
-                || !sample.observedColor.trim().isEmpty()
-                || !pendingCaptures.isEmpty();
-    }
-
-    private boolean canChangeEvent() {
-        SampleSession sample = engine.snapshot();
-        if (!sampleHasWork(sample)) return true;
-        Toast.makeText(this, "Termina o confirma la muestra antes de cambiar de evento", Toast.LENGTH_LONG).show();
-        return false;
-    }
-
-    private String entryRequirements(SampleSession sample) {
-        if (sample == null) return "Completa el ingreso para avanzar";
-        List<String> missing = new ArrayList<>();
-        if (sample.eventId == null || sample.eventId.trim().isEmpty() || "pending-event".equals(sample.eventId)) missing.add("evento");
-        if (sample.declaredSubstance == null || sample.declaredSubstance.trim().isEmpty()) missing.add("sustancia");
-        if (sample.presentation == null || sample.presentation.trim().isEmpty()) missing.add("formato");
-        if (sample.observedColor == null || sample.observedColor.trim().isEmpty()) missing.add("color observado");
-        if (sample.captures.isEmpty() && pendingCaptures.isEmpty()) missing.add("foto");
-        return missing.isEmpty() ? "Ingreso completo · puedes avanzar a colorimetría" : "Para avanzar completa: " + String.join(", ", missing);
-    }
-
     private void renderCaptureTab(SampleSession sample) {
         content.addView(sectionLabel("1  ·  INGRESO"));
-        String captureHeading = !pendingCaptures.isEmpty() ? "Revisar captura" : sample.captures.isEmpty() ? "Nueva muestra" : "Editar muestra";
-        content.addView(heading(captureHeading));
-        if (!pendingCaptures.isEmpty()) {
-            SampleSession.Capture latest = pendingCaptures.get(pendingCaptures.size() - 1);
-            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
-            content.addView(body("foto + visión  ·  " + pendingCaptures.size() + " vista(s) pendiente(s)"));
+        content.addView(heading(pendingCapture == null ? "Nueva muestra" : "Revisar captura"));
+        if (pendingCapture != null) {
+            addEvidencePair(pendingCapture.path, pendingCapture.silhouettePreviewPath, sample.presentation, pendingCapture.features);
+            content.addView(body("foto  +  visión"));
         } else if (!sample.captures.isEmpty()) {
             SampleSession.Capture latest = sample.captures.get(sample.captures.size() - 1);
-            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
+            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, latest.features);
             content.addView(body("último ingreso guardado"));
         } else {
             Button capture = actionButton("▣  FOTO", CORAL, TEXT);
@@ -364,56 +219,38 @@ public final class MainActivity extends AppCompatActivity {
             capture.setOnClickListener(view -> openCamera());
         }
 
-        addMoldRecognitionCard(sample);
-        if ((!pendingCaptures.isEmpty() || !sample.captures.isEmpty())) {
-            Button another = actionButton("⊕  OTRA VISTA", SURFACE, TEAL);
-            content.addView(another, new LinearLayout.LayoutParams(-1, dp(42)));
-            another.setOnClickListener(view -> openCamera());
-        }
-
         content.addView(sectionLabel("DECLARACIÓN"));
         addOptionStrip("sustancia", SUBSTANCE_OPTIONS, sample.declaredSubstance, value -> {
-            currentWasConfirmed = false;
             engine.setDeclaredSubstance(value);
             if (!containsIgnoreCase(formatsFor(value), sample.presentation)) engine.setPresentation("");
             render();
         });
         if (!sample.declaredSubstance.isEmpty()) {
-            addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { currentWasConfirmed = false; engine.setPresentation(value); render(); });
+            addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { engine.setPresentation(value); render(); });
         }
-        // The observed colour belongs to the capture context, not only to a
-        // completed declaration. Keep the ramp visible while a photo is
-        // reviewed/repeated; the sample is committed only at AVANZAR.
-        addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
-                value -> { currentWasConfirmed = false; engine.setObservedColor(value); }, this::render);
+        if (!sample.declaredSubstance.isEmpty() && !sample.presentation.isEmpty()) {
+            addColorStrip("color", COLOR_OPTIONS, COLOR_VALUES, sample.observedColor, value -> { engine.setObservedColor(value); render(); });
+        }
 
-        boolean entryReady = entryReadyForTests(sample);
-        boolean ready = entryReady && !currentWasConfirmed;
-        content.addView(body(currentWasConfirmed
-                ? "Muestra confirmada · edita un dato para reabrir el pipeline"
-                : entryReady ? "Ingreso completo · puedes avanzar a colorimetría" : entryRequirements(sample)));
-
-        if (!pendingCaptures.isEmpty()) {
+        if (pendingCapture != null) {
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
             Button discard = actionButton("🗑", SURFACE, CORAL);
             discard.setContentDescription("Descartar foto");
-            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", ready ? TEAL : SURFACE_RAISED, ready ? BG : MUTED);
-            save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
-            save.setEnabled(ready);
+            Button save = actionButton("✓  GUARDAR", TEAL, BG);
+            save.setContentDescription("Guardar ingreso");
             actions.addView(discard, new LinearLayout.LayoutParams(0, dp(50), .28f));
             LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, dp(50), .72f); saveParams.setMargins(dp(6), 0, 0, 0); actions.addView(save, saveParams);
             content.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
             discard.setOnClickListener(view -> discardPendingCapture(true));
             save.setOnClickListener(view -> saveCurrentEntry());
         } else {
-            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", ready ? TEAL : SURFACE_RAISED, ready ? BG : MUTED);
-            save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
-            save.setEnabled(ready);
+            Button save = actionButton("✓  GUARDAR", TEAL, BG);
+            save.setContentDescription("Guardar ingreso sin foto");
             content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
             save.setOnClickListener(view -> saveCurrentEntry());
         }
-        if (!pendingCaptures.isEmpty()) {
+        if (pendingCapture != null) {
             Button retry = actionButton("⊙  REPETIR FOTO", SURFACE, TEAL);
             content.addView(retry, new LinearLayout.LayoutParams(-1, dp(40)));
             retry.setOnClickListener(view -> { discardPendingCapture(false); openCamera(); });
@@ -422,14 +259,6 @@ public final class MainActivity extends AppCompatActivity {
 
     private void renderColorimetryTab(SampleSession sample) {
         content.addView(sectionLabel("2  ·  COLORIMETRÍA"));
-        if (!entryReadyForTests(sample)) {
-            content.addView(heading("Ingreso incompleto"));
-            content.addView(body(entryRequirements(sample)));
-            Button back = actionButton("←  VOLVER A INGRESO", TEAL, BG);
-            content.addView(back, new LinearLayout.LayoutParams(-1, dp(50)));
-            back.setOnClickListener(view -> { activeTab = 0; render(); });
-            return;
-        }
         List<SampleSession.TestSession> tests = ensureColorimetryTests(sample);
         if (tests.isEmpty()) {
             if ("OTRA".equalsIgnoreCase(sample.declaredSubstance)) {
@@ -440,9 +269,9 @@ public final class MainActivity extends AppCompatActivity {
                 content.addView(add, new LinearLayout.LayoutParams(-1, dp(50)));
                 add.setOnClickListener(view -> {
                     if (manualReagent.isEmpty()) { Toast.makeText(this, "elige un reactivo", Toast.LENGTH_SHORT).show(); return; }
-                    currentWasConfirmed = false;
                     engine.addTest("Colorimetría", manualReagent);
                     activeTestIndex = 0;
+                    persist();
                     render();
                 });
                 return;
@@ -459,183 +288,36 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession.TestSession current = tests.get(activeTestIndex);
         content.addView(body("reactivo correspondiente  ·  " + current.reagent));
         addColorimetryInput(current, activeTestIndex);
-        if (!testTimingReady(current)) content.addView(body("Inicia y detén el cronómetro antes de guardar este test."));
-        boolean currentReady = !currentWasConfirmed && testInputReady(tests.get(activeTestIndex));
-        boolean allReady = allTestsReady(tests);
-        boolean saveEnabled = currentReady && (activeTestIndex + 1 < tests.size() || allReady);
-        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "→  SIGUIENTE TEST" : "✓  GUARDAR TESTS", saveEnabled ? TEAL : SURFACE_RAISED, saveEnabled ? BG : MUTED);
-        save.setEnabled(saveEnabled);
+        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "✓  GUARDAR Y SEGUIR" : "✓  GUARDAR TEST", TEAL, BG);
         content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
         save.setOnClickListener(view -> saveCurrentColorimetryTest(tests));
     }
 
     private void renderEntriesTab() {
         content.addView(sectionLabel("3  ·  REGISTRO"));
-        content.addView(heading("Eventos y memoria RD"));
-        List<RdFieldDb.EventRow> eventRows = database.recentEvents();
-        for (RdFieldDb.EventRow row : eventRows) {
-            String label = row.name == null || row.name.trim().isEmpty() ? row.id : row.name;
-            String detail = row.venue == null || row.venue.trim().isEmpty() ? "" : "  ·  " + row.venue;
-            String sync = "synced".equalsIgnoreCase(row.syncStatus) ? "  ·  ✓" : "  ·  pendiente";
-            content.addView(body("●  " + label + detail + sync));
-        }
-        Button changeEvent = actionButton("＋  CREAR / CAMBIAR EVENTO", SURFACE_RAISED, AMBER);
-        content.addView(changeEvent, new LinearLayout.LayoutParams(-1, dp(46)));
-        changeEvent.setOnClickListener(view -> {
-            if (!canChangeEvent()) return;
-            loadBootstrapAndMaybeChoose(true, false);
-        });
-        String remoteHistoryLabel = remoteSamplesEventRef.isEmpty()
-                ? "HISTORIA HOST RD · NO CARGADA"
-                : remoteSamplesLoading
-                ? "HISTORIA HOST RD · CONSULTANDO…"
-                : remoteSamplesFailed
-                ? "HISTORIA HOST RD · NO DISPONIBLE"
-                : "HISTORIA HOST RD · " + remoteSamples.size() + " MUESTRA(S)"
-                + (remoteDemoCount() == 0 ? "" : " · " + remoteDemoCount() + " DEMO");
-        content.addView(sectionLabel(remoteHistoryLabel));
-        if (remoteSamples.isEmpty()) {
-            String historyMessage = remoteSamplesEventRef.isEmpty()
-                    ? "Selecciona un evento para consultar la base RD."
-                    : remoteSamplesLoading
-                    ? "Consultando la base RD del host…"
-                    : remoteSamplesFailed
-                    ? "No se pudo leer la base RD del host."
-                    : "El host no tiene muestras para este evento.";
-            content.addView(body(historyMessage));
-        } else {
-            for (JSONObject row : remoteSamples) addRemoteSampleRow(row);
-        }
-        content.addView(sectionLabel("PROYECCIÓN LOCAL DEL TELÉFONO"));
         content.addView(heading("Ingresos"));
         List<RdFieldDb.SampleRow> rows = database.recentSamples();
-        addCurrentRecordSummary(engine.snapshot(), rows);
         if (rows.isEmpty()) { content.addView(body("sin ingresos")); return; }
-        content.addView(body("Toca un ingreso para revisarlo o editarlo en las pestañas 1 y 2."));
         for (RdFieldDb.SampleRow row : rows) {
             List<SampleSession.Capture> captures = database.loadCaptures(row.id);
             SampleSession.Capture latest = captures.isEmpty() ? null : captures.get(captures.size() - 1);
             addEntryRow(row, latest);
         }
-        boolean confirmEnabled = sampleCanConfirm(engine.snapshot());
-        Button confirm = actionButton(confirmEnabled ? "✓  CONFIRMAR Y NUEVA MUESTRA" : "CONFIRMAR BLOQUEADO · COMPLETA EL PIPELINE", confirmEnabled ? TEAL : SURFACE_RAISED, confirmEnabled ? BG : MUTED);
-        confirm.setEnabled(confirmEnabled);
-        content.addView(confirm, new LinearLayout.LayoutParams(-1, dp(50)));
-        confirm.setOnClickListener(view -> confirmCurrentSample());
     }
 
-    private void addCurrentRecordSummary(SampleSession sample, List<RdFieldDb.SampleRow> rows) {
-        LinearLayout card = card();
-        card.addView(sectionLabel("MUESTRA ACTIVA"));
-        card.addView(text(sample.code, 18, TEXT));
-        String event = eventContextText(sample);
-        card.addView(body("evento  ·  " + event));
-        card.addView(body("sustancia  ·  " + (sample.declaredSubstance.isEmpty() ? "sin declarar" : sample.declaredSubstance)
-                + "   ·   formato  ·  " + (sample.presentation.isEmpty() ? "sin formato" : sample.presentation)));
-        card.addView(body("color observado  ·  " + (sample.observedColor.isEmpty() ? "sin color" : sample.observedColor)));
-
-        SampleSession.Capture latest = null;
-        if (!pendingCaptures.isEmpty()) latest = pendingCaptures.get(pendingCaptures.size() - 1);
-        else if (!sample.captures.isEmpty()) latest = sample.captures.get(sample.captures.size() - 1);
-        if (latest != null) {
-            LinearLayout evidence = new LinearLayout(this);
-            evidence.setOrientation(LinearLayout.HORIZONTAL);
-            evidence.addView(thumbnail(latest.path, "⊘", MUTED), new LinearLayout.LayoutParams(0, dp(112), 1f));
-            LinearLayout.LayoutParams silhouette = new LinearLayout.LayoutParams(0, dp(112), 1f);
-            silhouette.setMargins(dp(6), 0, 0, 0);
-            evidence.addView(thumbnail(latest.silhouettePreviewPath, latest.silhouettePreviewPath.isEmpty() ? "∅" : visualGlyph(sample.presentation), latest.silhouettePreviewPath.isEmpty() ? MUTED : colorForLabel(sample.observedColor), true), silhouette);
-            card.addView(evidence, new LinearLayout.LayoutParams(-1, dp(116)));
-            String silhouetteState = latest.silhouettePreviewPath.isEmpty() ? "silueta no disponible" : "foto + silueta";
-            card.addView(body(pendingCaptures.isEmpty() ? silhouetteState : silhouetteState + " · pendiente de AVANZAR"));
-        } else {
-            card.addView(body("foto + silueta  ·  pendiente"));
-        }
-
-        if (sample.tests.isEmpty()) {
-            card.addView(body("tests  ·  pendientes"));
-        } else {
-            card.addView(sectionLabel("TESTS Y REACCIONES"));
-            for (SampleSession.TestSession test : sample.tests) {
-                String persistedReaction = test.observations.isEmpty()
-                        ? ""
-                        : test.observations.get(test.observations.size() - 1).color;
-                String stagedReaction = testColors.get(test.id);
-                String reaction = stagedReaction != null ? stagedReaction
-                        : persistedReaction.isEmpty() ? "sin reacción registrada" : persistedReaction;
-                boolean stagedChange = stagedReaction != null && !stagedReaction.equals(persistedReaction);
-                String state = "done".equalsIgnoreCase(test.status) && !stagedChange ? "✓" : "pendiente de guardar";
-                card.addView(body(state + "  " + test.reagent + "  ·  reacción  ·  " + reaction
-                        + (test.elapsedMs > 0 ? "  ·  " + String.format(Locale.US, "%.1fs", test.elapsedMs / 1000f) : "")));
-            }
-        }
-
-        RdFieldDb.SampleRow local = null;
-        for (RdFieldDb.SampleRow row : rows) if (row.id.equals(sample.id)) { local = row; break; }
-        String sync = local == null ? "pendiente local" : "synced".equalsIgnoreCase(local.syncStatus)
-                ? "✓ recibido por host" : "pendiente de sincronizar";
-        card.addView(body("estado  ·  " + sample.status + "   ·   sincronización  ·  " + sync));
-        content.addView(card, new LinearLayout.LayoutParams(-1, -2));
-    }
-
-    private void addRemoteSampleRow(JSONObject row) {
-        LinearLayout item = card();
-        String code = row.optString("sampleCode", "sin código");
-        String substance = row.optString("substanceDeclared", "sin declarar");
-        String format = row.optString("sampleType", "sin formato");
-        String color = row.optString("color", "sin color");
-        String mold = remoteText(row, "moldDesign");
-        String mark = remoteText(row, "logoOrMark");
-        JSONArray captures = row.optJSONArray("captures");
-        JSONArray tests = row.optJSONArray("tests");
-        boolean demo = isRemoteDemo(row);
-        item.addView(text((demo ? "◇ DEMO  " : "○  ") + code + "  ·  " + substance, 15, TEXT));
-        if (demo) item.addView(body("registro sintético de demostración; no evidencia de terreno"));
-        item.addView(body(format + "  ·  color " + (color.isEmpty() ? "sin registro" : color)));
-        if (!mold.isEmpty()) item.addView(body("molde/diseño: " + mold));
-        if (!mark.isEmpty()) item.addView(body("marca: " + mark));
-        item.addView(body("capturas " + (captures == null ? 0 : captures.length())
-                + "  ·  tests " + (tests == null ? 0 : tests.length())
-                + "  ·  " + row.optString("date", "fecha sin registro")));
-        content.addView(item, new LinearLayout.LayoutParams(-1, -2));
-    }
-
-    private int remoteDemoCount() {
-        int count = 0;
-        for (JSONObject row : remoteSamples) if (isRemoteDemo(row)) count++;
-        return count;
-    }
-
-    private boolean isRemoteDemo(JSONObject row) {
-        String code = row == null ? "" : row.optString("sampleCode", "");
-        String origin = row == null ? "" : row.optString("eventOrigin", "");
-        return code.toUpperCase(Locale.ROOT).startsWith("XIO-DEMO")
-                || "demo".equalsIgnoreCase(origin)
-                || "synthetic".equalsIgnoreCase(origin);
-    }
-
-    private String remoteText(JSONObject row, String key) {
-        if (row == null || row.isNull(key)) return "";
-        String value = row.optString(key, "").trim();
-        return "null".equalsIgnoreCase(value) ? "" : value;
-    }
-
-    private void addEvidencePair(String photoPath, String silhouettePath, String format, String declaredColor, VisualFeatures features) {
+    private void addEvidencePair(String photoPath, String silhouettePath, String format, VisualFeatures features) {
         LinearLayout pair = new LinearLayout(this);
         pair.setOrientation(LinearLayout.HORIZONTAL);
         pair.setGravity(Gravity.CENTER_VERTICAL);
         pair.setPadding(0, dp(8), 0, dp(3));
         pair.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(0, dp(154), 1f));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(0, dp(154), 1f); visualParams.setMargins(dp(7), 0, 0, 0);
-        int visualColor = colorForLabel(declaredColor);
-        pair.addView(thumbnail(silhouettePath, silhouettePath.isEmpty() ? "∅" : visualGlyph(format), silhouettePath.isEmpty() ? MUTED : visualColor, true), visualParams);
+        int visualColor = features == null ? SURFACE_RAISED : Color.rgb(features.meanRed, features.meanGreen, features.meanBlue);
+        pair.addView(thumbnail(silhouettePath, visualGlyph(format), visualColor), visualParams);
         content.addView(pair, new LinearLayout.LayoutParams(-1, dp(165)));
     }
 
     private View thumbnail(String path, String fallback, int fallbackColor) {
-        return thumbnail(path, fallback, fallbackColor, false);
-    }
-
-    private View thumbnail(String path, String fallback, int fallbackColor, boolean tint) {
         FrameLayout tile = new FrameLayout(this);
         tile.setBackgroundColor(SURFACE_RAISED);
         if (path != null && !path.isEmpty() && new File(path).isFile()) {
@@ -645,7 +327,6 @@ public final class MainActivity extends AppCompatActivity {
                 image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 image.setPadding(dp(5), dp(5), dp(5), dp(5));
                 image.setImageBitmap(bitmap);
-                if (tint) image.setColorFilter(new PorterDuffColorFilter(fallbackColor, PorterDuff.Mode.SRC_IN));
                 tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
                 return tile;
             }
@@ -701,68 +382,40 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(horizontal, new LinearLayout.LayoutParams(-1, dp(40)));
     }
 
-    private TextView addColorRampControl(LinearLayout parent, String label, String selected,
-                                         String description, RampAction action) {
-        return addColorRampControl(parent, label, selected, description, action, null);
-    }
-
-    private TextView addColorRampControl(LinearLayout parent, String label, String selected,
-                                         String description, RampAction action, Runnable commit) {
-        if (label != null && !label.isEmpty()) parent.addView(sectionLabel(label));
-        boolean hasSelection = selected != null && !selected.trim().isEmpty();
-        TextView reading = text(hasSelection ? "color  " + selected : "sin color seleccionado", 12,
-                hasSelection ? TEXT : MUTED);
-        reading.setPadding(0, dp(4), 0, dp(4));
-        ColorRampView ramp = new ColorRampView(this, rampInitialColor(selected), value -> {
-            if (action != null) action.selected(value);
-            reading.setText("color  " + value);
-            reading.setTextColor(TEXT);
-        });
-        ramp.setOnCommit(commit);
-        ramp.setContentDescription(description);
-        parent.addView(ramp, new LinearLayout.LayoutParams(-1, dp(116)));
-        parent.addView(reading);
-        return reading;
-    }
-
-    private String rampInitialColor(String value) {
-        if (value == null || value.trim().isEmpty()) return "";
-        String clean = value.trim();
-        if (clean.startsWith("#")) return clean;
-        for (int i = 0; i < COLOR_OPTIONS.length; i++) {
-            if (COLOR_OPTIONS[i].equalsIgnoreCase(clean)) {
-                return String.format(Locale.US, "#%06X", COLOR_VALUES[i] & 0x00ffffff);
-            }
+    private void addColorStrip(String label, String[] options, int[] colors, String selected, OptionAction action) {
+        content.addView(sectionLabel(label.toUpperCase(Locale.ROOT)));
+        ScrollView horizontal = new ScrollView(this);
+        horizontal.setHorizontalScrollBarEnabled(false);
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        for (int i = 0; i < options.length; i++) {
+            String option = options[i];
+            Button choice = actionButton(option.equalsIgnoreCase(selected) ? "✓" : "●", colors[i], readableOn(colors[i]));
+            choice.setTextSize(16);
+            choice.setContentDescription(label + ": " + option);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(42), dp(38)); params.setMargins(0, 0, dp(5), 0); row.addView(choice, params);
+            choice.setOnClickListener(view -> action.select(option));
         }
-        return "";
+        horizontal.addView(row);
+        content.addView(horizontal, new LinearLayout.LayoutParams(-1, dp(40)));
     }
 
     private void addEntryRow(RdFieldDb.SampleRow row, SampleSession.Capture capture) {
         LinearLayout item = card();
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
-        item.setClickable(true);
-        item.setFocusable(true);
-        item.setContentDescription("Abrir ingreso " + row.code);
-        item.setOnClickListener(view -> selectLocalSample(row));
         String photoPath = capture == null ? "" : capture.path;
         String silhouettePath = capture == null ? "" : capture.silhouettePreviewPath;
         VisualFeatures features = capture == null ? null : capture.features;
-        int color = colorForLabel(row.observedColor);
+        int color = features == null ? colorForLabel(row.observedColor) : Color.rgb(features.meanRed, features.meanGreen, features.meanBlue);
         item.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(dp(62), dp(62)));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(dp(62), dp(62)); visualParams.setMargins(dp(5), 0, dp(9), 0);
-        item.addView(thumbnail(silhouettePath, silhouettePath.isEmpty() ? "∅" : visualGlyph(row.presentation), silhouettePath.isEmpty() ? MUTED : color, true), visualParams);
+        item.addView(thumbnail(silhouettePath, visualGlyph(row.presentation), color), visualParams);
         LinearLayout info = new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL); info.setGravity(Gravity.CENTER_VERTICAL);
         String substance = row.declaredSubstance == null || row.declaredSubstance.isEmpty() ? "sin declarar" : row.declaredSubstance;
         String format = row.presentation == null || row.presentation.isEmpty() ? "sin formato" : row.presentation;
-        String observedColorLabel = row.observedColor == null || row.observedColor.trim().isEmpty()
-                ? "sin color" : "color " + row.observedColor.trim();
         info.addView(text(substance + "  ·  " + format, 13, TEXT));
-        info.addView(body(observedColorLabel));
         info.addView(body(formatTime(capture == null ? row.createdAt : capture.capturedAt) + "  ·  " + row.code));
-        String sync = "synced".equalsIgnoreCase(row.syncStatus) ? "✓ recibido por host" : "sending".equalsIgnoreCase(row.syncStatus) ? "enviando al host…" : "pendiente de sincronizar";
-        if (row.syncError != null && !row.syncError.trim().isEmpty() && !"synced".equalsIgnoreCase(row.syncStatus)) sync += " · reintento disponible";
-        info.addView(body(sync));
         item.addView(info, new LinearLayout.LayoutParams(0, -1, 1f));
         content.addView(item, new LinearLayout.LayoutParams(-1, dp(82)));
     }
@@ -806,27 +459,34 @@ public final class MainActivity extends AppCompatActivity {
         row.addView(header);
 
         String selected = testColors.get(test.id);
-        TextView reading = addColorRampControl(row, "", selected, "Rampa cromática del test " + (index + 1), value -> {
-            currentWasConfirmed = false;
+        TextView reading = text(selected == null || selected.isEmpty() ? "sin lectura seleccionada" : "lectura  " + selected, 12, selected == null || selected.isEmpty() ? MUTED : TEXT);
+        reading.setPadding(0, dp(4), 0, dp(4));
+        ColorRampView ramp = new ColorRampView(this, selected, value -> {
             testColors.put(test.id, value);
-        }, this::render);
+            reading.setText("lectura  " + value);
+            reading.setTextColor(TEXT);
+        });
+        ramp.setContentDescription("Rampa cromática del test " + (index + 1));
+        row.addView(ramp, new LinearLayout.LayoutParams(-1, dp(116)));
+        row.addView(reading);
         Button noReading = actionButton("—  SIN CAMBIO / NO LEGIBLE", SURFACE_RAISED, MUTED);
         noReading.setContentDescription("Registrar sin lectura");
-        noReading.setOnClickListener(view -> { currentWasConfirmed = false; testColors.put(test.id, "sin lectura"); render(); });
+        noReading.setOnClickListener(view -> { testColors.put(test.id, "sin lectura"); render(); });
         row.addView(noReading, new LinearLayout.LayoutParams(-1, dp(38)));
-        timerButton.setOnClickListener(view -> { currentWasConfirmed = false; if (test.status.equals("running")) engine.stopTest(test); else engine.startTest(test); render(); });
+        timerButton.setOnClickListener(view -> { if (test.status.equals("running")) engine.stopTest(test); else engine.startTest(test); persist(); render(); });
         content.addView(row, new LinearLayout.LayoutParams(-1, dp(216)));
     }
 
     private List<SampleSession.TestSession> ensureColorimetryTests(SampleSession sample) {
         List<SampleSession.TestSession> result = new ArrayList<>();
         String[] plan = testPlanFor(sample.declaredSubstance);
+        boolean changed = false;
         for (String reagent : plan) {
             SampleSession.TestSession found = null;
             for (SampleSession.TestSession test : sample.tests) {
                 if (test.reagent != null && test.reagent.equalsIgnoreCase(reagent)) { found = test; break; }
             }
-            if (found == null) found = engine.addTest("Colorimetría", reagent);
+            if (found == null) { found = engine.addTest("Colorimetría", reagent); changed = true; }
             if (!testColors.containsKey(found.id) && !found.observations.isEmpty()) testColors.put(found.id, found.observations.get(found.observations.size() - 1).color);
             result.add(found);
         }
@@ -839,59 +499,8 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
         if (activeTestIndex >= result.size()) activeTestIndex = Math.max(0, result.size() - 1);
+        if (changed) persist();
         return result;
-    }
-
-    private boolean testColorReady(SampleSession.TestSession test) {
-        String color = test == null ? "" : testColors.get(test.id);
-        return color != null && !color.trim().isEmpty();
-    }
-
-    private boolean testTimingReady(SampleSession.TestSession test) {
-        return test != null && !"running".equalsIgnoreCase(test.status) && test.elapsedMs > 0L;
-    }
-
-    private boolean testInputReady(SampleSession.TestSession test) {
-        return testColorReady(test) && testTimingReady(test);
-    }
-
-    private boolean allTestsReady(List<SampleSession.TestSession> tests) {
-        if (tests == null || tests.isEmpty()) return false;
-        for (SampleSession.TestSession test : tests) if (!testInputReady(test)) return false;
-        return true;
-    }
-
-    private boolean testComplete(SampleSession.TestSession test) {
-        return test != null && "done".equalsIgnoreCase(test.status) && testTimingReady(test) && !test.observations.isEmpty();
-    }
-
-    private boolean sampleTestsComplete(SampleSession sample) {
-        if (sample == null) return false;
-        String[] plan = testPlanFor(sample.declaredSubstance);
-        if (plan.length == 0) {
-            if (!"OTRA".equalsIgnoreCase(sample.declaredSubstance)) return false;
-            for (SampleSession.TestSession test : sample.tests) if (testComplete(test)) return true;
-            return false;
-        }
-        for (String reagent : plan) {
-            boolean complete = false;
-            for (SampleSession.TestSession test : sample.tests) {
-                if (test.reagent != null && test.reagent.equalsIgnoreCase(reagent) && testComplete(test)) {
-                    complete = true;
-                    break;
-                }
-            }
-            if (!complete) return false;
-        }
-        return true;
-    }
-
-    private boolean sampleCanConfirm(SampleSession sample) {
-        return !currentWasConfirmed && pendingCaptures.isEmpty() && entryReadyForTests(sample) && sampleTestsComplete(sample);
-    }
-
-    private boolean sampleCanSync(SampleSession sample) {
-        return sample != null && ("confirmed".equalsIgnoreCase(sample.status) || currentWasConfirmed);
     }
 
     private List<SampleSession.TestSession> applicableTests(SampleSession sample) {
@@ -916,116 +525,54 @@ public final class MainActivity extends AppCompatActivity {
 
     private void saveCurrentEntry() {
         SampleSession sample = engine.snapshot();
-        if (currentWasConfirmed) {
-            Toast.makeText(this, "La muestra ya está confirmada; edita un dato antes de volver a confirmarla", Toast.LENGTH_LONG).show();
+        if (sample.declaredSubstance.isEmpty() || sample.presentation.isEmpty() || sample.observedColor.isEmpty()) {
+            Toast.makeText(this, "elige sustancia, formato y color", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (!entryReadyForTests(sample)) {
-            Toast.makeText(this, entryRequirements(sample), Toast.LENGTH_LONG).show();
-            render();
-            return;
-        }
-        if (!pendingCaptures.isEmpty()) {
-            for (SampleSession.Capture capture : new ArrayList<>(pendingCaptures)) {
-                engine.addCapture(capture);
-                engine.addVisualProposal(capture.id, capture.features);
-                database.insertCapture(sample.id, capture);
-            }
-            pendingCaptures.clear();
+        if (pendingCapture != null) {
+            SampleSession.Capture capture = pendingCapture;
+            engine.addCapture(capture);
+            engine.addVisualProposal(capture.id, capture.features);
+            database.insertCapture(sample.id, capture);
+            pendingCapture = null;
             pendingCameraFile = null;
         } else {
-            if (sample.captures.isEmpty()) sample.status = "entry_ready";
+            sample.status = "saved_without_photo";
         }
-        sample.status = "entry_ready";
-        engine.transitionTo(SampleSession.Phase.TEST);
+        engine.transitionTo(SampleSession.Phase.OBSERVE);
         persist();
-        activeTab = 1;
-        Toast.makeText(this, "Ingreso completo · avanzando a colorimetría", Toast.LENGTH_SHORT).show();
+        activeTab = 2;
+        Toast.makeText(this, "Ingreso guardado", Toast.LENGTH_SHORT).show();
         render();
     }
 
     private void discardPendingCapture(boolean rerender) {
-        if (!pendingCaptures.isEmpty()) {
-            SampleSession.Capture capture = pendingCaptures.remove(pendingCaptures.size() - 1);
-            deleteEvidence(capture.path);
-            deleteEvidence(capture.silhouettePath);
-            deleteEvidence(capture.silhouettePreviewPath);
-            deleteEvidence(capture.reliefPath);
+        if (pendingCapture != null) {
+            deleteEvidence(pendingCapture.path);
+            deleteEvidence(pendingCapture.silhouettePath);
+            deleteEvidence(pendingCapture.silhouettePreviewPath);
+            deleteEvidence(pendingCapture.reliefPath);
         } else if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
+        pendingCapture = null;
         pendingCameraFile = null;
         if (rerender) { Toast.makeText(this, "Foto descartada", Toast.LENGTH_SHORT).show(); render(); }
     }
 
-    private void discardAllPendingCaptures() {
-        while (!pendingCaptures.isEmpty()) discardPendingCapture(false);
-        if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
-        pendingCameraFile = null;
-    }
-
-    private void discardCameraDraft() {
-        if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
-        pendingCameraFile = null;
-    }
-
     private void saveCurrentColorimetryTest(List<SampleSession.TestSession> tests) {
-        if (currentWasConfirmed) {
-            Toast.makeText(this, "La muestra ya está confirmada; cambia una lectura antes de guardarla", Toast.LENGTH_LONG).show();
-            return;
-        }
         SampleSession.TestSession test = tests.get(activeTestIndex);
         String color = testColors.containsKey(test.id) ? testColors.get(test.id) : "sin lectura";
-        if (!testTimingReady(test)) {
-            Toast.makeText(this, "inicia y detén el cronómetro antes de guardar este test", Toast.LENGTH_LONG).show();
-            return;
-        }
-        if (!testColorReady(test)) {
-            Toast.makeText(this, "selecciona el color de la reacción o SIN CAMBIO / NO LEGIBLE", Toast.LENGTH_LONG).show();
-            return;
-        }
+        if (test.status.equals("running")) engine.stopTest(test);
+        String previous = test.observations.isEmpty() ? "" : test.observations.get(test.observations.size() - 1).color;
+        if (!color.equals(previous)) engine.addObservation(test, color, "Color seleccionado por el operador");
+        engine.completeTest(test, color, "Observación colorimétrica; no es identificación química");
+        persist();
         if (activeTestIndex + 1 < tests.size()) {
             activeTestIndex++;
-            Toast.makeText(this, "Test " + test.ordinal + " preparado", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Test " + test.ordinal + " guardado", Toast.LENGTH_SHORT).show();
         } else {
-            if (!allTestsReady(tests)) {
-                Toast.makeText(this, "completa todos los tests antes de guardar", Toast.LENGTH_LONG).show();
-                return;
-            }
-            for (SampleSession.TestSession pending : tests) {
-                String pendingColor = testColors.get(pending.id);
-                String previous = pending.observations.isEmpty() ? "" : pending.observations.get(pending.observations.size() - 1).color;
-                if (!pendingColor.equals(previous)) engine.addObservation(pending, pendingColor, "Color seleccionado por el operador");
-                engine.completeTest(pending, pendingColor, "Observación colorimétrica; no es identificación química");
-            }
-            engine.snapshot().status = "tests_ready";
-            persist();
             activeTab = 2;
-            engine.transitionTo(SampleSession.Phase.REVIEW);
-            Toast.makeText(this, "Todos los tests guardados · revisa y confirma", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Tests guardados", Toast.LENGTH_SHORT).show();
         }
-        render();
-    }
-
-    private void confirmCurrentSample() {
-        SampleSession confirmed = engine.snapshot();
-        if (!sampleCanConfirm(confirmed)) {
-            Toast.makeText(this, "Completa ingreso y todos los tests antes de confirmar", Toast.LENGTH_LONG).show();
-            return;
-        }
-        confirmed.status = "confirmed";
-        confirmed.phase = SampleSession.Phase.MEMORY;
-        database.saveSession(confirmed);
-        sendSample(confirmed, false);
-        String eventId = confirmed.eventId;
-        engine = SampleSessionEngine.create(eventId, "XIO-" + System.currentTimeMillis());
-        currentWasConfirmed = false;
-        activeTab = 0;
-        activeTestIndex = 0;
-        testColors.clear();
-        manualReagent = "";
-        discardAllPendingCaptures();
-        pendingCameraFile = null;
-        persist();
-        Toast.makeText(this, "Muestra confirmada · nueva muestra lista", Toast.LENGTH_LONG).show();
         render();
     }
 
@@ -1046,9 +593,6 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private int colorForLabel(String value) {
-        if (value != null && value.trim().startsWith("#")) {
-            try { return Color.parseColor(value.trim()); } catch (IllegalArgumentException ignored) { }
-        }
         if (value != null) for (int i = 0; i < COLOR_OPTIONS.length; i++) if (COLOR_OPTIONS[i].equalsIgnoreCase(value)) return COLOR_VALUES[i];
         return SURFACE_RAISED;
     }
@@ -1153,11 +697,6 @@ public final class MainActivity extends AppCompatActivity {
             LinearLayout card = card(); card.addView(sectionLabel("PROPUESTA")); card.addView(text(features.compactDescription(), 17, TEXT)); card.addView(body("Sólo rasgos visibles · no composición"));
             Button confirm = actionButton("✓  ACEPTAR", TEAL, BG); card.addView(confirm, new LinearLayout.LayoutParams(-1, dp(46))); confirm.setOnClickListener(view -> saveReviewedExample(sample.captures.get(sample.captures.size() - 1), features.compactDescription(), "visual_summary"));
             Button mark = actionButton("✎  MARCA / LOGO", SURFACE, TEAL); card.addView(mark, new LinearLayout.LayoutParams(-1, dp(42))); mark.setOnClickListener(view -> askForMarkingLabel(sample.captures.get(sample.captures.size() - 1), features));
-            if (isEcstasy(sample.declaredSubstance)) {
-                Button mold = actionButton("✦  MOLDE / DISEÑO", SURFACE, AMBER);
-                card.addView(mold, new LinearLayout.LayoutParams(-1, dp(42)));
-                mold.setOnClickListener(view -> askForMoldDesignLabel(sample.captures.get(sample.captures.size() - 1), features));
-            }
             content.addView(card, new LinearLayout.LayoutParams(-1, -2));
         } else {
             content.addView(body("Aún no hay captura visual que corregir."));
@@ -1170,7 +709,6 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(heading("Parecidos y recurrencia"));
         if (sample.captures.isEmpty()) { content.addView(body("Captura primero una muestra para consultar la memoria.")); return; }
         VisualFeatures query = sample.captures.get(sample.captures.size() - 1).features;
-        addMoldRecognitionCard(sample);
         List<BatchPatternDetector.Pattern> patterns = new BatchPatternDetector().detect(database.sampleVisualObservations(sample.eventId));
         BatchPatternDetector.Pattern currentPattern = null;
         for (BatchPatternDetector.Pattern pattern : patterns) if (pattern.sampleCodes.contains(sample.code)) { currentPattern = pattern; break; }
@@ -1194,44 +732,6 @@ public final class MainActivity extends AppCompatActivity {
         }
         Button back = actionButton("←  CORREGIR", SURFACE, TEAL); content.addView(back, new LinearLayout.LayoutParams(-1, dp(42))); back.setOnClickListener(view -> { engine.transitionTo(SampleSession.Phase.REVIEW); render(); });
         Button export = actionButton("⇩  EXPORTAR", TEAL, BG); content.addView(export, new LinearLayout.LayoutParams(-1, dp(46))); export.setOnClickListener(view -> exportSample());
-        Button backup = actionButton("⇩  RESPALDAR RD ANTES DE ACTUALIZAR", SURFACE_RAISED, AMBER); content.addView(backup, new LinearLayout.LayoutParams(-1, dp(46))); backup.setOnClickListener(view -> backupLocalData());
-    }
-
-    private void addMoldRecognitionCard(SampleSession sample) {
-        if (!isEcstasy(sample.declaredSubstance) || sample.captures.isEmpty()) return;
-        List<VisualFeatures> queryViews = new ArrayList<>();
-        for (SampleSession.Capture capture : sample.captures) if (capture.features != null) queryViews.add(capture.features);
-        VisualFeatures query = queryViews.isEmpty() ? null : queryViews.get(queryViews.size() - 1);
-        LinearLayout card = card();
-        card.addView(sectionLabel("RECONOCIMIENTO DE MOLDE / DISEÑO"));
-        card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
-        card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(queryViews)));
-        card.addView(body("Vocabulario histórico RD  ·  " + suggestedMoldDesignsText()));
-        card.addView(body("Catálogo visual aprobado  ·  " + memory.approvedCount() + " referencia(s) · revisión " + loadedCatalogRevision));
-        boolean referenceQuality = hasMoldReferenceQuality(queryViews);
-        if (!referenceQuality) {
-            card.addView(body("Calidad insuficiente para referencia automática: requiere silueta ≥ 0.55 y relieve ≥ 0.45. Captura una cara frontal cercana y nítida; no se etiqueta este objeto."));
-        }
-        List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), queryViews, 3);
-        if (matches.isEmpty()) {
-            card.addView(body(memory.approvedCount() == 0
-                    ? "— sin referencia visual aprobada; el vocabulario histórico no participa en matching"
-                    : "— sin coincidencia visual confiable (unknown); no supera calidad, relieve, consenso o margen"));
-        } else {
-            for (VisualMemory.Match match : matches) {
-                String label = match.entry.reviewedLabel;
-                if (label.toLowerCase(Locale.ROOT).startsWith("molde:")) label = label.substring("molde:".length()).trim();
-                card.addView(text("✦  CANDIDATO VISUAL  ·  " + label, 16, TEXT));
-                card.addView(body(match.entry.sampleCode + "  ·  " + match.explanation
-                        + "  ·  score " + String.format(Locale.US, "%.2f", match.similarity)
-                        + "  ·  ref " + match.entry.referenceId + "  ·  catálogo " + match.entry.catalogRevision));
-            }
-        }
-        Button register = actionButton(referenceQuality ? "✦  PROPONER REFERENCIA PARA REVISIÓN RD" : "✦  REFERENCIA BLOQUEADA POR CALIDAD", SURFACE, referenceQuality ? AMBER : MUTED);
-        register.setEnabled(referenceQuality);
-        card.addView(register, new LinearLayout.LayoutParams(-1, dp(42)));
-        register.setOnClickListener(view -> askForMoldDesignLabel(sample.captures.get(sample.captures.size() - 1), query));
-        content.addView(card, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private void openCamera() {
@@ -1245,27 +745,17 @@ public final class MainActivity extends AppCompatActivity {
             pendingCameraFile = photoStore.prepareFile(engine.snapshot().id, captureId);
             Uri output = FileProvider.getUriForFile(this, "cl.reduciendodano.xiofield.files", pendingCameraFile);
             Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE); intent.putExtra(MediaStore.EXTRA_OUTPUT, output); intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent, REQUEST_CAMERA);
-        } catch (IOException error) {
-            Toast.makeText(this, "No se pudo preparar el almacenamiento privado", Toast.LENGTH_LONG).show();
-        } catch (android.content.ActivityNotFoundException error) {
-            discardCameraDraft();
-            Toast.makeText(this, "No hay una aplicación de cámara disponible", Toast.LENGTH_LONG).show();
-        }
+        } catch (IOException error) { Toast.makeText(this, "No se pudo preparar el almacenamiento privado", Toast.LENGTH_LONG).show(); }
     }
 
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode != REQUEST_PERMISSION) return;
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) launchCamera();
-        else Toast.makeText(this, "Se necesita permiso de cámara para tomar la evidencia", Toast.LENGTH_LONG).show();
-    }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) { super.onRequestPermissionsResult(requestCode, permissions, results); if (requestCode == REQUEST_PERMISSION && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) launchCamera(); }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_CAMERA) return;
-        if (resultCode != RESULT_OK || pendingCameraFile == null) { discardCameraDraft(); return; }
+        if (resultCode != RESULT_OK || pendingCameraFile == null) { discardPendingCapture(false); return; }
         Bitmap bitmap = BitmapFactory.decodeFile(pendingCameraFile.getAbsolutePath());
-        if (bitmap == null) { discardCameraDraft(); Toast.makeText(this, "La captura no pudo leerse", Toast.LENGTH_LONG).show(); return; }
+        if (bitmap == null) { discardPendingCapture(false); Toast.makeText(this, "La captura no pudo leerse", Toast.LENGTH_LONG).show(); return; }
         processCapture(bitmap, pendingCameraFile);
     }
 
@@ -1284,133 +774,14 @@ public final class MainActivity extends AppCompatActivity {
             File silhouettePreviewFile = analysis.silhouettePreview == null ? null : photoStore.storeSilhouettePreview(engine.snapshot().id, captureId, analysis.silhouettePreview);
             File reliefFile = analysis.reliefSvg.isEmpty() ? null : photoStore.storeRelief(engine.snapshot().id, captureId, analysis.reliefSvg);
             if (analysis.silhouettePreview != null) analysis.silhouettePreview.recycle();
-            String viewKind = "vista-" + (engine.snapshot().captures.size() + pendingCaptures.size() + 1);
-            pendingCaptures.add(new SampleSession.Capture(captureId, viewKind, stored.file.getAbsolutePath(), silhouetteFile == null ? "" : silhouetteFile.getAbsolutePath(), silhouettePreviewFile == null ? "" : silhouettePreviewFile.getAbsolutePath(), reliefFile == null ? "" : reliefFile.getAbsolutePath(), stored.sha256, System.currentTimeMillis(), features));
-            currentWasConfirmed = false;
+            String viewKind = "vista-" + (engine.snapshot().captures.size() + 1);
+            pendingCapture = new SampleSession.Capture(captureId, viewKind, stored.file.getAbsolutePath(), silhouetteFile == null ? "" : silhouetteFile.getAbsolutePath(), silhouettePreviewFile == null ? "" : silhouettePreviewFile.getAbsolutePath(), reliefFile == null ? "" : reliefFile.getAbsolutePath(), stored.sha256, System.currentTimeMillis(), features);
             pendingCameraFile = null;
-            Toast.makeText(this, "Revisa la foto y completa el ingreso para avanzar", Toast.LENGTH_SHORT).show(); render();
+            Toast.makeText(this, "Revisa la foto y guarda el ingreso", Toast.LENGTH_SHORT).show(); render();
         } catch (IOException error) { Toast.makeText(this, "No se pudo guardar la evidencia", Toast.LENGTH_LONG).show(); }
     }
 
-    private void persist() {
-        SampleSession sample = engine.snapshot();
-        boolean includeTests = sample.tests.isEmpty() || sampleTestsComplete(sample);
-        database.saveSession(sample, includeTests);
-    }
-
-    /** Removes camera evidence that never reached AVANZAR and has no DB row. */
-    private void cleanupUncommittedDraftEvidence() {
-        List<String> draftIds = new ArrayList<>();
-        if ("draft".equalsIgnoreCase(engine.snapshot().status)) draftIds.add(engine.snapshot().id);
-        for (RdFieldDb.SampleRow local : database.recentSamples()) {
-            if ("draft".equalsIgnoreCase(local.status) && !draftIds.contains(local.id)) draftIds.add(local.id);
-        }
-        for (String sampleId : draftIds) {
-            File directory = new File(getFilesDir(), "evidence" + File.separator + sampleId);
-            File[] photos = directory.listFiles((dir, name) -> name != null && name.endsWith(".jpg"));
-            if (photos == null) continue;
-            List<SampleSession.Capture> registered = database.loadCaptures(sampleId);
-            for (File photo : photos) {
-                String captureId = photo.getName().substring(0, photo.getName().length() - 4);
-                boolean registeredCapture = false;
-                for (SampleSession.Capture capture : registered) if (capture.id.equals(captureId)) { registeredCapture = true; break; }
-                if (registeredCapture) continue;
-                deleteEvidence(photo.getAbsolutePath());
-                deleteEvidence(new File(directory, captureId + ".svg").getAbsolutePath());
-                deleteEvidence(new File(directory, captureId + ".silhouette.png").getAbsolutePath());
-                deleteEvidence(new File(directory, captureId + ".relief.svg").getAbsolutePath());
-            }
-        }
-    }
-
-    /** Reconciles orphan or incomplete evidence for every local sample. */
-    private void reconcileOrphanCaptureFiles() {
-        String currentSampleId = engine.snapshot().id;
-        for (RdFieldDb.SampleRow local : database.recentSamples()) {
-            if ("draft".equalsIgnoreCase(local.status)) continue;
-            reconcileOrphanCaptureFiles(local.id, local.id.equals(currentSampleId));
-        }
-    }
-
-    /** Re-runs only evidence that is absent or incomplete; never deletes the original photo. */
-    private void reconcileOrphanCaptureFiles(String sampleId, boolean hydrateCurrentSample) {
-        File directory = new File(getFilesDir(), "evidence" + File.separator + sampleId);
-        File[] photos = directory.listFiles((dir, name) -> name != null && name.endsWith(".jpg"));
-        if (photos == null) return;
-        List<SampleSession.Capture> registered = database.loadCaptures(sampleId);
-        for (File photo : photos) {
-            String captureId = photo.getName().substring(0, photo.getName().length() - 4);
-            SampleSession.Capture existing = null;
-            int existingIndex = -1;
-            for (int i = 0; i < registered.size(); i++) {
-                SampleSession.Capture capture = registered.get(i);
-                if (capture.id.equals(captureId)) { existing = capture; existingIndex = i; break; }
-            }
-            // A capture can already be registered while its first analysis
-            // produced no silhouette. Re-run that exact evidence on launch
-            // so a corrected extractor repairs the row instead of treating
-            // the failed draft as permanently complete.
-            boolean currentModel = existing != null
-                    && SampleSessionEngine.VISUAL_MODEL_VERSION.equals(database.captureModelVersion(sampleId, captureId));
-            boolean usableExisting = currentModel
-                    && !existing.silhouettePreviewPath.isEmpty()
-                    && new File(existing.silhouettePreviewPath).isFile()
-                    && existing.features != null
-                    && existing.features.circularity >= .12f
-                    && !"no separada".equalsIgnoreCase(existing.features.silhouetteLabel);
-            if (usableExisting) continue;
-            Bitmap bitmap = BitmapFactory.decodeFile(photo.getAbsolutePath());
-            if (bitmap == null) continue;
-            try {
-                VisualFeatureExtractor.VisualAnalysis analysis = VisualFeatureExtractor.analyzeDetailed(bitmap);
-                File svg = new File(directory, captureId + ".svg");
-                File preview = new File(directory, captureId + ".silhouette.png");
-                File relief = new File(directory, captureId + ".relief.svg");
-                String silhouettePath = svg.isFile() ? svg.getAbsolutePath() : "";
-                String previewPath = preview.isFile() ? preview.getAbsolutePath() : "";
-                String reliefPath = relief.isFile() ? relief.getAbsolutePath() : "";
-                if (silhouettePath.isEmpty() && analysis.separated && !analysis.silhouetteSvg.isEmpty()) silhouettePath = photoStore.storeSilhouette(sampleId, captureId, analysis.silhouetteSvg).getAbsolutePath();
-                if (previewPath.isEmpty() && analysis.silhouettePreview != null) previewPath = photoStore.storeSilhouettePreview(sampleId, captureId, analysis.silhouettePreview).getAbsolutePath();
-                if (reliefPath.isEmpty() && !analysis.reliefSvg.isEmpty()) reliefPath = photoStore.storeRelief(sampleId, captureId, analysis.reliefSvg).getAbsolutePath();
-                SampleSession.Capture capture = new SampleSession.Capture(captureId,
-                        existing == null ? "vista-recuperada" : existing.kind,
-                        photo.getAbsolutePath(), silhouettePath, previewPath, reliefPath,
-                        sha256(photo), existing == null ? (photo.lastModified() > 0 ? photo.lastModified() : System.currentTimeMillis()) : existing.capturedAt,
-                        analysis.features);
-                database.insertCapture(sampleId, capture);
-                if (existingIndex >= 0) registered.set(existingIndex, capture);
-                else registered.add(capture);
-                database.appendAction(sampleId, "evidence_reconciled", captureId + " · " + (existing == null ? "huérfana" : "reprocesada"));
-                if (hydrateCurrentSample) {
-                    int currentIndex = -1;
-                    for (int i = 0; i < engine.snapshot().captures.size(); i++) {
-                        if (captureId.equals(engine.snapshot().captures.get(i).id)) { currentIndex = i; break; }
-                    }
-                    if (currentIndex >= 0) engine.snapshot().captures.set(currentIndex, capture);
-                    else engine.restoreCapture(capture);
-                    engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
-                }
-                if (analysis.silhouettePreview != null && !analysis.silhouettePreview.isRecycled()) analysis.silhouettePreview.recycle();
-            } catch (IOException ignored) {
-                // Keep the original evidence intact; a later launch may retry.
-            } finally {
-                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
-            }
-        }
-    }
-
-    private String sha256(File file) throws IOException {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (FileInputStream input = new FileInputStream(file)) {
-                byte[] buffer = new byte[8192]; int count;
-                while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
-            }
-            StringBuilder result = new StringBuilder();
-            for (byte value : digest.digest()) result.append(String.format(Locale.US, "%02x", value));
-            return result.toString();
-        } catch (NoSuchAlgorithmException error) { return "hash-unavailable"; }
-    }
+    private void persist() { database.saveSession(engine.snapshot()); }
 
     private void saveReviewedExample(SampleSession.Capture capture, String label, String field) {
         SampleSession sample = engine.snapshot();
@@ -1419,8 +790,7 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession.Correction correction = sample.corrections.get(sample.corrections.size() - 1);
         sample.status = "reviewed";
         database.saveCorrectionAndTrainingExample(sample.id, correction, label);
-        memory.addReviewed(new VisualMemory.Entry(capture.id, sample.code, sample.eventId, capture.capturedAt, label,
-                sample.declaredSubstance, field, capture.features));
+        memory.addReviewed(new VisualMemory.Entry(capture.id, sample.code, sample.eventId, capture.capturedAt, label, capture.features));
         persist();
         Toast.makeText(this, "Corrección conservada y disponible para recuperar", Toast.LENGTH_SHORT).show();
         render();
@@ -1443,95 +813,11 @@ public final class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void askForMoldDesignLabel(SampleSession.Capture capture, VisualFeatures features) {
-        EditText input = new EditText(this);
-        input.setHint("Ej.: corona, calavera, estrella, logo sin leer");
-        input.setSingleLine(true);
-        new AlertDialog.Builder(this)
-                .setTitle("¿Qué diseño tiene el molde?")
-                .setMessage("Guarda una etiqueta visual para encontrar comprimidos parecidos en futuros turnos; no identifica la sustancia. Vocabulario histórico disponible: " + suggestedMoldDesignsText())
-                .setView(input)
-                .setNegativeButton("Cancelar", null)
-                .setPositiveButton("GUARDAR MOLDE", (dialog, which) -> {
-                    String label = input.getText().toString().trim();
-                    if (label.isEmpty()) label = "diseño visible sin nombre";
-                    submitMoldDesignCandidate(capture, label);
-                })
-                .show();
-    }
-
-    private void submitMoldDesignCandidate(SampleSession.Capture capture, String label) {
-        SampleSession sample = engine.snapshot();
-        List<VisualFeatures> allViews = new ArrayList<>();
-        for (SampleSession.Capture view : sample.captures) if (view.features != null) allViews.add(view.features);
-        if (!hasMoldReferenceQuality(allViews)) {
-            Toast.makeText(this, "Referencia bloqueada: captura frontal nítida con relieve visible", Toast.LENGTH_LONG).show();
-            return;
-        }
-        StringBuilder material = new StringBuilder(sample.code);
-        for (SampleSession.Capture view : sample.captures) material.append('|').append(view.id);
-        String referenceId = "ref-" + UUID.nameUUIDFromBytes(material.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        String storedLabel = "molde: " + label;
-        engine.addCorrection(capture.id, "mold_design_candidate", capture.features.compactDescription(), storedLabel + " · reference_id=" + referenceId);
-        SampleSession.Correction correction = sample.corrections.get(sample.corrections.size() - 1);
-        database.saveCorrectionAndTrainingExample(sample.id, correction, storedLabel, "pending_review");
-        persist();
-        Toast.makeText(this, "Candidato visual guardado · pendiente de aprobación RD", Toast.LENGTH_LONG).show();
-        flujo.submitVisualCandidate(sample, label, referenceId, "xio-rd-operator", rdEndpoint(), result -> {
-            if (result.isSuccess()) {
-                Toast.makeText(this, "Candidato enviado al host RD · pendiente de revisión", Toast.LENGTH_LONG).show();
-            } else {
-                Toast.makeText(this, "Candidato local pendiente · host RD no disponible", Toast.LENGTH_LONG).show();
-            }
-            render();
-        });
-        render();
-    }
-
-    private boolean hasMoldReferenceQuality(List<VisualFeatures> views) {
-        if (views == null) return false;
-        for (VisualFeatures features : views) {
-            if (features != null && features.silhouetteConfidence >= .55f && features.reliefConfidence >= .45f) return true;
-        }
-        return false;
-    }
-
-    private boolean isEcstasy(String value) {
-        if (value == null) return false;
-        String clean = value.toLowerCase(Locale.ROOT).replace("é", "e");
-        return clean.contains("extasis") || clean.contains("mdma");
-    }
-
-    private String suggestedMoldDesignsText() {
-        if (suggestedMoldDesigns.isEmpty()) return "sin referencias textuales";
-        int limit = Math.min(12, suggestedMoldDesigns.size());
-        return String.join(", ", suggestedMoldDesigns.subList(0, limit));
-    }
-
     private void startNextSample() {
+        discardPendingCapture(false);
         SampleSession current = engine.snapshot();
-        boolean unusedDraft = current.captures.isEmpty()
-                && current.tests.isEmpty()
-                && current.declaredSubstance.trim().isEmpty()
-                && current.presentation.trim().isEmpty()
-                && current.observedColor.trim().isEmpty()
-                && pendingCaptures.isEmpty()
-                && "draft".equalsIgnoreCase(current.status);
-        if (unusedDraft) {
-            // The installation starts with one empty placeholder row. Reuse
-            // its identity so tapping “new sample” creates one real row,
-            // instead of leaving XIO-DRAFT behind as a second sample.
-            engine = SampleSessionEngine.createExisting(current.id, current.eventId, "XIO-" + System.currentTimeMillis(), current.createdAt, "OBSERVE", false);
-        } else if (!"confirmed".equalsIgnoreCase(current.status)) {
-            Toast.makeText(this, "Completa y confirma la muestra actual antes de crear otra", Toast.LENGTH_LONG).show();
-            render();
-            return;
-        } else {
-            discardAllPendingCaptures();
-            engine = SampleSessionEngine.create(current.eventId, "XIO-" + System.currentTimeMillis());
-        }
-        currentWasConfirmed = false;
-        manualReagent = "";
+        persist();
+        engine = SampleSessionEngine.create(current.eventId, "XIO-" + System.currentTimeMillis());
         activeTab = 0;
         persist();
         render();
@@ -1551,380 +837,32 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void backupLocalData() {
-        try {
-            File archive = RdFieldExporter.exportLocalBackup(this);
-            Uri uri = FileProvider.getUriForFile(this, "cl.reduciendodano.xiofield.files", archive);
-            Intent share = new Intent(Intent.ACTION_SEND);
-            share.setType("application/zip");
-            share.putExtra(Intent.EXTRA_STREAM, uri);
-            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            startActivity(Intent.createChooser(share, "Guardar respaldo completo XIO-RD"));
-        } catch (IOException error) {
-            Toast.makeText(this, "No se pudo preparar el respaldo RD", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private void openRaider() {
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse(rdEndpoint() + "/raider"));
-            startActivity(intent);
-        } catch (Exception error) {
-            Toast.makeText(this, "No se pudo abrir RAIDER en XIO", Toast.LENGTH_LONG).show();
-        }
-    }
-
     private void syncCurrentSample() {
-        if (!sampleCanSync(engine.snapshot())) {
-            Toast.makeText(this, "Confirma la muestra antes de sincronizar", Toast.LENGTH_LONG).show();
-            return;
-        }
         loadBootstrapAndMaybeChoose(false, true);
     }
 
-    private String rdEndpoint() {
-        String stored = getSharedPreferences("xio_host", MODE_PRIVATE)
-                .getString("rd_endpoint", FlujoGateway.DEFAULT_ENDPOINT);
-        String value = stored == null ? "" : stored.trim();
-        if (value.isEmpty()) value = FlujoGateway.DEFAULT_ENDPOINT;
-        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
-        String suffix = "/api/plugins/rd_field";
-        return value.endsWith(suffix) ? value : value + suffix;
-    }
-
-    private String xioHostRoot() {
-        String endpoint = rdEndpoint();
-        String suffix = "/api/plugins/rd_field";
-        return endpoint.endsWith(suffix) ? endpoint.substring(0, endpoint.length() - suffix.length()) : endpoint;
-    }
-
-    private void showHostDialog() {
-        EditText input = eventInput("http://host:5000 o URL completa de rd_field", xioHostRoot());
-        new AlertDialog.Builder(this)
-                .setTitle("Host XIO-RD")
-                .setMessage("Por defecto usa este Xiaomi (127.0.0.1). Si un PC ejecuta XIO, escribe su dirección LAN; no se agregan tokens.")
-                .setView(input)
-                .setNegativeButton("CANCELAR", null)
-                .setNeutralButton("XIAOMI", (dialog, which) -> {
-                    getSharedPreferences("xio_host", MODE_PRIVATE).edit().remove("rd_endpoint").apply();
-                    Toast.makeText(this, "Host XIO-RD: Xiaomi local", Toast.LENGTH_SHORT).show();
-                })
-                .setPositiveButton("GUARDAR", (dialog, which) -> {
-                    String value = input.getText() == null ? "" : input.getText().toString().trim();
-                    if (!value.startsWith("http://") && !value.startsWith("https://")) {
-                        Toast.makeText(this, "El host debe comenzar con http:// o https://", Toast.LENGTH_LONG).show();
-                        return;
-                    }
-                    getSharedPreferences("xio_host", MODE_PRIVATE).edit().putString("rd_endpoint", value).apply();
-                    Toast.makeText(this, "Host XIO-RD guardado", Toast.LENGTH_SHORT).show();
-                    loadBootstrapAndMaybeChoose(true, false);
-                })
-                .show();
-    }
-
     private void loadBootstrapAndMaybeChoose(boolean forcePicker, boolean syncAfter) {
-        Toast.makeText(this, "⇧  consultando XIO-RD…", Toast.LENGTH_SHORT).show();
-        flujo.loadBootstrap(rdEndpoint(), "", result -> {
+        Toast.makeText(this, "⇧  consultando FLUJO…", Toast.LENGTH_SHORT).show();
+        flujo.loadBootstrap(FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
             if (!result.isSuccess()) {
-                Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
-                if (forcePicker) showCreateEventDialog(syncAfter);
+                Toast.makeText(this, "FLUJO · sin conexión", Toast.LENGTH_LONG).show();
                 return;
             }
             try {
-                suggestedMoldDesigns.clear();
-                JSONArray moldDesigns = result.response.optJSONArray("moldDesigns");
-                if (moldDesigns != null) for (int i = 0; i < moldDesigns.length(); i++) {
-                    JSONObject item = moldDesigns.optJSONObject(i);
-                    String label = item == null ? moldDesigns.optString(i, "") : item.optString("label", "");
-                    if (!label.trim().isEmpty()) suggestedMoldDesigns.add(label.trim());
-                }
-                JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
-                reconcileLocalEventAvailability(events);
+                JSONArray events = result.response.optJSONArray("events");
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
-                loadRemoteSamples(engine.snapshot().eventId);
-                loadApprovedVisualCatalog();
-                render();
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
-                else syncCurrentEventThenSample();
+                else sendCurrentSample();
             } catch (Exception error) {
-                Toast.makeText(this, "XIO-RD · catálogo inválido", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "FLUJO · catálogo inválido", Toast.LENGTH_LONG).show();
             }
         });
-    }
-
-    private void loadRemoteSamples(String eventRef) {
-        if (eventRef == null || eventRef.trim().isEmpty()) {
-            remoteSamples.clear();
-            remoteSamplesEventRef = "";
-            remoteSamplesLoading = false;
-            remoteSamplesFailed = false;
-            return;
-        }
-        remoteSamples.clear();
-        remoteSamplesEventRef = eventRef;
-        remoteSamplesLoading = true;
-        remoteSamplesFailed = false;
-        flujo.loadSamples(rdEndpoint(), eventRef, "", result -> {
-            if (!result.isSuccess()) {
-                remoteSamplesLoading = false;
-                remoteSamplesFailed = true;
-                render();
-                return;
-            }
-            JSONArray rows = result.response.optJSONArray("samples");
-            remoteSamples.clear();
-            if (rows != null) for (int i = 0; i < rows.length(); i++) {
-                JSONObject row = rows.optJSONObject(i);
-                if (row != null) remoteSamples.add(row);
-            }
-            remoteSamplesEventRef = eventRef;
-            remoteSamplesLoading = false;
-            remoteSamplesFailed = false;
-            reconcileRemoteSampleReceipt(eventRef);
-            render();
-        });
-    }
-
-    private void reconcileLocalEventAvailability(JSONArray hostEvents) {
-        Set<String> hostEventIds = new HashSet<>();
-        if (hostEvents != null) {
-            for (int i = 0; i < hostEvents.length(); i++) {
-                JSONObject item = hostEvents.optJSONObject(i);
-                if (item == null) continue;
-                String eventId = item.optString("event_id", "").trim();
-                if (!eventId.isEmpty()) hostEventIds.add(eventId);
-            }
-        }
-        for (RdFieldDb.EventRow local : database.recentEvents()) {
-            if (!hostEventIds.contains(local.id) && "synced".equalsIgnoreCase(local.syncStatus)) {
-                database.markEventPending(local.id);
-            }
-        }
-    }
-
-    private void reconcileRemoteSampleReceipt(String eventRef) {
-        Set<String> remoteCodes = new HashSet<>();
-        for (JSONObject row : remoteSamples) {
-            String code = row.optString("sampleCode", "").trim();
-            if (!code.isEmpty()) remoteCodes.add(code);
-        }
-        for (RdFieldDb.SampleRow local : database.recentSamples()) {
-            if (!eventRef.equals(local.eventId) || !"synced".equalsIgnoreCase(local.syncStatus)) continue;
-            if (remoteCodes.contains(local.code)) continue;
-            database.recordSampleSync(local.id, "pending", "el host no reconoce el recibo local", "[]");
-        }
-    }
-
-    private void loadApprovedVisualCatalog() {
-        flujo.loadVisualCatalog(rdEndpoint(), result -> {
-            if (!result.isSuccess()) return;
-            JSONArray references = result.response.optJSONArray("references");
-            if (references == null) return;
-            memory.clearApproved();
-            loadedCatalogRevision = result.response.optInt("catalogRevision", 0);
-            for (int i = 0; i < references.length(); i++) {
-                JSONObject reference = references.optJSONObject(i);
-                if (reference == null || !"approved".equalsIgnoreCase(reference.optString("status", ""))) continue;
-                JSONArray views = reference.optJSONArray("views");
-                if (views == null) continue;
-                for (int j = 0; j < views.length(); j++) {
-                    JSONObject view = views.optJSONObject(j);
-                    if (view == null) continue;
-                    JSONObject rawFeatures = view.optJSONObject("features");
-                    VisualFeatures features = featuresFromCatalog(rawFeatures);
-                    if (features == null) continue;
-                    String referenceId = reference.optString("referenceId", "");
-                    String captureId = view.optString("captureId", "view-" + j);
-                    memory.addApproved(new VisualMemory.Entry(
-                            referenceId + ":" + captureId,
-                            reference.optString("sourceSampleCode", referenceId),
-                            reference.optString("sourceEventRef", ""), 0L,
-                            "molde: " + reference.optString("canonicalLabel", "diseño visual"),
-                            "ÉXTASIS", "mold_design_catalog", features,
-                            referenceId, reference.optInt("catalogRevision", loadedCatalogRevision), true));
-                }
-            }
-            render();
-        });
-    }
-
-    private VisualFeatures featuresFromCatalog(JSONObject raw) {
-        if (raw == null || raw.length() == 0) return null;
-        return new VisualFeatures(
-                raw.optString("colorLabel", ""), raw.optString("silhouetteLabel", ""),
-                (float) raw.optDouble("aspectRatio", 0d), (float) raw.optDouble("foregroundRatio", 0d),
-                (float) raw.optDouble("brightness", 0d), (float) raw.optDouble("saturation", 0d),
-                (float) raw.optDouble("textureScore", 0d), raw.optInt("meanRed", 0),
-                raw.optInt("meanGreen", 0), raw.optInt("meanBlue", 0), raw.optLong("perceptualHash", 0L),
-                raw.optString("markingCandidate", "sin señal clara"), (float) raw.optDouble("markingScore", 0d),
-                (float) raw.optDouble("reliefConfidence", 0d), raw.optString("reliefSignature", ""),
-                (float) raw.optDouble("silhouetteConfidence", 0d), (float) raw.optDouble("circularity", 0d),
-                (float) raw.optDouble("solidity", 0d), (float) raw.optDouble("symmetry", 0d),
-                raw.optInt("contourPointCount", 0), raw.optString("geometrySignature", ""));
-    }
-
-    private JSONArray mergeLocalEvents(JSONArray remoteEvents, JSONArray remoteXioEvents) {
-        JSONArray merged = new JSONArray();
-        if (remoteEvents != null) {
-            for (int i = 0; i < remoteEvents.length(); i++) {
-                JSONObject item = remoteEvents.optJSONObject(i);
-                if (item != null) merged.put(item);
-            }
-        }
-        if (remoteXioEvents != null) {
-            for (int i = 0; i < remoteXioEvents.length(); i++) {
-                JSONObject source = remoteXioEvents.optJSONObject(i);
-                if (source == null) continue;
-                String id = source.optString("client_event_id", source.optString("clientEventId", ""));
-                if (id.isEmpty() || indexOfEvent(merged, id) >= 0) continue;
-                try {
-                    JSONObject item = new JSONObject();
-                    item.put("event_id", id);
-                    item.put("event_label_candidate", source.optString("event_name", source.optString("eventName", id)));
-                    item.put("link_review_status", source.optString("review_status", source.optString("reviewStatus", "")));
-                    item.put("event_origin", "xio_app");
-                    JSONArray producers = new JSONArray();
-                    String producerName = source.optString("producer_name", source.optString("producer", "")).trim();
-                    if (!producerName.isEmpty()) producers.put(new JSONObject().put("productora_slug", producerName));
-                    item.put("productoras", producers);
-                    merged.put(item);
-                } catch (Exception ignored) { }
-            }
-        }
-        return merged;
-    }
-
-    private EditText eventInput(String hint, String value) {
-        EditText input = new EditText(this);
-        input.setHint(hint);
-        input.setSingleLine(true);
-        input.setText(value == null ? "" : value);
-        input.setTextColor(TEXT);
-        input.setHintTextColor(MUTED);
-        input.setPadding(dp(10), dp(4), dp(10), dp(4));
-        return input;
-    }
-
-    private void showCreateEventDialog(boolean syncAfter) {
-        new AlertDialog.Builder(this)
-                .setTitle("Evento no disponible")
-                .setMessage("XIO-RD no crea eventos desde la mesa. El evento debe existir en la base RD del host y aparecer en el catálogo antes de registrar o sincronizar muestras.")
-                .setPositiveButton("REINTENTAR", (dialog, which) -> loadBootstrapAndMaybeChoose(true, syncAfter))
-                .setNegativeButton("CERRAR", null)
-                .show();
-    }
-
-    private JSONArray commaArray(String raw) {
-        JSONArray result = new JSONArray();
-        if (raw == null) return result;
-        for (String value : raw.split(",")) {
-            String clean = value.trim();
-            if (!clean.isEmpty()) result.put(clean);
-        }
-        return result;
-    }
-
-    private void saveNewEvent(String name, String venue, String producer, String startDate,
-                              String endDate, String djs, String sources, String flyerRef,
-                              String flyerSha256, boolean syncAfter) {
-        String eventName = name == null ? "" : name.trim();
-        if (eventName.isEmpty()) {
-            Toast.makeText(this, "El nombre del evento es obligatorio", Toast.LENGTH_LONG).show();
-            return;
-        }
-        String eventId = "xio-" + UUID.randomUUID();
-        String cleanVenue = venue == null ? "" : venue.trim();
-        String cleanProducer = producer == null ? "" : producer.trim();
-        String cleanStart = startDate == null ? "" : startDate.trim();
-        String cleanEnd = endDate == null ? "" : endDate.trim();
-        String cleanFlyerRef = flyerRef == null ? "" : flyerRef.trim();
-        String cleanFlyerSha256 = flyerSha256 == null ? "" : flyerSha256.trim().toLowerCase(Locale.ROOT);
-        JSONArray djArray = commaArray(djs);
-        JSONObject triangulation = new JSONObject();
-        try {
-            JSONArray sourceArray = commaArray(sources);
-            if (sourceArray.length() > 0) triangulation.put("sources", sourceArray);
-            database.upsertEvent(eventId, eventName, cleanVenue, cleanProducer, cleanStart, cleanEnd,
-                    djArray.toString(), triangulation.toString(), cleanFlyerRef, cleanFlyerSha256, "pending");
-            engine.setEventId(eventId);
-            eventLabel = eventName;
-            eventProducer = cleanProducer.isEmpty() ? "" : capitalize(cleanProducer);
-            eventContextPending = true;
-            getSharedPreferences("xio_event_context", MODE_PRIVATE).edit()
-                    .putString("event_id", eventId)
-                    .putString("event_label", eventLabel)
-                    .putString("event_producer", eventProducer)
-                    .putBoolean("pending", true)
-                    .apply();
-            persist();
-            render();
-            JSONObject payload = new JSONObject();
-            payload.put("clientEventId", eventId);
-            payload.put("eventName", eventName);
-            payload.put("venue", cleanVenue);
-            payload.put("producer", cleanProducer);
-            payload.put("startDate", cleanStart);
-            payload.put("endDate", cleanEnd);
-            payload.put("djs", djArray);
-            payload.put("triangulation", triangulation);
-            payload.put("flyerRef", cleanFlyerRef);
-            payload.put("flyerSha256", cleanFlyerSha256);
-            flujo.syncEvent(payload, rdEndpoint(), "", result -> {
-                if (result.isSuccess()) {
-                    String review = result.response.optString("reviewStatus", "pendiente_revision_humana");
-                    database.markEventSynced(eventId, review);
-                    if (eventId.equals(engine.snapshot().eventId)) {
-                        eventContextPending = !"confirmado".equalsIgnoreCase(review);
-                        render();
-                    }
-                    Toast.makeText(this, "XIO-RD ✓ evento guardado", Toast.LENGTH_LONG).show();
-                    if (syncAfter) sendCurrentSample();
-                } else {
-                    Toast.makeText(this, "Evento local ✓ · sincronización pendiente", Toast.LENGTH_LONG).show();
-                }
-            });
-        } catch (Exception error) {
-            Toast.makeText(this, "No se pudo guardar el evento local", Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private RdFieldDb.EventRow localEvent(String id) {
-        for (RdFieldDb.EventRow row : database.recentEvents()) {
-            if (id != null && id.equals(row.id)) return row;
-        }
-        return null;
-    }
-
-    private JSONObject eventPayload(RdFieldDb.EventRow row) throws Exception {
-        JSONObject payload = new JSONObject();
-        payload.put("clientEventId", row.id);
-        payload.put("eventName", row.name == null ? row.id : row.name);
-        payload.put("venue", row.venue == null ? "" : row.venue);
-        payload.put("producer", row.producer == null ? "" : row.producer);
-        payload.put("startDate", row.startDate == null ? "" : row.startDate);
-        payload.put("endDate", row.endDate == null ? "" : row.endDate);
-        payload.put("djs", row.djsJson == null || row.djsJson.trim().isEmpty() ? new JSONArray() : new JSONArray(row.djsJson));
-        payload.put("triangulation", row.triangulationJson == null || row.triangulationJson.trim().isEmpty() ? new JSONObject() : new JSONObject(row.triangulationJson));
-        payload.put("flyerRef", row.flyerRef == null ? "" : row.flyerRef);
-        payload.put("flyerSha256", row.flyerSha256 == null ? "" : row.flyerSha256);
-        payload.put("reviewStatus", row.reviewStatus == null ? "pendiente_revision_humana" : row.reviewStatus);
-        return payload;
-    }
-
-    private void syncCurrentEventThenSample() {
-        // The host catalog is authoritative. A local row may be a legacy draft
-        // from an older build, but it must never be re-sent as an implicit event
-        // after the RD endpoint has accepted only exact host eventRefs.
-        SampleSession sample = engine.snapshot();
-        if (!sampleCanSync(sample)) return;
-        sendSample(sample, false);
     }
 
     private void showEventPicker(JSONArray events, int selected, boolean syncAfter) {
         if (events == null || events.length() == 0) {
-            showCreateEventDialog(syncAfter);
+            Toast.makeText(this, "FLUJO · no hay eventos disponibles", Toast.LENGTH_LONG).show();
             return;
         }
         Map<String, List<Integer>> byProducer = new LinkedHashMap<>();
@@ -1947,17 +885,6 @@ public final class MainActivity extends AppCompatActivity {
                     if (first != null && !first.optString("productora_slug", "").trim().isEmpty()) producer = first.optString("productora_slug");
                 }
                 if (producers != null && producers.length() > 1) producer += " +" + (producers.length() - 1);
-                boolean logoLoaded = false;
-                if (producers != null) {
-                    for (int producerIndex = 0; producerIndex < producers.length(); producerIndex++) {
-                        JSONObject producerItem = producers.optJSONObject(producerIndex);
-                        if (producerItem != null && producerItem.optBoolean("logo_loaded", false)) {
-                            logoLoaded = true;
-                            break;
-                        }
-                    }
-                }
-                producer = (logoLoaded ? "(LOGO) " : "(SIN LOGO) ") + producer;
                 List<Integer> members = byProducer.get(producer);
                 if (members == null) { members = new ArrayList<>(); byProducer.put(producer, members); }
                 members.add(i);
@@ -1969,7 +896,7 @@ public final class MainActivity extends AppCompatActivity {
                 pendingProducer.put(producer, pendingProducer.containsKey(producer) ? pendingProducer.get(producer) || pending : pending);
             }
         } catch (Exception error) {
-            Toast.makeText(this, "XIO-RD · catálogo inválido", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "FLUJO · catálogo inválido", Toast.LENGTH_LONG).show();
             return;
         }
         LinearLayout grouped = new LinearLayout(this);
@@ -1982,14 +909,6 @@ public final class MainActivity extends AppCompatActivity {
                 .setView(scroll)
                 .setNegativeButton("CERRAR", null)
                 .create();
-        TextView hostOnly = text("Los eventos se preparan en el host RD; esta mesa sólo permite seleccionar uno existente.", 11, MUTED);
-        hostOnly.setPadding(0, dp(8), 0, dp(4));
-        grouped.addView(hostOnly, new LinearLayout.LayoutParams(-1, dp(48)));
-        if (byProducer.isEmpty()) {
-            TextView placeholder = text("El host RD no entregó eventos preparados en este snapshot.", 12, AMBER);
-            placeholder.setPadding(0, dp(12), 0, dp(12));
-            grouped.addView(placeholder, new LinearLayout.LayoutParams(-1, dp(72)));
-        }
         for (Map.Entry<String, List<Integer>> group : byProducer.entrySet()) {
             String pendingLabel = Boolean.TRUE.equals(pendingProducer.get(group.getKey())) ? "  ·  candidato" : "";
             TextView producer = text(capitalize(group.getKey()) + "  ·  " + group.getValue().size() + pendingLabel, 12, AMBER);
@@ -2003,13 +922,11 @@ public final class MainActivity extends AppCompatActivity {
                 event.setContentDescription("Evento " + labels[index]);
                 grouped.addView(event, new LinearLayout.LayoutParams(-1, dp(48)));
                 event.setOnClickListener(view -> {
-                    if (!canChangeEvent()) return;
                     String eventId = ids[index];
                     if (eventId == null || eventId.trim().isEmpty()) return;
                     try { applyEventContext(events.getJSONObject(index)); } catch (Exception ignored) { }
                     engine.setEventId(eventId);
                     persist();
-                    loadRemoteSamples(eventId);
                     dialog.dismiss();
                     render();
                     if (syncAfter) sendCurrentSample();
@@ -2027,32 +944,17 @@ public final class MainActivity extends AppCompatActivity {
 
     private void applyEventContext(JSONObject item) {
         if (item == null) return;
-        String eventId = item.optString("event_id", "").trim();
         eventLabel = item.optString("event_label_candidate", "").trim();
         eventContextPending = !"APROBADO".equalsIgnoreCase(item.optString("link_review_status", ""));
         eventProducer = "";
-        String producerForDb = "";
         JSONArray producers = item.optJSONArray("productoras");
         if (producers != null && producers.length() > 0) {
             JSONObject first = producers.optJSONObject(0);
-            if (first != null) {
-                producerForDb = first.optString("productora_slug", "").trim();
-                eventProducer = capitalize(producerForDb);
-            }
+            if (first != null) eventProducer = capitalize(first.optString("productora_slug", ""));
             if (producers.length() > 1) eventProducer += " +" + (producers.length() - 1);
         }
-        String venueForDb = "";
-        JSONArray venues = item.optJSONArray("venues");
-        if (venues != null && venues.length() > 0) {
-            JSONObject first = venues.optJSONObject(0);
-            if (first != null) venueForDb = first.optString("venue_nombre", first.optString("name", "")).trim();
-        }
-        if (!eventId.isEmpty()) {
-            database.upsertEvent(eventId, eventLabel.isEmpty() ? eventId : eventLabel,
-                    venueForDb, producerForDb, "", "", "[]", "{}", "", "", "synced");
-        }
         getSharedPreferences("xio_event_context", MODE_PRIVATE).edit()
-                .putString("event_id", eventId)
+                .putString("event_id", item.optString("event_id", ""))
                 .putString("event_label", eventLabel)
                 .putString("event_producer", eventProducer)
                 .putBoolean("pending", eventContextPending)
@@ -2060,7 +962,6 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private String eventContextText(SampleSession sample) {
-        if ("pending-event".equals(sample.eventId)) return "evento no seleccionado";
         String base = eventLabel.isEmpty() ? sample.eventId : eventProducer.isEmpty() ? eventLabel : eventProducer + " > " + eventLabel;
         return eventContextPending && !eventLabel.isEmpty() ? base + "  ·  ⏳" : base;
     }
@@ -2075,29 +976,15 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void sendCurrentSample() {
-        sendSample(engine.snapshot(), true);
-    }
-
-    private void sendSample(SampleSession sample, boolean showProgress) {
-        database.recordSampleSync(sample.id, "sending", "", "[]");
-        if (showProgress) {
-            render();
-            Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
-        }
-        flujo.syncSample(sample, rdEndpoint(), "", result -> {
+        SampleSession sample = engine.snapshot();
+        Toast.makeText(this, "⇧  enviando a FLUJO…", Toast.LENGTH_SHORT).show();
+        flujo.syncSample(sample, FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
-                JSONArray receipts = result.response.optJSONArray("captureReceipts");
-                database.recordSampleSync(sample.id, "synced", "", receipts == null ? "[]" : receipts.toString());
-                Toast.makeText(this, "XIO-RD ✓  " + sample.code + " · "
-                        + result.response.optInt("captureCount", 0) + " captura(s)"
-                        + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "FLUJO ✓  " + sample.code + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
             } else {
-                String message = result.error == null || result.error.getMessage() == null ? "sin conexión" : result.error.getMessage();
-                database.recordSampleSync(sample.id, "pending", message, "[]");
-                Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "FLUJO · sin conexión", Toast.LENGTH_LONG).show();
             }
-            if (showProgress) render();
         });
     }
 
@@ -2108,12 +995,9 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private final class ColorRampView extends View {
-        private final int[] hueColors = {0xffff3b30, 0xffff2dce, 0xff5b5ce2, 0xff00a7ff, 0xff00bd83, 0xffffc107, 0xffff3b30};
-        private final float[] huePositions = {0f, .17f, .34f, .51f, .68f, .84f, 1f};
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint marker = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RampAction action;
-        private Runnable onCommit;
         private float selectedX = -1f;
         private float selectedY = -1f;
         private int selectedColor = Color.TRANSPARENT;
@@ -2127,34 +1011,21 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
 
-        void setOnCommit(Runnable commit) { onCommit = commit; }
-
         @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
             if (selectedColor == Color.TRANSPARENT || width <= 1 || height <= 1) return;
-            // Find the marker in the same RGB ramp that is rendered and used
-            // by colorAt(). HSV coordinates are not equivalent to the RGB
-            // interpolation between the visible hue stops.
-            float best = Float.MAX_VALUE;
-            int steps = 64;
-            for (int xi = 0; xi <= steps; xi++) for (int yi = 0; yi <= steps; yi++) {
-                float x = (width - 1) * xi / (float) steps;
-                float y = (height - 1) * yi / (float) steps;
-                int candidate = colorAt(x, y);
-                float distance = square(Color.red(candidate) - Color.red(selectedColor))
-                        + square(Color.green(candidate) - Color.green(selectedColor))
-                        + square(Color.blue(candidate) - Color.blue(selectedColor));
-                if (distance < best) { best = distance; selectedX = x; selectedY = y; }
-            }
+            float[] hsv = new float[3]; Color.colorToHSV(selectedColor, hsv);
+            selectedX = (hsv[0] / 360f) * Math.max(1, width - 1);
+            selectedY = hsv[2] >= .98f ? hsv[1] * height / 2f : height / 2f + (1f - hsv[2]) * height / 2f;
         }
-
-        private float square(float value) { return value * value; }
 
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             int width = getWidth();
             int height = getHeight();
             if (width <= 1 || height <= 1) return;
-            paint.setShader(new LinearGradient(0, 0, width, 0, hueColors, huePositions, Shader.TileMode.CLAMP));
+            int[] hues = {0xffff3b30, 0xffff2dce, 0xff5b5ce2, 0xff00a7ff, 0xff00bd83, 0xffffc107, 0xffff3b30};
+            float[] positions = {0f, .17f, .34f, .51f, .68f, .84f, 1f};
+            paint.setShader(new LinearGradient(0, 0, width, 0, hues, positions, Shader.TileMode.CLAMP));
             canvas.drawRect(0, 0, width, height, paint);
             paint.setShader(null);
             canvas.save();
@@ -2186,32 +1057,17 @@ public final class MainActivity extends AppCompatActivity {
                 float y = Math.max(0, Math.min(getHeight() - 1, event.getY()));
                 selectedX = x; selectedY = y; selectedColor = colorAt(x, y);
                 invalidate();
-                if (event.getAction() == MotionEvent.ACTION_UP) {
-                    if (action != null) action.selected(hexForColor(selectedColor));
-                    if (onCommit != null) onCommit.run();
-                }
+                if (action != null) action.selected(hexForColor(selectedColor));
                 return true;
             }
             return true;
         }
 
         private int colorAt(float x, float y) {
-            float position = x / Math.max(1f, getWidth() - 1f);
-            int pure = hueColorAt(position);
+            float hue = (x / Math.max(1f, getWidth() - 1f)) * 360f;
+            int pure = Color.HSVToColor(new float[]{hue, 1f, 1f});
             if (y <= getHeight() / 2f) return blend(Color.WHITE, pure, y / Math.max(1f, getHeight() / 2f));
             return blend(pure, Color.BLACK, (y - getHeight() / 2f) / Math.max(1f, getHeight() / 2f));
-        }
-
-        private int hueColorAt(float position) {
-            float p = Math.max(0f, Math.min(1f, position));
-            for (int i = 1; i < huePositions.length; i++) {
-                if (p <= huePositions[i]) {
-                    float span = huePositions[i] - huePositions[i - 1];
-                    float amount = span <= 0f ? 0f : (p - huePositions[i - 1]) / span;
-                    return blend(hueColors[i - 1], hueColors[i], amount);
-                }
-            }
-            return hueColors[hueColors.length - 1];
         }
 
         private int blend(int from, int to, float amount) {

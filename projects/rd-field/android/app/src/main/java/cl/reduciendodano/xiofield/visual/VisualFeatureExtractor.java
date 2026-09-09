@@ -33,8 +33,6 @@ public final class VisualFeatureExtractor {
         Bitmap bitmap = Bitmap.createScaledBitmap(source, ANALYSIS_SIZE, ANALYSIS_SIZE, true);
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
-        float frameLuminance = averageLuminance(bitmap);
-        boolean underexposed = frameLuminance < 28f;
         float[] background = estimateBackground(bitmap);
         float[] separation = new float[width * height];
         for (int y = 0; y < height; y++) {
@@ -46,115 +44,14 @@ public final class VisualFeatureExtractor {
         float threshold = Math.max(16f, otsuThreshold(separation));
         boolean[] rawMask = new boolean[separation.length];
         for (int i = 0; i < separation.length; i++) rawMask[i] = separation[i] >= threshold;
-        boolean[] mask = underexposed ? new boolean[separation.length]
-                : bestComponent(rawMask, width, height);
+        boolean[] mask = largestComponent(close(rawMask, width, height), width, height);
         int objectPixels = count(mask);
         boolean separated = objectPixels >= width * height * .008f && objectPixels <= width * height * .86f;
-        boolean fallbackUsed = false;
-        if (!separated && !underexposed) {
-            // Soft backgrounds and low-light camera frames can defeat the
-            // first Otsu threshold. Try progressively more permissive *real
-            // connected components*. Never invent a centered ellipse: that
-            // would display a silhouette even when the photo contains no
-            // separable object.
-            // Otsu can choose the table's broad illumination as the dominant
-            // class. In that case the sample is still present as a compact,
-            // higher-contrast component (for example a coloured round lid on
-            // a warm wooden table). Try stricter thresholds before relaxing;
-            // relaxing first turns the whole table into the candidate.
-            boolean[] rescueMask = null;
-            int rescuePixels = 0;
-            float rescueScore = -1f;
-            float rescueThreshold = threshold;
-            for (float relaxed : new float[]{threshold * 1.25f, threshold * 1.50f, threshold * 1.80f,
-                    threshold * .80f, threshold * .65f, threshold * .50f, Math.max(8f, threshold * .35f)}) {
-                if (relaxed > 110f) continue;
-                boolean[] relaxedRaw = new boolean[separation.length];
-                for (int i = 0; i < separation.length; i++) relaxedRaw[i] = separation[i] >= relaxed;
-                boolean[] relaxedMask = bestCluster(relaxedRaw, width, height);
-                relaxedMask = fillEnclosedHoles(relaxedMask, width, height);
-                int relaxedPixels = count(relaxedMask);
-                float relaxedRatio = relaxedPixels / (float) (width * height);
-                float relaxedPerimeter = perimeter(relaxedMask, width, height);
-                float relaxedCircularity = relaxedPerimeter <= 0f ? 0f
-                        : (float) ((4d * Math.PI * relaxedPixels) / (relaxedPerimeter * relaxedPerimeter));
-                // A large, low-circularity component is normally the table
-                // illumination. Keep searching for the stricter compact
-                // component instead of accepting it and losing the sample
-                // in the later quality gate.
-                if (relaxedRatio > .08f && relaxedCircularity < .08f) continue;
-                if (relaxedPixels >= width * height * .003f && relaxedPixels <= width * height * .92f) {
-                    float score = relaxedCircularity * .70f + Math.min(1f, relaxedRatio / .025f) * .30f;
-                    if (score > rescueScore) {
-                        rescueMask = relaxedMask;
-                        rescuePixels = relaxedPixels;
-                        rescueScore = score;
-                        rescueThreshold = relaxed;
-                    }
-                }
-            }
-            // A coloured sample can be closer to the table in brightness
-            // than in hue. Use the dominant chroma displacement as a second
-            // real-pixel candidate; this is what preserves the full pink
-            // lid in warm wood lighting without fabricating a shape.
-            float chromaThreshold = Math.max(24f, threshold * .75f);
-            boolean[] chromaRaw = new boolean[separation.length];
-            for (int i = 0; i < separation.length; i++) {
-                int pixel = bitmap.getPixel(i % width, i / width);
-                float rg = (Color.red(pixel) - Color.green(pixel)) - (background[0] - background[1]);
-                float bg = (Color.blue(pixel) - Color.green(pixel)) - (background[2] - background[1]);
-                chromaRaw[i] = Math.max(Math.abs(rg), Math.abs(bg)) >= chromaThreshold;
-            }
-            boolean[] chromaMask = fillEnclosedHoles(bestCluster(chromaRaw, width, height), width, height);
-            int chromaPixels = count(chromaMask);
-            float chromaRatio = chromaPixels / (float) (width * height);
-            float chromaPerimeter = perimeter(chromaMask, width, height);
-            float chromaCircularity = chromaPerimeter <= 0f ? 0f
-                    : (float) ((4d * Math.PI * chromaPixels) / (chromaPerimeter * chromaPerimeter));
-            if (chromaPixels >= width * height * .003f && chromaPixels <= width * height * .92f) {
-                float score = chromaCircularity * .70f + Math.min(1f, chromaRatio / .025f) * .30f;
-                if (score > rescueScore) {
-                    rescueMask = chromaMask;
-                    rescuePixels = chromaPixels;
-                    rescueThreshold = chromaThreshold;
-                }
-            }
-            float directionalThreshold = Math.max(32f, threshold * .90f);
-            for (int direction = 0; direction < 4; direction++) {
-                boolean[] directionalRaw = new boolean[separation.length];
-                for (int i = 0; i < separation.length; i++) {
-                    int pixel = bitmap.getPixel(i % width, i / width);
-                    float rg = (Color.red(pixel) - Color.green(pixel)) - (background[0] - background[1]);
-                    float blueGreen = (Color.blue(pixel) - Color.green(pixel)) - (background[2] - background[1]);
-                    float primary = direction < 2 ? rg : blueGreen;
-                    float secondary = direction < 2 ? blueGreen : rg;
-                    float signed = (direction % 2 == 0) ? primary : -primary;
-                    directionalRaw[i] = signed >= directionalThreshold && signed >= Math.abs(secondary) * .80f;
-                }
-                boolean[] directionalMask = fillEnclosedHoles(bestCluster(directionalRaw, width, height), width, height);
-                int directionalPixels = count(directionalMask);
-                float directionalRatio = directionalPixels / (float) (width * height);
-                float directionalPerimeter = perimeter(directionalMask, width, height);
-                float directionalCircularity = directionalPerimeter <= 0f ? 0f
-                        : (float) ((4d * Math.PI * directionalPixels) / (directionalPerimeter * directionalPerimeter));
-                if (directionalPixels < width * height * .003f || directionalPixels > width * height * .92f) continue;
-                float score = directionalCircularity * .70f + Math.min(1f, directionalRatio / .025f) * .30f;
-                if (score > rescueScore) {
-                    rescueMask = directionalMask;
-                    rescuePixels = directionalPixels;
-                    rescueScore = score;
-                    rescueThreshold = directionalThreshold;
-                }
-            }
-            if (rescueMask != null) {
-                mask = rescueMask;
-                objectPixels = rescuePixels;
-                threshold = rescueThreshold;
-            }
-            fallbackUsed = true;
+        if (!separated) {
+            mask = new boolean[width * height];
+            Arrays.fill(mask, true);
+            objectPixels = 0;
         }
-        boolean contourAvailable = objectPixels >= width * height * .003f
-                && objectPixels <= width * height * .92f;
 
         int minX = width, minY = height, maxX = -1, maxY = -1;
         float sumR = 0f, sumG = 0f, sumB = 0f, sumLuma = 0f, sumLumaSquared = 0f;
@@ -169,11 +66,11 @@ public final class VisualFeatureExtractor {
                 float luma = luminance(pixel);
                 sumR += r; sumG += g; sumB += b; sumLuma += luma; sumLumaSquared += luma * luma;
                 foregroundSeparation += separation[index];
-                if (contourAvailable) {
+                if (separated) {
                     minX = Math.min(minX, x); maxX = Math.max(maxX, x);
                     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
                 }
-                boolean inner = !contourAvailable || (x > width * .20f && x < width * .80f && y > height * .20f && y < height * .80f);
+                boolean inner = !separated || (x > width * .20f && x < width * .80f && y > height * .20f && y < height * .80f);
                 if (inner) interiorForeground++;
                 int right = bitmap.getPixel(x + 1, y);
                 int down = bitmap.getPixel(x, y + 1);
@@ -184,50 +81,39 @@ public final class VisualFeatureExtractor {
             }
         }
 
-        float pixels = Math.max(1f, contourAvailable ? objectPixels : (width - 2) * (height - 2));
+        float pixels = Math.max(1f, separated ? objectPixels : (width - 2) * (height - 2));
         int meanR = Math.round(sumR / pixels), meanG = Math.round(sumG / pixels), meanB = Math.round(sumB / pixels);
         float[] hsv = new float[3];
         Color.RGBToHSV(meanR, meanG, meanB, hsv);
-        float aspect = contourAvailable && maxY > minY ? (float) (maxX - minX + 1) / (float) (maxY - minY + 1) : 0f;
-        float foregroundRatio = contourAvailable ? objectPixels / (float) (width * height) : 0f;
+        float aspect = separated && maxY > minY ? (float) (maxX - minX + 1) / (float) (maxY - minY + 1) : 0f;
+        float foregroundRatio = separated ? objectPixels / (float) (width * height) : 0f;
         float variance = Math.max(0f, (sumLumaSquared / pixels) - ((sumLuma / pixels) * (sumLuma / pixels)));
         float texture = clamp((float) Math.sqrt(variance) / 80f + (edgeCount / pixels) * .35f);
         String colorLabel = semanticColor(hsv[0], hsv[1], hsv[2]);
 
-        List<PointF> boundary = contourAvailable ? boundary(mask, width, height) : Collections.emptyList();
-        float perimeter = contourAvailable ? perimeter(mask, width, height) : 0f;
-        float area = contourAvailable ? objectPixels : 0f;
+        List<PointF> boundary = separated ? boundary(mask, width, height) : Collections.emptyList();
+        float perimeter = separated ? perimeter(mask, width, height) : 0f;
+        float area = separated ? objectPixels : 0f;
         float circularity = perimeter <= 0f ? 0f : clamp((float) ((4d * Math.PI * area) / (perimeter * perimeter)));
-        // A broad, jagged low-contrast region is usually a table/shadow or
-        // an underexposed frame, not the sample. Do not publish a misleading
-        // silhouette when the contour quality itself contradicts the claim.
-        if (contourAvailable && (underexposed || (foregroundRatio > .08f && circularity < .08f))) {
-            mask = new boolean[separation.length];
-            objectPixels = 0;
-            contourAvailable = false;
-            minX = width; minY = height; maxX = -1; maxY = -1;
-            circularity = 0f;
-        }
-        float solidity = contourAvailable ? solidity(boundary, area) : 0f;
-        float symmetry = contourAvailable ? symmetry(mask, width, height, minX, minY, maxX, maxY) : 0f;
-        RadialContour radial = contourAvailable ? radialContour(boundary) : new RadialContour();
+        float solidity = separated ? solidity(boundary, area) : 0f;
+        float symmetry = separated ? symmetry(mask, width, height, minX, minY, maxX, maxY) : 0f;
+        RadialContour radial = separated ? radialContour(boundary) : new RadialContour();
         String signature = radial.signature();
-        String svg = contourAvailable ? svg(radial.points, minX, minY, maxX, maxY, meanR, meanG, meanB) : "";
-        String silhouette = silhouette(aspect, circularity, solidity, contourAvailable);
+        String svg = separated ? svg(radial.points, minX, minY, maxX, maxY, meanR, meanG, meanB) : "";
+        String silhouette = silhouette(aspect, circularity, solidity, separated);
         float interiorEdgeDensity = interiorEdgeCount / (float) Math.max(1, interiorForeground);
-        float markingScore = contourAvailable ? clamp((interiorEdgeDensity - .07f) * 2.6f) : 0f;
-        ReliefData relief = contourAvailable ? reliefData(bitmap, mask, width, height, minX, minY, maxX, maxY) : new ReliefData();
+        float markingScore = separated ? clamp((interiorEdgeDensity - .07f) * 2.6f) : 0f;
+        ReliefData relief = separated ? reliefData(bitmap, mask, width, height, minX, minY, maxX, maxY) : new ReliefData();
         markingScore = Math.max(markingScore, relief.confidence);
         String marking = markingLabel(markingScore, interiorEdgeDensity);
         float meanSeparation = foregroundSeparation / pixels;
-        float confidence = contourAvailable ? clamp((meanSeparation / 255f) * .70f + Math.min(1f, boundary.size() / 80f) * .30f) : 0f;
-        if (fallbackUsed) confidence *= .45f;
+        float confidence = separated ? clamp((meanSeparation / 255f) * .70f + Math.min(1f, boundary.size() / 80f) * .30f) : 0f;
         long hash = averageHash(bitmap);
-        Bitmap silhouettePreview = contourAvailable ? silhouettePreview(mask, width, height, meanR, meanG, meanB) : null;
+        Bitmap silhouettePreview = separated ? silhouettePreview(mask, width, height, meanR, meanG, meanB) : null;
         bitmap.recycle();
 
         VisualFeatures features = new VisualFeatures(colorLabel, silhouette, aspect, foregroundRatio, hsv[2], hsv[1], texture, meanR, meanG, meanB, hash, marking, markingScore, relief.confidence, relief.signature, confidence, circularity, solidity, symmetry, radial.count(), signature);
-        return new VisualAnalysis(features, svg, relief.svg, silhouettePreview, contourAvailable, threshold);
+        return new VisualAnalysis(features, svg, relief.svg, silhouettePreview, separated, threshold);
     }
 
     public static final class VisualAnalysis {
@@ -251,23 +137,17 @@ public final class VisualFeatureExtractor {
     private static float[] estimateBackground(Bitmap bitmap) {
         int width = bitmap.getWidth(), height = bitmap.getHeight();
         int border = Math.max(2, width / 14);
-        int[] red = new int[width * height], green = new int[width * height], blue = new int[width * height];
+        float r = 0f, g = 0f, b = 0f;
         int count = 0;
         for (int y = 0; y < height; y += 2) {
             for (int x = 0; x < width; x += 2) {
                 if (x < border || y < border || x >= width - border || y >= height - border) {
                     int pixel = bitmap.getPixel(x, y);
-                    red[count] = Color.red(pixel); green[count] = Color.green(pixel); blue[count] = Color.blue(pixel); count++;
+                    r += Color.red(pixel); g += Color.green(pixel); b += Color.blue(pixel); count++;
                 }
             }
         }
-        return new float[]{median(red, count), median(green, count), median(blue, count)};
-    }
-
-    private static float median(int[] values, int length) {
-        if (length <= 0) return 0f;
-        Arrays.sort(values, 0, length);
-        return values[length / 2];
+        return new float[]{r / Math.max(1, count), g / Math.max(1, count), b / Math.max(1, count)};
     }
 
     private static float otsuThreshold(float[] values) {
@@ -341,177 +221,10 @@ public final class VisualFeatureExtractor {
         return best;
     }
 
-    /** Prefer an object fully inside the frame over furniture/table edges. */
-    private static boolean[] bestComponent(boolean[] source, int width, int height) {
-        boolean[] visited = new boolean[source.length];
-        boolean[] best = new boolean[source.length];
-        int[] queue = new int[source.length];
-        int[] component = new int[source.length];
-        int bestInteriorCount = 0;
-        float bestScore = -1f;
-        float marginX = width * .08f, marginY = height * .08f;
-        for (int start = 0; start < source.length; start++) {
-            if (!source[start] || visited[start]) continue;
-            int head = 0, tail = 0, componentCount = 0;
-            int minX = width, minY = height, maxX = -1, maxY = -1;
-            queue[tail++] = start; visited[start] = true;
-            while (head < tail) {
-                int index = queue[head++]; component[componentCount++] = index;
-                int x = index % width, y = index / width;
-                minX = Math.min(minX, x); minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-                for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0) continue;
-                    int nx = x + dx, ny = y + dy;
-                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-                    int next = ny * width + nx;
-                    if (source[next] && !visited[next]) { visited[next] = true; queue[tail++] = next; }
-                }
-            }
-            // XIO-RD photos are evidence captures, not arbitrary landscapes:
-            // the relevant sample is expected away from the frame. This
-            // rejects table/laptop edges that morphology can detach by one
-            // pixel while retaining a small central tablet/powder sample.
-            boolean interior = minX > marginX && minY > marginY
-                    && maxX < width - marginX && maxY < height - marginY;
-            if (interior && componentCount >= width * height * .003f) {
-                float boxWidth = maxX - minX + 1f;
-                float boxHeight = maxY - minY + 1f;
-                float fill = componentCount / Math.max(1f, boxWidth * boxHeight);
-                float aspectBalance = Math.min(boxWidth, boxHeight) / Math.max(boxWidth, boxHeight);
-                float areaSupport = Math.min(1f, componentCount / (width * height * .02f));
-                // Prefer a compact, central object over a larger interior
-                // shadow or a broad piece of furniture. Area still matters,
-                // so tiny isolated texture marks cannot win by circularity.
-                float score = fill * .45f + aspectBalance * .35f + areaSupport * .20f;
-                if (score > bestScore || (Math.abs(score - bestScore) < .02f && componentCount > bestInteriorCount)) {
-                    Arrays.fill(best, false);
-                    for (int i = 0; i < componentCount; i++) best[component[i]] = true;
-                    bestInteriorCount = componentCount;
-                    bestScore = score;
-                }
-            }
-        }
-        return bestInteriorCount > 0 ? best : new boolean[source.length];
-    }
-
-    /**
-     * Joins nearby interior components from one object when highlights,
-     * printed markings, or a soft shadow split its thresholded contour.
-     * This is still evidence-derived: the cluster must come from real
-     * foreground pixels and every member must stay away from the frame.
-     */
-    private static boolean[] bestCluster(boolean[] source, int width, int height) {
-        List<MaskComponent> components = connectedComponents(source, width, height);
-        float marginX = width * .08f, marginY = height * .08f;
-        boolean[] best = new boolean[source.length];
-        int bestCount = 0;
-        for (int seed = 0; seed < components.size(); seed++) {
-            MaskComponent first = components.get(seed);
-            if (!first.interior(width, height, marginX, marginY) || first.pixels.length < 12) continue;
-            boolean[] included = new boolean[components.size()];
-            included[seed] = true;
-            int minX = first.minX, minY = first.minY, maxX = first.maxX, maxY = first.maxY, total = first.pixels.length;
-            boolean changed;
-            do {
-                changed = false;
-                for (int i = 0; i < components.size(); i++) {
-                    if (included[i]) continue;
-                    MaskComponent candidate = components.get(i);
-                    if (candidate.pixels.length < 12 || !candidate.interior(width, height, marginX, marginY)) continue;
-                    if (!boxesNear(minX, minY, maxX, maxY, candidate, 12)) continue;
-                    included[i] = true;
-                    minX = Math.min(minX, candidate.minX); minY = Math.min(minY, candidate.minY);
-                    maxX = Math.max(maxX, candidate.maxX); maxY = Math.max(maxY, candidate.maxY);
-                    total += candidate.pixels.length;
-                    changed = true;
-                }
-            } while (changed);
-            if (total <= bestCount) continue;
-            Arrays.fill(best, false);
-            for (int i = 0; i < components.size(); i++) if (included[i]) {
-                for (int pixel : components.get(i).pixels) best[pixel] = true;
-            }
-            bestCount = total;
-        }
-        return bestCount > 0 ? best : new boolean[source.length];
-    }
-
-    private static boolean boxesNear(int minX, int minY, int maxX, int maxY, MaskComponent candidate, int gap) {
-        return minX <= candidate.maxX + gap && candidate.minX <= maxX + gap
-                && minY <= candidate.maxY + gap && candidate.minY <= maxY + gap;
-    }
-
-    private static List<MaskComponent> connectedComponents(boolean[] source, int width, int height) {
-        List<MaskComponent> result = new ArrayList<>();
-        boolean[] visited = new boolean[source.length];
-        int[] queue = new int[source.length];
-        for (int start = 0; start < source.length; start++) {
-            if (!source[start] || visited[start]) continue;
-            int head = 0, tail = 0;
-            ArrayList<Integer> pixels = new ArrayList<>();
-            int minX = width, minY = height, maxX = -1, maxY = -1;
-            queue[tail++] = start; visited[start] = true;
-            while (head < tail) {
-                int index = queue[head++]; pixels.add(index);
-                int x = index % width, y = index / width;
-                minX = Math.min(minX, x); minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-                for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
-                    if (dx == 0 && dy == 0) continue;
-                    int nx = x + dx, ny = y + dy;
-                    if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-                    int next = ny * width + nx;
-                    if (source[next] && !visited[next]) { visited[next] = true; queue[tail++] = next; }
-                }
-            }
-            int[] values = new int[pixels.size()];
-            for (int i = 0; i < values.length; i++) values[i] = pixels.get(i);
-            result.add(new MaskComponent(values, minX, minY, maxX, maxY));
-        }
-        return result;
-    }
-
-    private static final class MaskComponent {
-        final int[] pixels;
-        final int minX, minY, maxX, maxY;
-
-        MaskComponent(int[] pixels, int minX, int minY, int maxX, int maxY) {
-            this.pixels = pixels; this.minX = minX; this.minY = minY; this.maxX = maxX; this.maxY = maxY;
-        }
-
-        boolean interior(int width, int height, float marginX, float marginY) {
-            return minX > marginX && minY > marginY && maxX < width - marginX && maxY < height - marginY;
-        }
-    }
-
     private static int count(boolean[] mask) {
         int count = 0;
         for (boolean value : mask) if (value) count++;
         return count;
-    }
-
-    /** Fill interior gaps so printed detail does not punch holes in a silhouette. */
-    private static boolean[] fillEnclosedHoles(boolean[] source, int width, int height) {
-        boolean[] outside = new boolean[source.length];
-        int[] queue = new int[source.length];
-        int head = 0, tail = 0;
-        for (int y = 0; y < height; y++) for (int x = 0; x < width; x++) {
-            if (x != 0 && y != 0 && x != width - 1 && y != height - 1) continue;
-            int index = y * width + x;
-            if (!source[index] && !outside[index]) { outside[index] = true; queue[tail++] = index; }
-        }
-        while (head < tail) {
-            int index = queue[head++];
-            int x = index % width, y = index / width;
-            if (x > 0 && !source[index - 1] && !outside[index - 1]) { outside[index - 1] = true; queue[tail++] = index - 1; }
-            if (x + 1 < width && !source[index + 1] && !outside[index + 1]) { outside[index + 1] = true; queue[tail++] = index + 1; }
-            if (y > 0 && !source[index - width] && !outside[index - width]) { outside[index - width] = true; queue[tail++] = index - width; }
-            if (y + 1 < height && !source[index + width] && !outside[index + width]) { outside[index + width] = true; queue[tail++] = index + width; }
-        }
-        boolean[] filled = Arrays.copyOf(source, source.length);
-        for (int i = 0; i < filled.length; i++) if (!source[i] && !outside[i]) filled[i] = true;
-        return filled;
     }
 
     private static List<PointF> boundary(boolean[] mask, int width, int height) {
@@ -725,25 +438,10 @@ public final class VisualFeatureExtractor {
 
     private static float colorDistance(int pixel, float r, float g, float b) {
         float dr = Color.red(pixel) - r, dg = Color.green(pixel) - g, db = Color.blue(pixel) - b;
-        float euclidean = (float) (Math.sqrt(dr * dr + dg * dg + db * db) / 1.732f);
-        float chromaRg = (Color.red(pixel) - Color.green(pixel)) - (r - g);
-        float chromaBg = (Color.blue(pixel) - Color.green(pixel)) - (b - g);
-        float chroma = (float) (Math.sqrt(chromaRg * chromaRg + chromaBg * chromaBg) / 1.414f);
-        return Math.min(255f, Math.max(euclidean, chroma));
+        return Math.min(255f, (float) (Math.sqrt(dr * dr + dg * dg + db * db) / 1.732f));
     }
 
     private static float luminance(int pixel) { return (.2126f * Color.red(pixel)) + (.7152f * Color.green(pixel)) + (.0722f * Color.blue(pixel)); }
-    private static float averageLuminance(Bitmap bitmap) {
-        long total = 0L;
-        int samples = 0;
-        for (int y = 0; y < bitmap.getHeight(); y += 4) {
-            for (int x = 0; x < bitmap.getWidth(); x += 4) {
-                total += Math.round(luminance(bitmap.getPixel(x, y)));
-                samples++;
-            }
-        }
-        return total / (float) Math.max(1, samples);
-    }
     private static float clamp(float value) { return Math.max(0f, Math.min(1f, value)); }
     private static float cross(PointF a, PointF b, PointF c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
     private static float polygonArea(List<PointF> points) { float area = 0f; for (int i = 0; i < points.size(); i++) { PointF a = points.get(i), b = points.get((i + 1) % points.size()); area += (a.x * b.y) - (b.x * a.y); } return area / 2f; }

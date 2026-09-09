@@ -13,34 +13,27 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
-import cl.reduciendodano.xiofield.core.SampleSessionEngine;
 import cl.reduciendodano.xiofield.core.VisualFeatures;
-import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 
 /**
- * Small LAN client for the XIO RD host. The mobile app remains usable
+ * Small LAN client for FLUJO's RD bridge. The mobile app remains usable
  * offline; synchronization is an explicit projection of the local session.
  */
 public final class FlujoGateway {
-    public static final String XIO_BASE_ENDPOINT = "http://127.0.0.1:5000";
-    public static final String DEFAULT_ENDPOINT = XIO_BASE_ENDPOINT + "/api/plugins/rd_field";
+    public static final String DEFAULT_ENDPOINT = "http://192.168.50.2:8765";
+    private static final String USB_TUNNEL_ENDPOINT = "http://127.0.0.1:8765";
     private static final int CONNECT_TIMEOUT_MS = 4500;
     private static final int READ_TIMEOUT_MS = 12000;
     private static final int MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-    // Base64 expands the bytes; keep the raw-photo budget below XIO's 8 MB
+    // Base64 expands the bytes; keep the raw-photo budget below FLUJO's 8 MB
     // request cap after JSON encoding and metadata are added.
     private static final int MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
     private final Context context;
@@ -54,18 +47,7 @@ public final class FlujoGateway {
         executor.execute(() -> {
             try {
                 JSONObject payload = buildPayload(sample);
-                JSONObject response = request("POST", endpoint + "/sync", payload, token);
-                deliver(callback, Result.success(response));
-            } catch (Exception error) {
-                deliver(callback, Result.failure(error));
-            }
-        });
-    }
-
-    public void syncEvent(JSONObject event, String endpoint, String token, Callback callback) {
-        executor.execute(() -> {
-            try {
-                JSONObject response = request("POST", endpoint + "/events/sync", event, token);
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/api/rd/muestras/sync", payload, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -76,87 +58,7 @@ public final class FlujoGateway {
     public void loadBootstrap(String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = request("GET", endpoint + "/bootstrap", null, token);
-                deliver(callback, Result.success(response));
-            } catch (Exception error) {
-                deliver(callback, Result.failure(error));
-            }
-        });
-    }
-
-    public void loadSamples(String endpoint, String eventRef, String sampleCode, Callback callback) {
-        executor.execute(() -> {
-            try {
-                String encodedEvent = URLEncoder.encode(eventRef == null ? "" : eventRef, "UTF-8");
-                String target = endpoint + "/samples?eventRef=" + encodedEvent;
-                if (sampleCode != null && !sampleCode.trim().isEmpty()) {
-                    target += "&sampleCode=" + URLEncoder.encode(sampleCode.trim(), "UTF-8");
-                }
-                JSONObject response = request("GET", target, null, "");
-                deliver(callback, Result.success(response));
-            } catch (Exception error) {
-                deliver(callback, Result.failure(error));
-            }
-        });
-    }
-
-    public void loadVisualCatalog(String endpoint, Callback callback) {
-        executor.execute(() -> {
-            try {
-                JSONObject response = request("GET", endpoint + "/catalog", null, "");
-                deliver(callback, Result.success(response));
-            } catch (Exception error) {
-                deliver(callback, Result.failure(error));
-            }
-        });
-    }
-
-    public void submitVisualCandidate(SampleSession sample, String label, String referenceId,
-                                      String createdBy, String endpoint, Callback callback) {
-        executor.execute(() -> {
-            try {
-                JSONObject payload = new JSONObject();
-                payload.put("referenceId", referenceId);
-                payload.put("canonicalLabel", label);
-                payload.put("sourceEventRef", safe(sample.eventId, ""));
-                payload.put("sourceSampleCode", safe(sample.code, ""));
-                payload.put("createdBy", safe(createdBy, "operator"));
-                payload.put("featureModelVersion", SampleSessionEngine.VISUAL_MODEL_VERSION);
-                JSONArray views = new JSONArray();
-                int encodedBytes = 0;
-                for (SampleSession.Capture capture : sample.captures) {
-                    if (capture == null || capture.features == null) continue;
-                    JSONObject view = new JSONObject();
-                    view.put("captureId", capture.id);
-                    view.put("faceOrView", "unknown");
-                    view.put("photoSha256", safe(capture.sha256, ""));
-                    view.put("geometrySignature", safe(capture.features.geometrySignature, ""));
-                    view.put("reliefSignature", safe(capture.features.reliefSignature, ""));
-                    view.put("silhouetteConfidence", capture.features.silhouetteConfidence);
-                    view.put("reliefConfidence", capture.features.reliefConfidence);
-                    view.put("circularity", capture.features.circularity);
-                    view.put("solidity", capture.features.solidity);
-                    view.put("symmetry", capture.features.symmetry);
-                    view.put("contourPointCount", capture.features.contourPointCount);
-                    putVisualFeatures(view, capture.features);
-                    File file = new File(capture.path);
-                    long fileLength = file.isFile() ? file.length() : 0L;
-                    if (fileLength > 0 && fileLength <= MAX_PHOTO_BYTES
-                            && encodedBytes + fileLength <= MAX_PAYLOAD_BYTES) {
-                        byte[] bytes = readBytes(file, MAX_PHOTO_BYTES);
-                        if (encodedBytes + bytes.length <= MAX_PAYLOAD_BYTES) {
-                            view.put("photoBase64", Base64.encodeToString(bytes, Base64.NO_WRAP));
-                            encodedBytes += bytes.length;
-                        }
-                    }
-                    encodedBytes = putDerivedAsset(view, "silhouetteBase64", "silhouetteSha256",
-                            capture.silhouettePreviewPath, "png", encodedBytes);
-                    encodedBytes = putDerivedAsset(view, "reliefSvgBase64", "reliefSha256",
-                            capture.reliefPath, "svg", encodedBytes);
-                    views.put(view);
-                }
-                payload.put("views", views);
-                JSONObject response = request("POST", endpoint + "/catalog/candidates", payload, "");
+                JSONObject response = requestWithUsbFallback("GET", endpoint + "/api/rd/muestras/bootstrap", null, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -173,7 +75,7 @@ public final class FlujoGateway {
         payload.put("schema", "xio-flujo-rd-v1");
         payload.put("date", new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(sample.createdAt)));
         payload.put("eventRef", sample.eventId);
-        payload.put("eventOrigin", "xio_app");
+        payload.put("eventOrigin", "app");
         payload.put("sampleCode", sample.code);
         payload.put("substanceDeclared", safe(sample.declaredSubstance, "sin declarar"));
         payload.put("sampleType", safe(sample.presentation, "sin clasificar"));
@@ -183,10 +85,6 @@ public final class FlujoGateway {
         payload.put("color", sample.observedColor == null || sample.observedColor.isEmpty() ? (features == null ? "" : features.colorLabel) : sample.observedColor);
         payload.put("texture", textureText(features));
         payload.put("logoOrMark", reviewedMark(sample, features));
-        String approvedMoldDesign = reviewedMoldDesign(sample);
-        payload.put("moldDesign", approvedMoldDesign);
-        payload.put("moldFingerprint", approvedMoldDesign.isEmpty() ? "" : MoldPatternMatcher.fingerprint(designViews(sample)));
-        payload.put("observationFingerprint", MoldPatternMatcher.fingerprint(designViews(sample)));
         payload.put("mesa", new JSONObject().put("label", "XIO / mesa móvil").put("number", 1));
         payload.put("notes", notes(sample, features));
 
@@ -210,7 +108,6 @@ public final class FlujoGateway {
             item.put("solidity", capture.features.solidity);
             item.put("symmetry", capture.features.symmetry);
             item.put("contourPointCount", capture.features.contourPointCount);
-            putVisualFeatures(item, capture.features);
             File file = new File(capture.path);
             long fileLength = file.isFile() ? file.length() : 0L;
             if (fileLength > 0 && fileLength <= MAX_PHOTO_BYTES && encodedBytes + fileLength <= MAX_PAYLOAD_BYTES) {
@@ -220,12 +117,6 @@ public final class FlujoGateway {
                     encodedBytes += bytes.length;
                 }
             }
-            encodedBytes = putDerivedAsset(item, "silhouetteBase64", "silhouetteSha256",
-                    capture.silhouettePreviewPath, "png", encodedBytes);
-            encodedBytes = putDerivedAsset(item, "silhouetteSvgBase64", "silhouetteSvgSha256",
-                    capture.silhouettePath, "svg", encodedBytes);
-            encodedBytes = putDerivedAsset(item, "reliefSvgBase64", "reliefSha256",
-                    capture.reliefPath, "svg", encodedBytes);
             captures.put(item);
         }
         payload.put("captures", captures);
@@ -245,25 +136,6 @@ public final class FlujoGateway {
         return payload;
     }
 
-    private static void putVisualFeatures(JSONObject item, VisualFeatures features) throws JSONException {
-        item.put("colorLabel", safe(features.colorLabel, ""));
-        item.put("silhouetteLabel", safe(features.silhouetteLabel, ""));
-        item.put("aspectRatio", features.aspectRatio);
-        item.put("foregroundRatio", features.foregroundRatio);
-        item.put("brightness", features.brightness);
-        item.put("saturation", features.saturation);
-        item.put("textureScore", features.textureScore);
-        item.put("meanRed", features.meanRed);
-        item.put("meanGreen", features.meanGreen);
-        item.put("meanBlue", features.meanBlue);
-        item.put("perceptualHash", features.perceptualHash);
-        item.put("markingCandidate", safe(features.markingCandidate, ""));
-        item.put("markingScore", features.markingScore);
-    }
-
-    // The target is the operator-selected data boundary. A failed LAN request
-    // must remain a failure; silently redirecting it to Xiaomi localhost can
-    // report success while writing into a different database.
     private JSONObject request(String method, String target, JSONObject body, String token) throws IOException, JSONException {
         HttpURLConnection connection = (HttpURLConnection) new URL(target).openConnection();
         connection.setRequestMethod(method);
@@ -282,8 +154,19 @@ public final class FlujoGateway {
         java.io.InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
         String responseText = input == null ? "{}" : new String(readAll(input), StandardCharsets.UTF_8);
         connection.disconnect();
-        if (status < 200 || status >= 300) throw new IOException("XIO-RD HTTP " + status + ": " + responseText);
+        if (status < 200 || status >= 300) throw new IOException("FLUJO HTTP " + status + ": " + responseText);
         return new JSONObject(responseText);
+    }
+
+    private JSONObject requestWithUsbFallback(String method, String target, JSONObject body, String token) throws IOException, JSONException {
+        try {
+            return request(method, target, body, token);
+        } catch (IOException first) {
+            if (target.startsWith(USB_TUNNEL_ENDPOINT)) throw first;
+            // Development/field handoff: when USB reverse is active, keep the
+            // same client usable even if the MAK firewall blocks the LAN port.
+            return request(method, USB_TUNNEL_ENDPOINT + target.substring(target.indexOf('/', 8)), body, token);
+        }
     }
 
     private static byte[] readBytes(File file, int maxBytes) throws IOException {
@@ -297,32 +180,6 @@ public final class FlujoGateway {
                 output.write(buffer, 0, count);
             }
             return output.toByteArray();
-        }
-    }
-
-    private static int putDerivedAsset(JSONObject target, String dataKey, String shaKey,
-                                       String path, String extension, int encodedBytes)
-            throws IOException, JSONException {
-        if (path == null || path.isEmpty()) return encodedBytes;
-        File file = new File(path);
-        long length = file.isFile() ? file.length() : 0L;
-        if (length <= 0 || length > MAX_PHOTO_BYTES || encodedBytes + length > MAX_PAYLOAD_BYTES) return encodedBytes;
-        byte[] bytes = readBytes(file, MAX_PHOTO_BYTES);
-        if (encodedBytes + bytes.length > MAX_PAYLOAD_BYTES) return encodedBytes;
-        target.put(dataKey, Base64.encodeToString(bytes, Base64.NO_WRAP));
-        target.put(shaKey, sha256Bytes(bytes));
-        target.put(dataKey + "Extension", extension);
-        return encodedBytes + bytes.length;
-    }
-
-    private static String sha256Bytes(byte[] bytes) throws IOException {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
-            StringBuilder result = new StringBuilder();
-            for (byte value : digest) result.append(String.format(Locale.US, "%02x", value));
-            return result.toString();
-        } catch (NoSuchAlgorithmException error) {
-            throw new IOException("SHA-256 no disponible", error);
         }
     }
 
@@ -356,42 +213,22 @@ public final class FlujoGateway {
         return fallback;
     }
 
-    private static String reviewedMoldDesign(SampleSession sample) {
-        for (int i = sample.corrections.size() - 1; i >= 0; i--) {
-            SampleSession.Correction correction = sample.corrections.get(i);
-            if (!"mold_design_approved".equals(correction.field)) continue;
-            String value = correction.correctedValue == null ? "" : correction.correctedValue.trim();
-            if (value.toLowerCase(Locale.ROOT).startsWith("molde:")) return value.substring("molde:".length()).trim();
-            return value;
-        }
-        return "";
-    }
-
     private static String notes(SampleSession sample, VisualFeatures features) {
         String visual = features == null ? "" : features.compactDescription();
         SampleSession.Capture latest = latestCapture(sample);
-        StringBuilder notes = new StringBuilder("xio_visual_source=proposal; model=").append(SampleSessionEngine.VISUAL_MODEL_VERSION).append("; ");
+        StringBuilder notes = new StringBuilder("xio_visual_source=proposal; model=visual-contour-v0.3; ");
         notes.append(visual).append("; phase=").append(sample.phase.name());
-        String mold = reviewedMoldDesign(sample);
-        if (!mold.isEmpty()) notes.append("; xio_mold_design=").append(mold);
-        if (features != null) notes.append("; xio_observation_fingerprint=").append(MoldPatternMatcher.fingerprint(designViews(sample)));
         if (features != null) {
             notes.append(String.format(Locale.US, "; geometry_confidence=%.3f; circularity=%.3f; solidity=%.3f; symmetry=%.3f; contour_points=%d; geometry_signature=%s; relief_confidence=%.3f; relief_signature=%s", features.silhouetteConfidence, features.circularity, features.solidity, features.symmetry, features.contourPointCount, features.geometrySignature, features.reliefConfidence, features.reliefSignature));
         }
-        // Evidence paths live in muestra_capturas; do not duplicate dangling
-        // svg:capture-* aliases inside the canonical sample notes.
+        if (latest != null && latest.silhouettePath != null && !latest.silhouettePath.isEmpty()) notes.append("; xio_silhouette_ref=svg:").append(latest.id);
+        if (latest != null && latest.reliefPath != null && !latest.reliefPath.isEmpty()) notes.append("; xio_relief_ref=svg:").append(latest.id);
         return notes.toString();
     }
 
     private static String latestObservation(SampleSession.TestSession test) {
         if (!test.observations.isEmpty()) return safe(test.observations.get(test.observations.size() - 1).color, "");
         return safe(test.operatorResult, "");
-    }
-
-    private static List<VisualFeatures> designViews(SampleSession sample) {
-        List<VisualFeatures> result = new ArrayList<>();
-        for (SampleSession.Capture capture : sample.captures) if (capture.features != null) result.add(capture.features);
-        return result;
     }
 
     private static String safe(String value, String fallback) {

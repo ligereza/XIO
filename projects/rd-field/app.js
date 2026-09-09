@@ -15,8 +15,7 @@ const ui = {
   search: "",
   pendingPhotoTarget: { type: "sample" },
   toastTimer: null,
-  timer: null,
-  remote: { connected: false, events: [], lastBootstrapAt: null, error: "" }
+  timer: null
 };
 
 function uid(prefix) {
@@ -82,8 +81,6 @@ function makeSample(eventId, sequence, overrides = {}) {
     humanCorrection: null,
     tests: [],
     workflowStatus: "draft",
-    syncStatus: "pending",
-    remoteSampleId: null,
     audit: [{ at: createdAt, action: "sample_created", actor: "operator" }],
     ...overrides
   };
@@ -143,69 +140,6 @@ function loadState() {
 
 const state = loadState();
 
-function availableEvents() {
-  if (!ui.remote.connected) return state.events;
-  return state.events.filter((event) => event.remote === true);
-}
-
-function remoteUrl(path) {
-  return new URL(path, window.location.href).toString();
-}
-
-function mapRemoteEvent(raw) {
-  const eventRef = String(raw?.event_id || "").trim();
-  if (!eventRef) return null;
-  const venue = raw.venues?.find((item) => item.venue_nombre)?.venue_nombre || "Sin lugar";
-  const producer = raw.productoras?.find((item) => item.productora_slug)?.productora_slug || "";
-  return {
-    id: `rd-remote-${eventRef}`,
-    eventRef,
-    code: eventRef,
-    name: raw.event_label_candidate || eventRef,
-    venue,
-    producer,
-    scheduledAt: raw.date_iso_candidate ? `${raw.date_iso_candidate}T12:00:00.000Z` : null,
-    startedAt: null,
-    status: raw.event_label_status || "planned",
-    synthetic: false,
-    remote: true,
-    createdAt: isoNow()
-  };
-}
-
-function mergeRemoteEvents(rawEvents) {
-  const mapped = (Array.isArray(rawEvents) ? rawEvents : []).map(mapRemoteEvent).filter(Boolean);
-  const byRef = new Map(mapped.map((event) => [event.eventRef, event]));
-  state.events = state.events.filter((event) => !event.remote || byRef.has(event.eventRef));
-  mapped.forEach((remoteEvent) => {
-    const current = state.events.find((event) => event.remote && event.eventRef === remoteEvent.eventRef);
-    if (current) Object.assign(current, remoteEvent, { startedAt: current.startedAt });
-    else state.events.push(remoteEvent);
-  });
-  const first = availableEvents()[0];
-  const selected = availableEvents().find((event) => event.id === state.selectedEventId) || first;
-  state.selectedEventId = selected?.id || null;
-  const currentSample = eventSamples(state.selectedEventId)[0];
-  state.selectedSampleId = currentSample?.id || null;
-}
-
-async function loadRemoteBootstrap() {
-  if (window.location.protocol === "file:") return;
-  try {
-    const response = await fetch(remoteUrl("bootstrap"), { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const payload = await response.json();
-    if (!Array.isArray(payload.events)) throw new Error("bootstrap RD sin eventos");
-    ui.remote = { connected: true, events: payload.events, lastBootstrapAt: isoNow(), error: "" };
-    mergeRemoteEvents(payload.events);
-    persist("Host RD conectado · eventos cargados");
-    renderAll();
-  } catch (error) {
-    ui.remote = { connected: false, events: [], lastBootstrapAt: null, error: String(error?.message || error) };
-    refreshStatus();
-  }
-}
-
 function persist(message = "Guardado local") {
   state.savedAt = isoNow();
   try {
@@ -232,14 +166,8 @@ function sampleProgress(sample) {
 
 function refreshStatus() {
   const connected = navigator.onLine;
-  const label = document.getElementById("connectionLabel");
-  if (ui.remote.connected) {
-    label.textContent = "Host RD conectado · persistencia en servidor";
-    document.querySelector(".live-dot").style.background = "#74c18f";
-  } else {
-    label.textContent = connected ? "Conexión disponible · modo local" : "Sin conexión · guardado local";
-    document.querySelector(".live-dot").style.background = connected ? "#e6c96b" : "#74c18f";
-  }
+  document.getElementById("connectionLabel").textContent = connected ? "Conexión disponible · modo local" : "Sin conexión · guardado local";
+  document.querySelector(".live-dot").style.background = connected ? "#e6c96b" : "#74c18f";
 }
 
 function showToast(message, type = "success") {
@@ -259,15 +187,11 @@ function renderSidebar() {
   const event = getEvent();
   const samples = eventSamples();
   const allTests = samples.flatMap((sample) => sample.tests);
-  const events = availableEvents();
   const pending = samples.filter((sample) => sample.workflowStatus !== "complete").length;
   const corrections = samples.filter((sample) => sample.humanCorrection).length;
   document.getElementById("eventName").textContent = event?.name || "Sin evento";
   document.getElementById("eventMeta").textContent = event ? `${event.code} · ${event.venue || "Sin lugar"}` : "Selecciona o crea un evento";
-  document.getElementById("eventSelect").innerHTML = events.map((item) => `<option value="${item.id}" ${item.id === state.selectedEventId ? "selected" : ""}>${escapeHTML(item.name)}${item.synthetic ? " · DEMO" : ""}</option>`).join("");
-  const newEventButton = document.getElementById("newEventButton");
-  newEventButton.disabled = ui.remote.connected;
-  newEventButton.title = ui.remote.connected ? "Los eventos se seleccionan desde el host RD" : "Crear evento local";
+  document.getElementById("eventSelect").innerHTML = state.events.map((item) => `<option value="${item.id}" ${item.id === state.selectedEventId ? "selected" : ""}>${escapeHTML(item.name)}${item.synthetic ? " · DEMO" : ""}</option>`).join("");
   const startButton = document.getElementById("eventStartButton");
   startButton.classList.toggle("started", Boolean(event?.startedAt));
   startButton.textContent = event?.startedAt ? `● En curso desde ${formatDate(event.startedAt)}` : "▶ Marcar inicio real del evento";
@@ -362,8 +286,7 @@ function renderWorkspace() {
   }
   empty.hidden = true;
   const statusLabel = sample.workflowStatus === "complete" ? "Completa" : sample.humanCorrection ? "En revisión" : sample.tests.length ? "En proceso" : "Borrador";
-  const syncLabel = sample.syncStatus === "synced" ? "Sincronizada con host RD" : sample.syncStatus === "syncing" ? "Sincronizando…" : "Pendiente de sincronizar";
-  root.innerHTML = `<div class="workspace-header"><div><p class="eyebrow">Registro interno · ${event.synthetic ? "DEMO SINTÉTICA" : "DATOS LOCALES"}</p><h2>${escapeHTML(sample.code)}</h2><p class="subhead">Una muestra con historia propia. Declara, observa, prueba, corrige y exporta sin perder el contexto.</p></div><div class="saved-state"><span class="check">✓</span><span>${escapeHTML(statusLabel)} · ${formatDate(sample.updatedAt)}</span></div></div>${renderWorkflow(sample)}<div class="record-layout"><div class="record-main">${renderIdentityPanel(sample)}${renderAppearancePanel(sample)}${renderTestsPanel(sample)}${renderReviewPanel(sample)}<div class="record-footer"><p>Último cambio local: ${formatDate(sample.updatedAt)} · ${ui.remote.connected ? syncLabel : "sin sincronización automática"}</p><div class="footer-actions"><button class="button button-quiet" type="button" data-action="duplicate-sample">Duplicar como demo</button><button class="button button-quiet" type="button" data-action="sync-current" ${!ui.remote.connected || sample.syncStatus === "syncing" ? "disabled" : ""}>⇧ ${ui.remote.connected ? "Sincronizar con host RD" : "Host RD no disponible"}</button><button class="button button-primary" type="button" data-action="export-current">Exportar muestra</button></div></div></div>${renderAside(sample, event)}</div>`;
+  root.innerHTML = `<div class="workspace-header"><div><p class="eyebrow">Registro interno · ${event.synthetic ? "DEMO SINTÉTICA" : "DATOS LOCALES"}</p><h2>${escapeHTML(sample.code)}</h2><p class="subhead">Una muestra con historia propia. Declara, observa, prueba, corrige y exporta sin perder el contexto.</p></div><div class="saved-state"><span class="check">✓</span><span>${escapeHTML(statusLabel)} · ${formatDate(sample.updatedAt)}</span></div></div>${renderWorkflow(sample)}<div class="record-layout"><div class="record-main">${renderIdentityPanel(sample)}${renderAppearancePanel(sample)}${renderTestsPanel(sample)}${renderReviewPanel(sample)}<div class="record-footer"><p>Último cambio local: ${formatDate(sample.updatedAt)} · sin sincronización automática</p><div class="footer-actions"><button class="button button-quiet" type="button" data-action="duplicate-sample">Duplicar como demo</button><button class="button button-primary" type="button" data-action="export-current">Exportar muestra</button></div></div></div>${renderAside(sample, event)}</div>`;
 }
 
 function renderAll() {
@@ -520,11 +443,6 @@ function startEvent() {
 }
 
 function createEventFromForm() {
-  if (ui.remote.connected) {
-    document.getElementById("eventDialog").close();
-    showToast("Los eventos RD se preparan en el host; aquí sólo se seleccionan.", "error");
-    return;
-  }
   const nameInput = document.getElementById("eventFormName");
   const venueInput = document.getElementById("eventFormVenue");
   const scheduledInput = document.getElementById("eventFormScheduled");
@@ -607,83 +525,6 @@ function findSimilar() {
   showToast(`Recuperación demo: ${best.code} comparte rasgos visuales revisados.`);
 }
 
-function epochSeconds(value) {
-  if (!value) return null;
-  const stamp = new Date(value).getTime();
-  return Number.isFinite(stamp) ? Math.floor(stamp / 1000) : null;
-}
-
-function capturePayload(asset, kind) {
-  if (!asset || asset.synthetic || !asset.dataUrl) return null;
-  return {
-    id: asset.id,
-    kind,
-    capturedAt: epochSeconds(asset.capturedAt),
-    sha256: asset.sha256 || "",
-    photoBase64: asset.dataUrl
-  };
-}
-
-function sampleSyncPayload(sample, event) {
-  const captures = [capturePayload(sample.photo, "sample")];
-  sample.tests.forEach((test) => (test.evidence || []).forEach((asset) => captures.push(capturePayload(asset, "reaction"))));
-  return {
-    date: new Date(sample.createdAt).toISOString().slice(0, 10),
-    eventRef: event.eventRef || event.code,
-    eventOrigin: "xio-rd-pwa",
-    sampleCode: sample.code,
-    substanceDeclared: sample.declaredSubstance === "Otro" ? (sample.declaredOther || "Otro") : (sample.declaredSubstance || "Desconocido"),
-    sampleType: sample.format || "",
-    color: sample.appearance?.color || "",
-    texture: sample.appearance?.texture || "",
-    logoOrMark: sample.appearance?.brand || "",
-    notes: sample.appearance?.notes || "",
-    mesa: { label: "PWA RD", number: null },
-    captures: captures.filter(Boolean),
-    tests: sample.tests.map((test, index) => ({
-      reagent: test.reagent || "Otro / método local",
-      resultColor: test.reactionColor || "",
-      family: "",
-      suspectedAdulterant: "",
-      matchesDeclared: null,
-      order: index + 1
-    }))
-  };
-}
-
-async function syncCurrentSample() {
-  const sample = getSample();
-  const event = getEvent();
-  if (!sample || !event || !ui.remote.connected || !event.remote) {
-    showToast("Selecciona un evento RD del host antes de sincronizar.", "error");
-    return;
-  }
-  sample.syncStatus = "syncing";
-  persist("Sincronización RD en curso");
-  renderAll();
-  try {
-    const response = await fetch(remoteUrl("sync"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(sampleSyncPayload(sample, event))
-    });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok || result.ok === false) throw new Error(result.error || `HTTP ${response.status}`);
-    sample.syncStatus = "synced";
-    sample.remoteSampleId = result.sampleId || null;
-    sample.remoteSyncedAt = isoNow();
-    sample.audit.push({ at: isoNow(), action: "sample_synced_to_rd_host", actor: "operator", remoteSampleId: sample.remoteSampleId });
-    persist("Muestra guardada en el host RD");
-    renderAll();
-    showToast(`${sample.code} guardada en el host RD.`);
-  } catch (error) {
-    sample.syncStatus = "pending";
-    persist("Host RD no confirmó la muestra");
-    renderAll();
-    showToast(`No se pudo sincronizar: ${error?.message || error}`, "error");
-  }
-}
-
 function duplicateSample() {
   const current = getSample();
   if (!current) return;
@@ -755,7 +596,6 @@ document.addEventListener("click", (event) => {
     renderAll();
   } else if (action === "find-similar") findSimilar();
   else if (action === "duplicate-sample") duplicateSample();
-  else if (action === "sync-current") syncCurrentSample();
   else if (action === "export-current") exportEvent(state.selectedSampleId);
   else if (action === "export-event-from-director") exportEvent();
 });
@@ -794,7 +634,6 @@ document.getElementById("openDirectorButton").addEventListener("click", () => { 
 document.getElementById("closeDirectorButton").addEventListener("click", () => document.getElementById("directorDialog").close());
 document.getElementById("photoInput").addEventListener("change", (event) => { const file = event.target.files?.[0]; if (file) handlePhoto(file); });
 window.addEventListener("online", refreshStatus);
-window.addEventListener("online", loadRemoteBootstrap);
 window.addEventListener("offline", refreshStatus);
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("./sw.js").catch(() => {});
@@ -804,4 +643,3 @@ ui.timer = setInterval(() => {
 }, 1000);
 
 renderAll();
-loadRemoteBootstrap();
