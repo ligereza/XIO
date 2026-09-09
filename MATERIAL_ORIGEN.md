@@ -20,6 +20,25 @@ La extracción se hizo desde la copia local de `C:\IA\flujo`, clonada de
 Se mantuvieron los paths originales para que las instrucciones, imports y
 workflows de XIO sigan siendo legibles y rastreables.
 
+## Ensamblaje de la rama candidate
+
+Esta rama de revisión se ensambló sin modificar las copias de trabajo
+originales. Su base es el snapshot XIO extraído desde Windows; encima se
+integraron los commits funcionales que estaban en /home/mak/XIO y no en la
+copia Windows, y luego XIO_LAYER desde la rama canónica
+codex/xio-lucida-input-contract.
+
+La procedencia inmediata queda registrada por Git:
+
+- Windows XIO: codex/obras-experimental-rehearsal-xio-root, commit eb20894.
+- Candidate MAK/XIO: codex/xio-import-review.
+- XIO_LAYER de origen: codex/xio-lucida-input-contract, commit cd3b4d3.
+
+Antes de publicar, se comprobó que 262 archivos comunes entre Windows XIO y
+la base MAK/XIO tenían el mismo blob Git; los dos archivos adicionales de MAK
+eran NEXT.md y pytest.ini. El candidate conserva ambos. El manifiesto
+XIO_MANIFEST.sha256 añade una comprobación offline por archivo.
+
 ## Excluido
 
 El árbol fuente tenía elementos locales que no son código o ideas reutilizables

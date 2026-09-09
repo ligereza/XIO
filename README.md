@@ -24,6 +24,9 @@ automatización, documentación, ideas y proyectos de instalación.
   y plan de arquitectura USB→Windows→Ethernet→MAK.
 - `tests/test_xio_superficie.py` y `tests/test_xio_puente_staged.py`:
   regresiones sobre la superficie de seguridad y el puente staged.
+- XIO_LAYER/: capa transversal host-neutral para eventos, snapshots,
+  propuestas, acciones explicitas, auditoria, replay y transporte inyectable;
+  no decide acciones por si sola.
 
 ## Arranque rápido
 
@@ -47,6 +50,12 @@ python -m pytest tests/test_xio_superficie.py
 python -m pytest tests/test_xio_puente_staged.py
 python -m pytest tests/test_radio_monitor.py
 ```
+
+Los destinos de red del show y del puente no tienen IP privada por defecto.
+Use los argumentos de cada herramienta o configure XIO_HOST, XIO_DEST_HOST,
+XIO_BASE, MAK_HUB_URL y XIO_WIFI_SERIAL según corresponda.
+El denylist del teléfono se configura con XIO_DENY_IPS o con
+/sdcard/xio_termux/deny_ips.txt.
 
 Las capacidades marcadas como implementadas no implican que estén instaladas
 o verificadas en el Xiaomi; consultar `xio/CAPACIDADES.md` antes de operar un

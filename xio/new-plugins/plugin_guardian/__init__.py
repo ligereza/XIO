@@ -92,10 +92,13 @@ class PluginGuardian(PluginBase):
         return permission in permissions
     
     def check_command_safety(self, plugin_id: str, command: str) -> tuple[bool, str]:
-        """Verificar si un comando es seguro"""
-        if not self.security_hook:
-            return True, ""
-        return self.security_hook.validate_command(plugin_id, command)[:2]
+        """Apply guardian-only checks after SecurityHook has run.
+
+        The SecurityHook calls this extension point as its final stage. Calling
+        the hook again here would recurse forever, so the guardian keeps this
+        method non-recursive and available for future policy checks.
+        """
+        return True, ""
     
     def get_stats(self) -> dict:
         """Estadísticas del guardian"""

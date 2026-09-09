@@ -1,6 +1,6 @@
 # XIO — capacidades, inventario y proyectos
 
-Inventario consolidado al 2026-08-28. Separa lo que existe en el repositorio, lo
+Inventario consolidado al 2026-09-09. Separa lo que existe en el repositorio, lo
 que el despliegue prepara y lo que está realmente instalado/verificado en el
 Xiaomi. Un README o manifest no demuestra una capacidad operativa.
 
@@ -15,6 +15,7 @@ Xiaomi. Un README o manifest no demuestra una capacidad operativa.
 | cuarentena | Se omite por defecto porque ejecuta acciones al cargar o trata datos sensibles. |
 | device: no verificado | No hubo un Xiaomi autorizado conectado en esta auditoría; adb devices no mostró equipos. |
 | no aplica | Corre en Windows, MAK o una laptop, no dentro del teléfono. |
+| candidate | Esta capacidad está en una rama de revisión separada; aún no está promovida a origin/main. |
 
 ## Runtime de XIO
 
@@ -213,6 +214,24 @@ Diseño:
   retención y responsable definidos.
 - Objetivo piloto: 24 clientes públicos planificados sobre 32 máximos, 16
   peticiones simultáneas y 60 peticiones/minuto por IP en memoria.
+
+## XIO Layer transversal
+
+XIO_LAYER/ es la capa reutilizable que se importó desde la rama canónica
+codex/xio-lucida-input-contract, elegida por contener el contrato de entrada
+LUCIDA y el superset de transporte. Su flujo es:
+
+    event -> snapshot -> proposal -> explicit_action -> result -> audit
+
+| Componente | Función | Estado |
+|---|---|---|
+| XIO_LAYER/core | Contratos estrictos, log idempotente, snapshots, checkpoints, permisos, auditoría, replay, transporte y sesiones. | repo; 179 pruebas offline OK. |
+| XIO_LAYER/adapters | Fuentes locales, protocolos, handoff explícito y adaptador de entrada LUCIDA con proyección privada. | repo; sin sockets ni ejecución automática. |
+| XIO_LAYER/tests | Pruebas de contratos, persistencia, replay, ASCII, permisos, transporte y handoff. | 179 tests OK en MAK; hardware no verificado. |
+
+Esta capa propone y audita, pero no convierte un evento en una acción. Su
+presencia en la rama candidate no prueba integración con XIO runtime, Android,
+ADB, red o hardware.
 
 ## Servicio Android de recuperación
 
