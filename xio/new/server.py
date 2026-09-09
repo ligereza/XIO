@@ -820,4 +820,9 @@ if __name__ == "__main__":
     # Initialize plugins before starting server
     init_plugins()
 
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    app.run(
+        host=os.environ.get("XIO_BIND_HOST", "0.0.0.0"),
+        port=5000,
+        debug=False,
+        threaded=True,
+    )

@@ -16,12 +16,35 @@ cd "$HOME/xioserver" || exit 1
 export XIO_BACKEND=rish
 export RISH_PATH="$HOME/rish"
 export PLUGINS_DIR="$HOME/xioplugins"
+
+# RD NODO show mode: keep the existing XIO control plane off the public
+# hotspot. The public service runs separately on port 8088 and is read-only.
+RD_NODO_ENABLED="${RD_NODO_ENABLED:-0}"
+[ -f /sdcard/xio_termux/rd_nodo/enabled ] && RD_NODO_ENABLED=1
+if [ "$RD_NODO_ENABLED" = "1" ]; then
+  export XIO_BIND_HOST="${XIO_BIND_HOST:-127.0.0.1}"
+else
+  export XIO_BIND_HOST="${XIO_BIND_HOST:-0.0.0.0}"
+fi
+
 # Untrusted hosts that must never drive xio (e.g. the local-LLM box that could pull a
 # poisoned model). Comma-separated source IPs. MAK/dell-11m = 192.168.198.85 (hotspot).
 export XIO_DENY_IPS="192.168.198.85"
 
 nohup python server.py > /sdcard/xio_termux/server.log 2>&1 &
 echo "launched pid $! (log: /sdcard/xio_termux/server.log)"
+
+if [ "$RD_NODO_ENABLED" = "1" ]; then
+  sh "$HOME/xioserver/rd_nodo_start.sh" >> /sdcard/xio_termux/server.log 2>&1 || \
+    echo "RD NODO public service not started; public_pack.json is missing or invalid"
+  if ! pgrep -f 'rd_nodo_public_supervisor.sh' >/dev/null 2>&1; then
+    nohup sh "$HOME/xioserver/rd_nodo_public_supervisor.sh" \
+      >> /sdcard/xio_termux/rd_nodo_public.log 2>&1 &
+  fi
+else
+  pkill -f 'rd_nodo_public_server.py' 2>/dev/null
+  pkill -f 'rd_nodo_public_supervisor.sh' 2>/dev/null
+fi
 
 # --- auto-heal + persistencia (Shizuku SPOF) ---
 # Mantiene la CPU de Termux despierta (evita que el doze congele el loop del watchdog).

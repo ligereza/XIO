@@ -17,6 +17,11 @@ automatización, documentación, ideas y proyectos de instalación.
 - `cultura/`: mapa conceptual XIO, handoff técnico y puente MAK↔XIO.
 - `projects/cultura/MAPA_GENERATIVO.md`: contexto del XIO dentro del mapa de
   proyectos e ideas de Cauce.
+- `xio/radio_monitor.py`: monitor local de solo lectura que correlaciona
+  radio celular del Xiaomi, enlace Wi-Fi Windows↔XIO, latencia y consumo por
+  adaptador; ver `xio/RADIO_MONITOR.md`.
+- `xio/PLAN_CONECTIVIDAD_CLARO_2026.md`: investigación local de SUBTEL/Claro
+  y plan de arquitectura USB→Windows→Ethernet→MAK.
 - `tests/test_xio_superficie.py` y `tests/test_xio_puente_staged.py`:
   regresiones sobre la superficie de seguridad y el puente staged.
 
@@ -40,6 +45,7 @@ en Termux, revisar primero `xio/RUNBOOK.md`, `xio/FACES.md` y
 python -m pytest xio/new-plugins/showcontrol
 python -m pytest tests/test_xio_superficie.py
 python -m pytest tests/test_xio_puente_staged.py
+python -m pytest tests/test_radio_monitor.py
 ```
 
 Las capacidades marcadas como implementadas no implican que estén instaladas

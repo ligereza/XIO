@@ -42,6 +42,37 @@ a 5G) se suma solo si hay señal. "Router offline" = el mismo hotspot sin señal
 tierra / piso -6 la LAN sigue viva; solo mueren las features que necesitan internet real
 (ntfy, cloud, LLM).
 
+## RD NODO: servicio público aislado
+
+Para un stand abierto, no se expone el controlador XIO del puerto 5000. Se
+activa el modo RD NODO con un pack previamente revisado:
+
+```sh
+mkdir -p /sdcard/xio_termux/rd_nodo
+touch /sdcard/xio_termux/rd_nodo/enabled
+sh /sdcard/xio_termux/run_server.sh
+```
+
+`run_server.sh` deja `server.py` en `127.0.0.1` y levanta el proceso público
+de sólo lectura en `:8088`. El pack y el estado quedan fuera de
+`$HOME/xioserver/data`, que el despliegue reconstruye. La URL depende de la IP
+que Android asigne al hotspot:
+
+```text
+http://<IP-ACTUAL-DE-XIO>:8088/
+```
+
+El equipo modifica el estado desde Termux, no desde un cliente público:
+
+```sh
+python /data/data/com.termux/files/home/xioserver/rd_nodo_admin.py \
+  --state-file /sdcard/xio_termux/rd_nodo/state.json zone test espera
+```
+
+Los límites del piloto son 24 clientes públicos planificados, 16 peticiones
+HTTP simultáneas y 60 peticiones por minuto por IP en memoria. Ver el diseño
+completo en `xio/RD_NODO_ARQUITECTURA_OPERATIVA.md`.
+
 ## Pre-show (con PC, antes de ir al FOH)
 
 Dejar el telefono en este estado; luego se sostiene solo mientras NO reboote:

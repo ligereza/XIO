@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "publication_status": "pending_review",
+  "edition": "RD NODO · piloto RD",
+  "generated_at": 1787871155,
+  "zones": [
+    {
+      "id": "info",
+      "title": "Información"
+    },
+    {
+      "id": "test",
+      "title": "Testeo"
+    },
+    {
+      "id": "care",
+      "title": "Pausa / acompañamiento"
+    }
+  ],
+  "testeo": {
+    "scope": "orientación y reducción de daño",
+    "disclaimer": "El testeo es orientativo; no certifica pureza ni garantiza seguridad.",
+    "reagents": [
+      {
+        "name": "Ehrlich",
+        "family": "LSD / indoles",
+        "reaction": "purpura a magenta",
+        "color": "#7a1f5a"
+      },
+      {
+        "name": "Ehrlich",
+        "family": "triptaminas",
+        "reaction": "purpura",
+        "color": "#6b2a5a"
+      },
+      {
+        "name": "Froehde",
+        "family": "opiaceos",
+        "reaction": "violeta a verde",
+        "color": "#3a4a2a"
+      },
+      {
+        "name": "Froehde",
+        "family": "2C-x",
+        "reaction": "verde oliva",
+        "color": "#5b6b2a"
+      },
+      {
+        "name": "Liebermann",
+        "family": "MDMA",
+        "reaction": "negro",
+        "color": "#1a1a1a"
+      },
+      {
+        "name": "Liebermann",
+        "family": "cocaina",
+        "reaction": "amarillo",
+        "color": "#d4b81a"
+      },
+      {
+        "name": "Liebermann",
+        "family": "cocaina cortada (levamisol / lidocaina)",
+        "reaction": "rojo oxido (DanceSafe: alerta de corte comun)",
+        "color": "#a0442a"
+      },
+      {
+        "name": "Mandelin",
+        "family": "ketamina",
+        "reaction": "naranja",
+        "color": "#d47a1a"
+      },
+      {
+        "name": "Mandelin",
+        "family": "MDMA",
+        "reaction": "azul a negro",
+        "color": "#14213a"
+      },
+      {
+        "name": "Mandelin",
+        "family": "anfetamina",
+        "reaction": "verde",
+        "color": "#3a6b3a"
+      },
+      {
+        "name": "Mandelin",
+        "family": "cocaina",
+        "reaction": "naranja a marron",
+        "color": "#a8541a"
+      },
+      {
+        "name": "Marquis",
+        "family": "MDMA / MDA",
+        "reaction": "violeta a negro",
+        "color": "#3b1a4a"
+      },
+      {
+        "name": "Marquis",
+        "family": "anfetamina",
+        "reaction": "naranja a marron",
+        "color": "#b5651d"
+      },
+      {
+        "name": "Marquis",
+        "family": "opiaceos",
+        "reaction": "violeta",
+        "color": "#5b2a6b"
+      },
+      {
+        "name": "Marquis",
+        "family": "2C-B",
+        "reaction": "verde amarillento",
+        "color": "#6b8e23"
+      },
+      {
+        "name": "Marquis",
+        "family": "DXM",
+        "reaction": "gris a negro",
+        "color": "#3a3a3a"
+      },
+      {
+        "name": "Marquis",
+        "family": "cocaina",
+        "reaction": "rosa a durazno (actualizacion DanceSafe 2023)",
+        "color": "#e0a48c"
+      },
+      {
+        "name": "Marquis",
+        "family": "sin reaccion (blanco)",
+        "reaction": "sin cambio",
+        "color": "#efe9dd"
+      },
+      {
+        "name": "Mecke",
+        "family": "MDMA",
+        "reaction": "azul a verde a negro",
+        "color": "#16302a"
+      },
+      {
+        "name": "Mecke",
+        "family": "opiaceos",
+        "reaction": "verde a azul",
+        "color": "#1f5a5a"
+      },
+      {
+        "name": "Mecke",
+        "family": "2C-B",
+        "reaction": "verde",
+        "color": "#4a7c3a"
+      },
+      {
+        "name": "Simon",
+        "family": "MDMA (amina 2a)",
+        "reaction": "azul",
+        "color": "#1b3a6b"
+      },
+      {
+        "name": "Simon",
+        "family": "MDA (amina 1a)",
+        "reaction": "gris a verde oscuro (actualizacion DanceSafe 2023; Simon distingue MDMA azul de MDA)",
+        "color": "#3a4a3a"
+      }
+    ]
+  },
+  "privacy": {
+    "public_data": "Contenido educativo y catálogo de reactivos aprobado.",
+    "excluded": [
+      "personas",
+      "muestras",
+      "observaciones",
+      "eventos",
+      "fuentes",
+      "identificadores internos"
+    ]
+  }
+}
