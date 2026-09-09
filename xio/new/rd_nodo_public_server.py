@@ -152,12 +152,14 @@ class RDPublicHandler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         self._serve(head_only=True)
 
-    def _reject_mutation(self):
+    def do_POST(self):
         self._json_response({"error": "read_only"}, status=405)
 
-    do_POST = _reject_mutation
-    do_PUT = _reject_mutation
-    do_DELETE = _reject_mutation
+    def do_PUT(self):
+        self._json_response({"error": "read_only"}, status=405)
+
+    def do_DELETE(self):
+        self._json_response({"error": "read_only"}, status=405)
 
     def _serve(self, head_only):
         if not self.server.rate_limiter.allow(self.client_address[0]):
