@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xio-layer"
+version = "0.1.0"
+description = "Reusable adaptive infrastructure between users, devices and applications"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["XIO_LAYER*"]
