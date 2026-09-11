@@ -151,14 +151,17 @@ public final class MainActivity extends AppCompatActivity {
         TextView sampleCode = text(sample.code, 28, TEXT);
         sampleCode.setTypeface(null, Typeface.BOLD); content.addView(sampleCode);
         LinearLayout topActions = new LinearLayout(this); topActions.setGravity(Gravity.END);
+        Button host = iconButton("⌂", "Configurar host XIO-RD", SURFACE, AMBER);
+        topActions.addView(host, new LinearLayout.LayoutParams(dp(44), dp(38)));
         Button sync = iconButton("⇧", "Sincronizar con XIO-RD", SURFACE, TEAL);
-        topActions.addView(sync, new LinearLayout.LayoutParams(dp(44), dp(38)));
+        LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(dp(44), dp(38)); syncParams.setMargins(dp(5), 0, 0, 0); topActions.addView(sync, syncParams);
         Button raider = iconButton("▦", "Abrir RAIDER", SURFACE, AMBER);
         LinearLayout.LayoutParams raiderParams = new LinearLayout.LayoutParams(dp(44), dp(38)); raiderParams.setMargins(dp(5), 0, 0, 0); topActions.addView(raider, raiderParams);
         Button nextSample = iconButton("⊕", "Nueva muestra del mismo evento", SURFACE, TEAL);
         LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(dp(44), dp(38)); nextParams.setMargins(dp(5), 0, 0, 0); topActions.addView(nextSample, nextParams);
         content.addView(topActions, new LinearLayout.LayoutParams(-1, dp(38)));
         sync.setOnClickListener(view -> syncCurrentSample());
+        host.setOnClickListener(view -> showHostDialog());
         raider.setOnClickListener(view -> openRaider());
         nextSample.setOnClickListener(view -> startNextSample());
         status = text(statusLine(sample), 11, MUTED);
@@ -857,7 +860,7 @@ public final class MainActivity extends AppCompatActivity {
     private void openRaider() {
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse(FlujoGateway.XIO_BASE_ENDPOINT + "/raider?domain=rd"));
+                    Uri.parse(xioHostRoot() + "/raider?domain=rd"));
             startActivity(intent);
         } catch (Exception error) {
             Toast.makeText(this, "No se pudo abrir RAIDER en XIO", Toast.LENGTH_LONG).show();
@@ -868,9 +871,49 @@ public final class MainActivity extends AppCompatActivity {
         loadBootstrapAndMaybeChoose(false, true);
     }
 
+    private String rdEndpoint() {
+        String stored = getSharedPreferences("xio_host", MODE_PRIVATE)
+                .getString("rd_endpoint", FlujoGateway.DEFAULT_ENDPOINT);
+        String value = stored == null ? "" : stored.trim();
+        if (value.isEmpty()) value = FlujoGateway.DEFAULT_ENDPOINT;
+        while (value.endsWith("/")) value = value.substring(0, value.length() - 1);
+        String suffix = "/api/plugins/rd_field";
+        return value.endsWith(suffix) ? value : value + suffix;
+    }
+
+    private String xioHostRoot() {
+        String endpoint = rdEndpoint();
+        String suffix = "/api/plugins/rd_field";
+        return endpoint.endsWith(suffix) ? endpoint.substring(0, endpoint.length() - suffix.length()) : endpoint;
+    }
+
+    private void showHostDialog() {
+        EditText input = eventInput("http://host:5000 o URL completa de rd_field", xioHostRoot());
+        new AlertDialog.Builder(this)
+                .setTitle("Host XIO-RD")
+                .setMessage("Por defecto usa este Xiaomi (127.0.0.1). Si un PC ejecuta XIO, escribe su dirección LAN; no se agregan tokens.")
+                .setView(input)
+                .setNegativeButton("CANCELAR", null)
+                .setNeutralButton("XIAOMI", (dialog, which) -> {
+                    getSharedPreferences("xio_host", MODE_PRIVATE).edit().remove("rd_endpoint").apply();
+                    Toast.makeText(this, "Host XIO-RD: Xiaomi local", Toast.LENGTH_SHORT).show();
+                })
+                .setPositiveButton("GUARDAR", (dialog, which) -> {
+                    String value = input.getText() == null ? "" : input.getText().toString().trim();
+                    if (!value.startsWith("http://") && !value.startsWith("https://")) {
+                        Toast.makeText(this, "El host debe comenzar con http:// o https://", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    getSharedPreferences("xio_host", MODE_PRIVATE).edit().putString("rd_endpoint", value).apply();
+                    Toast.makeText(this, "Host XIO-RD guardado", Toast.LENGTH_SHORT).show();
+                    loadBootstrapAndMaybeChoose(true, false);
+                })
+                .show();
+    }
+
     private void loadBootstrapAndMaybeChoose(boolean forcePicker, boolean syncAfter) {
         Toast.makeText(this, "⇧  consultando XIO-RD…", Toast.LENGTH_SHORT).show();
-        flujo.loadBootstrap(FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
+        flujo.loadBootstrap(rdEndpoint(), "", result -> {
             if (!result.isSuccess()) {
                 Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
                 if (forcePicker) showCreateEventDialog(syncAfter);
@@ -994,7 +1037,7 @@ public final class MainActivity extends AppCompatActivity {
             payload.put("triangulation", triangulation);
             payload.put("flyerRef", cleanFlyerRef);
             payload.put("flyerSha256", cleanFlyerSha256);
-            flujo.syncEvent(payload, FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
+            flujo.syncEvent(payload, rdEndpoint(), "", result -> {
                 if (result.isSuccess()) {
                     String review = result.response.optString("reviewStatus", "pendiente_revision_humana");
                     database.markEventSynced(eventId, review);
@@ -1181,7 +1224,7 @@ public final class MainActivity extends AppCompatActivity {
     private void sendCurrentSample() {
         SampleSession sample = engine.snapshot();
         Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
-        flujo.syncSample(sample, FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
+        flujo.syncSample(sample, rdEndpoint(), "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
                 Toast.makeText(this, "XIO-RD ✓  " + sample.code + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
