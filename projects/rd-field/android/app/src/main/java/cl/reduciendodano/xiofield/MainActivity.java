@@ -39,12 +39,15 @@ import androidx.core.content.FileProvider;
 
 import java.io.File;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
+import java.util.UUID;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
 import cl.reduciendodano.xiofield.core.SampleSessionEngine;
@@ -295,6 +298,17 @@ public final class MainActivity extends AppCompatActivity {
 
     private void renderEntriesTab() {
         content.addView(sectionLabel("3  ·  REGISTRO"));
+        content.addView(heading("Eventos locales"));
+        List<RdFieldDb.EventRow> eventRows = database.recentEvents();
+        for (RdFieldDb.EventRow row : eventRows) {
+            String label = row.name == null || row.name.trim().isEmpty() ? row.id : row.name;
+            String detail = row.venue == null || row.venue.trim().isEmpty() ? "" : "  ·  " + row.venue;
+            String sync = "synced".equalsIgnoreCase(row.syncStatus) ? "  ·  ✓" : "  ·  pendiente";
+            content.addView(body("●  " + label + detail + sync));
+        }
+        Button changeEvent = actionButton("＋  CREAR / CAMBIAR EVENTO", SURFACE_RAISED, AMBER);
+        content.addView(changeEvent, new LinearLayout.LayoutParams(-1, dp(46)));
+        changeEvent.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
         content.addView(heading("Ingresos"));
         List<RdFieldDb.SampleRow> rows = database.recentSamples();
         if (rows.isEmpty()) { content.addView(body("sin ingresos")); return; }
@@ -846,23 +860,238 @@ public final class MainActivity extends AppCompatActivity {
         flujo.loadBootstrap(FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
             if (!result.isSuccess()) {
                 Toast.makeText(this, "FLUJO · sin conexión", Toast.LENGTH_LONG).show();
+                if (forcePicker) showCreateEventDialog(syncAfter);
                 return;
             }
             try {
-                JSONArray events = result.response.optJSONArray("events");
+                JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
-                else sendCurrentSample();
+                else syncCurrentEventThenSample();
             } catch (Exception error) {
                 Toast.makeText(this, "FLUJO · catálogo inválido", Toast.LENGTH_LONG).show();
             }
         });
     }
 
+    private JSONArray mergeLocalEvents(JSONArray remoteEvents, JSONArray remoteXioEvents) {
+        JSONArray merged = new JSONArray();
+        if (remoteEvents != null) {
+            for (int i = 0; i < remoteEvents.length(); i++) {
+                JSONObject item = remoteEvents.optJSONObject(i);
+                if (item != null) merged.put(item);
+            }
+        }
+        if (remoteXioEvents != null) {
+            for (int i = 0; i < remoteXioEvents.length(); i++) {
+                JSONObject source = remoteXioEvents.optJSONObject(i);
+                if (source == null) continue;
+                String id = source.optString("client_event_id", source.optString("clientEventId", ""));
+                if (id.isEmpty() || indexOfEvent(merged, id) >= 0) continue;
+                try {
+                    JSONObject item = new JSONObject();
+                    item.put("event_id", id);
+                    item.put("event_label_candidate", source.optString("event_name", source.optString("eventName", id)));
+                    item.put("link_review_status", source.optString("review_status", source.optString("reviewStatus", "")));
+                    item.put("event_origin", "xio_app");
+                    JSONArray producers = new JSONArray();
+                    String producerName = source.optString("producer_name", source.optString("producer", "")).trim();
+                    if (!producerName.isEmpty()) producers.put(new JSONObject().put("productora_slug", producerName));
+                    item.put("productoras", producers);
+                    merged.put(item);
+                } catch (Exception ignored) { }
+            }
+        }
+        for (RdFieldDb.EventRow row : database.recentEvents()) {
+            if (indexOfEvent(merged, row.id) >= 0) continue;
+            try {
+                JSONObject item = new JSONObject();
+                item.put("event_id", row.id);
+                item.put("event_label_candidate", row.name == null ? row.id : row.name);
+                item.put("link_review_status", row.reviewStatus);
+                item.put("event_origin", "xio_app");
+                item.put("productoras", new JSONArray());
+                if (row.producer != null && !row.producer.trim().isEmpty()) {
+                    JSONObject producer = new JSONObject();
+                    producer.put("productora_slug", row.producer);
+                    producer.put("estado_revision", row.reviewStatus);
+                    item.put("productoras", new JSONArray().put(producer));
+                }
+                merged.put(item);
+            } catch (Exception ignored) { }
+        }
+        return merged;
+    }
+
+    private EditText eventInput(String hint, String value) {
+        EditText input = new EditText(this);
+        input.setHint(hint);
+        input.setSingleLine(true);
+        input.setText(value == null ? "" : value);
+        input.setTextColor(TEXT);
+        input.setHintTextColor(MUTED);
+        input.setPadding(dp(10), dp(4), dp(10), dp(4));
+        return input;
+    }
+
+    private void showCreateEventDialog(boolean syncAfter) {
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
+        fields.setPadding(dp(18), 0, dp(18), 0);
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+        EditText name = eventInput("Nombre del evento · obligatorio", "");
+        EditText venue = eventInput("Venue", "");
+        EditText producer = eventInput("Productora declarada", "");
+        EditText startDate = eventInput("Fecha inicio · YYYY-MM-DD", today);
+        EditText endDate = eventInput("Fecha fin · opcional", "");
+        EditText djs = eventInput("DJs · separados por coma", "");
+        EditText sources = eventInput("Fuentes de triangulación · separadas por coma", "");
+        EditText flyerRef = eventInput("Referencia del flyer · opcional", "");
+        EditText flyerSha256 = eventInput("SHA-256 del flyer · opcional", "");
+        EditText[] inputs = {name, venue, producer, startDate, endDate, djs, sources, flyerRef, flyerSha256};
+        for (EditText input : inputs) {
+            fields.addView(input, new LinearLayout.LayoutParams(-1, dp(48)));
+        }
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(fields);
+        new AlertDialog.Builder(this)
+                .setTitle("Nuevo evento XIO")
+                .setMessage("Se guarda primero en el teléfono y queda pendiente si FLUJO no responde.")
+                .setView(scroll)
+                .setNegativeButton("CANCELAR", null)
+                .setPositiveButton("GUARDAR Y SINCRONIZAR", (dialog, which) ->
+                        saveNewEvent(name.getText().toString(), venue.getText().toString(),
+                                producer.getText().toString(), startDate.getText().toString(),
+                                endDate.getText().toString(), djs.getText().toString(),
+                                sources.getText().toString(), flyerRef.getText().toString(),
+                                flyerSha256.getText().toString(), syncAfter))
+                .show();
+    }
+
+    private JSONArray commaArray(String raw) {
+        JSONArray result = new JSONArray();
+        if (raw == null) return result;
+        for (String value : raw.split(",")) {
+            String clean = value.trim();
+            if (!clean.isEmpty()) result.put(clean);
+        }
+        return result;
+    }
+
+    private void saveNewEvent(String name, String venue, String producer, String startDate,
+                              String endDate, String djs, String sources, String flyerRef,
+                              String flyerSha256, boolean syncAfter) {
+        String eventName = name == null ? "" : name.trim();
+        if (eventName.isEmpty()) {
+            Toast.makeText(this, "El nombre del evento es obligatorio", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String eventId = "xio-" + UUID.randomUUID();
+        String cleanVenue = venue == null ? "" : venue.trim();
+        String cleanProducer = producer == null ? "" : producer.trim();
+        String cleanStart = startDate == null ? "" : startDate.trim();
+        String cleanEnd = endDate == null ? "" : endDate.trim();
+        String cleanFlyerRef = flyerRef == null ? "" : flyerRef.trim();
+        String cleanFlyerSha256 = flyerSha256 == null ? "" : flyerSha256.trim().toLowerCase(Locale.ROOT);
+        JSONArray djArray = commaArray(djs);
+        JSONObject triangulation = new JSONObject();
+        try {
+            JSONArray sourceArray = commaArray(sources);
+            if (sourceArray.length() > 0) triangulation.put("sources", sourceArray);
+            database.upsertEvent(eventId, eventName, cleanVenue, cleanProducer, cleanStart, cleanEnd,
+                    djArray.toString(), triangulation.toString(), cleanFlyerRef, cleanFlyerSha256, "pending");
+            engine.setEventId(eventId);
+            eventLabel = eventName;
+            eventProducer = cleanProducer.isEmpty() ? "" : capitalize(cleanProducer);
+            eventContextPending = true;
+            getSharedPreferences("xio_event_context", MODE_PRIVATE).edit()
+                    .putString("event_id", eventId)
+                    .putString("event_label", eventLabel)
+                    .putString("event_producer", eventProducer)
+                    .putBoolean("pending", true)
+                    .apply();
+            persist();
+            render();
+            JSONObject payload = new JSONObject();
+            payload.put("clientEventId", eventId);
+            payload.put("eventName", eventName);
+            payload.put("venue", cleanVenue);
+            payload.put("producer", cleanProducer);
+            payload.put("startDate", cleanStart);
+            payload.put("endDate", cleanEnd);
+            payload.put("djs", djArray);
+            payload.put("triangulation", triangulation);
+            payload.put("flyerRef", cleanFlyerRef);
+            payload.put("flyerSha256", cleanFlyerSha256);
+            flujo.syncEvent(payload, FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
+                if (result.isSuccess()) {
+                    String review = result.response.optString("reviewStatus", "pendiente_revision_humana");
+                    database.markEventSynced(eventId, review);
+                    if (eventId.equals(engine.snapshot().eventId)) {
+                        eventContextPending = !"confirmado".equalsIgnoreCase(review);
+                        render();
+                    }
+                    Toast.makeText(this, "FLUJO ✓ evento guardado", Toast.LENGTH_LONG).show();
+                    if (syncAfter) sendCurrentSample();
+                } else {
+                    Toast.makeText(this, "Evento local ✓ · sincronización pendiente", Toast.LENGTH_LONG).show();
+                }
+            });
+        } catch (Exception error) {
+            Toast.makeText(this, "No se pudo guardar el evento local", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private RdFieldDb.EventRow localEvent(String id) {
+        for (RdFieldDb.EventRow row : database.recentEvents()) {
+            if (id != null && id.equals(row.id)) return row;
+        }
+        return null;
+    }
+
+    private JSONObject eventPayload(RdFieldDb.EventRow row) throws Exception {
+        JSONObject payload = new JSONObject();
+        payload.put("clientEventId", row.id);
+        payload.put("eventName", row.name == null ? row.id : row.name);
+        payload.put("venue", row.venue == null ? "" : row.venue);
+        payload.put("producer", row.producer == null ? "" : row.producer);
+        payload.put("startDate", row.startDate == null ? "" : row.startDate);
+        payload.put("endDate", row.endDate == null ? "" : row.endDate);
+        payload.put("djs", row.djsJson == null || row.djsJson.trim().isEmpty() ? new JSONArray() : new JSONArray(row.djsJson));
+        payload.put("triangulation", row.triangulationJson == null || row.triangulationJson.trim().isEmpty() ? new JSONObject() : new JSONObject(row.triangulationJson));
+        payload.put("flyerRef", row.flyerRef == null ? "" : row.flyerRef);
+        payload.put("flyerSha256", row.flyerSha256 == null ? "" : row.flyerSha256);
+        payload.put("reviewStatus", row.reviewStatus == null ? "pendiente_revision_humana" : row.reviewStatus);
+        return payload;
+    }
+
+    private void syncCurrentEventThenSample() {
+        RdFieldDb.EventRow row = localEvent(engine.snapshot().eventId);
+        if (row == null || "synced".equalsIgnoreCase(row.syncStatus)) {
+            sendCurrentSample();
+            return;
+        }
+        try {
+            flujo.syncEvent(eventPayload(row), FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
+                if (!result.isSuccess()) {
+                    Toast.makeText(this, "Evento local · sincronización pendiente", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                String review = result.response.optString("reviewStatus", "pendiente_revision_humana");
+                database.markEventSynced(row.id, review);
+                eventContextPending = !"confirmado".equalsIgnoreCase(review);
+                render();
+                sendCurrentSample();
+            });
+        } catch (Exception error) {
+            Toast.makeText(this, "Evento local · datos pendientes inválidos", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void showEventPicker(JSONArray events, int selected, boolean syncAfter) {
         if (events == null || events.length() == 0) {
-            Toast.makeText(this, "FLUJO · no hay eventos disponibles", Toast.LENGTH_LONG).show();
+            showCreateEventDialog(syncAfter);
             return;
         }
         Map<String, List<Integer>> byProducer = new LinkedHashMap<>();
@@ -909,6 +1138,14 @@ public final class MainActivity extends AppCompatActivity {
                 .setView(scroll)
                 .setNegativeButton("CERRAR", null)
                 .create();
+        Button createEvent = actionButton("＋  NUEVO EVENTO LOCAL", SURFACE_RAISED, AMBER);
+        createEvent.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        createEvent.setContentDescription("Crear un evento local sin conexión");
+        grouped.addView(createEvent, new LinearLayout.LayoutParams(-1, dp(48)));
+        createEvent.setOnClickListener(view -> {
+            dialog.dismiss();
+            showCreateEventDialog(syncAfter);
+        });
         for (Map.Entry<String, List<Integer>> group : byProducer.entrySet()) {
             String pendingLabel = Boolean.TRUE.equals(pendingProducer.get(group.getKey())) ? "  ·  candidato" : "";
             TextView producer = text(capitalize(group.getKey()) + "  ·  " + group.getValue().size() + pendingLabel, 12, AMBER);

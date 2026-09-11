@@ -7,8 +7,12 @@ from flask import Flask, Response, request, jsonify
 
 from xiaomi_controller import XiaomiController
 
-ADB_PATH = r"C:\XPEDR\XiaomiServer\platform-tools\adb.exe"
-DEVICE_SERIAL = "192.168.127.125:5555"
+ADB_PATH = os.environ.get("ADB_PATH", r"C:\XPEDR\XiaomiServer\platform-tools\adb.exe")
+# The hotspot address is session state, never a source default.  None lets
+# XiaomiController use its normal USB/auto-detect path; set DEVICE_SERIAL (or
+# XIO_DEVICE_SERIAL) explicitly for a deliberate wireless-ADB session.
+DEVICE_SERIAL = (os.environ.get("DEVICE_SERIAL") or
+                 os.environ.get("XIO_DEVICE_SERIAL") or None)
 
 app = Flask(__name__)
 controller = XiaomiController(adb_path=ADB_PATH, serial=DEVICE_SERIAL)

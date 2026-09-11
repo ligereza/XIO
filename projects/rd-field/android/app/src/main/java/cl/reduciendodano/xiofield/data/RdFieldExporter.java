@@ -22,7 +22,11 @@ public final class RdFieldExporter {
         File folder = new File(context.getCacheDir(), "rd-exports");
         if (!folder.exists() && !folder.mkdirs()) throw new IOException("No se pudo crear la carpeta de exportación");
         File archive = new File(folder, session.code + "-" + System.currentTimeMillis() + ".zip");
+        RdFieldDb database = new RdFieldDb(context);
+        RdFieldDb.EventRow event = database.findEvent(session.eventId);
+        database.close();
         try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(archive))) {
+            putText(zip, "evento.json", eventJson(event, session.eventId));
             putText(zip, "registro.json", json(session));
             putText(zip, "capturas.csv", capturesCsv(session));
             putText(zip, "pruebas.csv", testsCsv(session));
@@ -39,6 +43,31 @@ public final class RdFieldExporter {
             }
         }
         return archive;
+    }
+
+    private static String eventJson(RdFieldDb.EventRow event, String fallbackId) {
+        if (event == null) return "{\n  \"schema\":\"xio-rd-event-v0.1\",\n  \"eventId\":\"" + escape(fallbackId) + "\"\n}\n";
+        StringBuilder out = new StringBuilder();
+        out.append("{\n  \"schema\":\"xio-rd-event-v0.1\",\n");
+        out.append("  \"eventId\":\"").append(escape(event.id)).append("\",\n");
+        out.append("  \"eventName\":\"").append(escape(event.name)).append("\",\n");
+        out.append("  \"venue\":\"").append(escape(event.venue)).append("\",\n");
+        out.append("  \"producer\":\"").append(escape(event.producer)).append("\",\n");
+        out.append("  \"startDate\":\"").append(escape(event.startDate)).append("\",\n");
+        out.append("  \"endDate\":\"").append(escape(event.endDate)).append("\",\n");
+        out.append("  \"djs\":").append(jsonOrDefault(event.djsJson, "[]")).append(",\n");
+        out.append("  \"triangulation\":").append(jsonOrDefault(event.triangulationJson, "{}")).append(",\n");
+        out.append("  \"flyerRef\":\"").append(escape(event.flyerRef)).append("\",\n");
+        out.append("  \"flyerSha256\":\"").append(escape(event.flyerSha256)).append("\",\n");
+        out.append("  \"syncStatus\":\"").append(escape(event.syncStatus)).append("\",\n");
+        out.append("  \"reviewStatus\":\"").append(escape(event.reviewStatus)).append("\"\n}\n");
+        return out.toString();
+    }
+
+    private static String jsonOrDefault(String value, String fallback) {
+        if (value == null || value.trim().isEmpty()) return fallback;
+        String clean = value.trim();
+        return (clean.startsWith("[") && clean.endsWith("]")) || (clean.startsWith("{") && clean.endsWith("}")) ? clean : fallback;
     }
 
     private static void putText(ZipOutputStream zip, String name, String value) throws IOException {

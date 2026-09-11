@@ -91,7 +91,6 @@ function makeSample(eventId, sequence, overrides = {}) {
 
 function createSeedState() {
   const eventId = uid("event");
-  const secondEventId = uid("event");
   const sampleOne = makeSample(eventId, 1, {
     code: "XIO-20260905-001",
     declaredSubstance: "MDMA",
@@ -119,8 +118,7 @@ function createSeedState() {
     savedAt: isoNow(),
     meta: { sequence: 2, syntheticDemo: true },
     events: [
-      { id: eventId, code: "RD-0509", name: "Turno de demostración", venue: "Mesa local · sin ubicación", scheduledAt: "2026-09-05T18:00:00.000Z", startedAt: "2026-09-05T18:07:00.000Z", status: "active", synthetic: true, createdAt: "2026-09-05T17:55:00.000Z" },
-      { id: secondEventId, code: "RD-BORRADOR", name: "Evento nuevo", venue: "Sin definir", scheduledAt: null, startedAt: null, status: "draft", synthetic: true, createdAt: "2026-09-05T17:40:00.000Z" }
+      { id: eventId, code: "RD-0509", name: "Turno de demostración", venue: "Mesa local · sin ubicación", scheduledAt: "2026-09-05T18:00:00.000Z", startedAt: "2026-09-05T18:07:00.000Z", status: "active", synthetic: true, createdAt: "2026-09-05T17:55:00.000Z" }
     ],
     samples: [sampleOne, sampleTwo],
     selectedEventId: eventId,
@@ -144,7 +142,11 @@ function loadState() {
 const state = loadState();
 
 function availableEvents() {
-  if (!ui.remote.connected) return state.events;
+  // Production/HTTP mode is host-gated: a client may select a known event or
+  // stage already cached work, but it may never invent an operational event.
+  // The synthetic fixture remains visible only when opening the static demo
+  // directly from file:// during UI development.
+  if (window.location.protocol === "file:") return state.events.filter((event) => event.synthetic);
   return state.events.filter((event) => event.remote === true);
 }
 
@@ -263,11 +265,13 @@ function renderSidebar() {
   const pending = samples.filter((sample) => sample.workflowStatus !== "complete").length;
   const corrections = samples.filter((sample) => sample.humanCorrection).length;
   document.getElementById("eventName").textContent = event?.name || "Sin evento";
-  document.getElementById("eventMeta").textContent = event ? `${event.code} · ${event.venue || "Sin lugar"}` : "Selecciona o crea un evento";
+  document.getElementById("eventMeta").textContent = event ? `${event.code} · ${event.venue || "Sin lugar"}` : "Conecta el host RD para cargar un evento preparado";
   document.getElementById("eventSelect").innerHTML = events.map((item) => `<option value="${item.id}" ${item.id === state.selectedEventId ? "selected" : ""}>${escapeHTML(item.name)}${item.synthetic ? " · DEMO" : ""}</option>`).join("");
+  document.getElementById("eventSelect").disabled = events.length === 0;
   const newEventButton = document.getElementById("newEventButton");
-  newEventButton.disabled = ui.remote.connected;
-  newEventButton.title = ui.remote.connected ? "Los eventos se seleccionan desde el host RD" : "Crear evento local";
+  newEventButton.disabled = true;
+  newEventButton.title = "Los eventos RD se preparan en el host; aquí sólo se seleccionan";
+  document.getElementById("emptyNewEventButton").disabled = true;
   const startButton = document.getElementById("eventStartButton");
   startButton.classList.toggle("started", Boolean(event?.startedAt));
   startButton.textContent = event?.startedAt ? `● En curso desde ${formatDate(event.startedAt)}` : "▶ Marcar inicio real del evento";
@@ -494,7 +498,10 @@ function addTest() {
 
 function addSample() {
   const event = getEvent();
-  if (!event) return;
+  if (!event || !event.remote) {
+    showToast("Selecciona un evento RD preparado por el host antes de registrar muestras.", "error");
+    return;
+  }
   state.meta.sequence = Number(state.meta.sequence || 0) + 1;
   const sample = makeSample(event.id, state.meta.sequence);
   state.samples.push(sample);
@@ -520,30 +527,8 @@ function startEvent() {
 }
 
 function createEventFromForm() {
-  if (ui.remote.connected) {
-    document.getElementById("eventDialog").close();
-    showToast("Los eventos RD se preparan en el host; aquí sólo se seleccionan.", "error");
-    return;
-  }
-  const nameInput = document.getElementById("eventFormName");
-  const venueInput = document.getElementById("eventFormVenue");
-  const scheduledInput = document.getElementById("eventFormScheduled");
-  const name = nameInput.value.trim();
-  if (!name) return;
-  const event = { id: uid("event"), code: `RD-${String(state.events.length + 1).padStart(3, "0")}`, name, venue: venueInput.value.trim() || "Sin definir", scheduledAt: scheduledInput.value ? new Date(scheduledInput.value).toISOString() : null, startedAt: null, status: "draft", synthetic: false, createdAt: isoNow() };
-  state.events.push(event);
-  state.selectedEventId = event.id;
-  const sample = makeSample(event.id, Number(state.meta.sequence || 0) + 1, { synthetic: false });
-  state.meta.sequence = Number(state.meta.sequence || 0) + 1;
-  state.samples.push(sample);
-  state.selectedSampleId = sample.id;
   document.getElementById("eventDialog").close();
-  nameInput.value = "";
-  venueInput.value = "";
-  scheduledInput.value = "";
-  persist("Evento creado · muestra preparada");
-  renderAll();
-  showToast("Evento creado con una muestra lista para registrar.");
+  showToast("Los eventos RD deben existir en el host; esta superficie sólo selecciona eventos preparados.", "error");
 }
 
 function makeExportPayload(eventId = state.selectedEventId, onlySampleId = null) {

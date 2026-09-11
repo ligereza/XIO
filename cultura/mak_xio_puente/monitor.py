@@ -6,7 +6,7 @@ toca endpoints de red/hotspot/carga. Poll cada 60s a una allowlist dura
 de rutas GET; historia en historia.jsonl, ultimo estado en estado.json,
 alertas ntfy con antispam.
 
-    python3 monitor.py            # daemon
+    XIO_BASE=http://<IP-XIO-ACTUAL>:5000 python3 monitor.py  # daemon
     python3 monitor.py --una-vez  # un poll (pruebas)
 """
 import json
@@ -20,7 +20,7 @@ sys.path.insert(0, "/home/mak/research")
 from research_lib import load_env, ntfy_publish  # noqa: E402
 
 BASE_DIR = "/home/mak/xio_puente"
-XIO_BASE = os.environ.get("XIO_BASE", "http://192.168.95.203:5000")
+XIO_BASE = os.environ.get("XIO_BASE", "").strip().rstrip("/")
 RUTAS_LECTURA = ("/status", "/obs", "/battery/status", "/connectivity/status")
 HISTORIA = os.path.join(BASE_DIR, "historia.jsonl")
 ESTADO = os.path.join(BASE_DIR, "estado.json")
@@ -30,6 +30,8 @@ ANTISPAM_S = 1800
 
 
 def _get(ruta):
+    if not XIO_BASE:
+        return 0, None
     url = XIO_BASE.rstrip("/") + ruta
     headers = {"User-Agent": "mak-xio-puente/1.0"}
     token = os.environ.get("XIO_TOKEN")
@@ -152,6 +154,13 @@ def poll(fallos_previos=0):
 def main():
     os.makedirs(BASE_DIR, exist_ok=True)
     load_env()
+    # research_lib may load the per-session environment file lazily.
+    global XIO_BASE
+    XIO_BASE = os.environ.get("XIO_BASE", "").strip().rstrip("/")
+    if not XIO_BASE:
+        print("[xio_puente] FALTA XIO_BASE=http://<IP-XIO-ACTUAL>:5000; "
+              "no se usara una IP historica.", file=sys.stderr, flush=True)
+        return 2
     if "--una-vez" in sys.argv:
         estado, _ = poll()
         print(json.dumps(estado, ensure_ascii=False, indent=1))

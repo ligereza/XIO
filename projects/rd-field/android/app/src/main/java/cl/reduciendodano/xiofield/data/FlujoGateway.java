@@ -55,6 +55,17 @@ public final class FlujoGateway {
         });
     }
 
+    public void syncEvent(JSONObject event, String endpoint, String token, Callback callback) {
+        executor.execute(() -> {
+            try {
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/api/rd/eventos/sync", event, token);
+                deliver(callback, Result.success(response));
+            } catch (Exception error) {
+                deliver(callback, Result.failure(error));
+            }
+        });
+    }
+
     public void loadBootstrap(String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
@@ -75,7 +86,7 @@ public final class FlujoGateway {
         payload.put("schema", "xio-flujo-rd-v1");
         payload.put("date", new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(sample.createdAt)));
         payload.put("eventRef", sample.eventId);
-        payload.put("eventOrigin", "app");
+        payload.put("eventOrigin", "xio_app");
         payload.put("sampleCode", sample.code);
         payload.put("substanceDeclared", safe(sample.declaredSubstance, "sin declarar"));
         payload.put("sampleType", safe(sample.presentation, "sin clasificar"));

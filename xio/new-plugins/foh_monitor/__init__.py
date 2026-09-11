@@ -86,7 +86,10 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
 .ev .t{color:#6b7280;font-size:11px;margin-right:6px}
 .e-on{border-color:#4ade80}.e-off{border-color:#f87171}.e-set{border-color:#60a5fa}.e-au{border-color:#fbbf24}
 .hot{color:#f87171;font-weight:800}
+.ctx{background:#101827;border:1px solid #29405f;border-radius:12px;padding:9px 11px;color:#cbd5e1;font-size:13px}
+.ctx a{color:#60a5fa;font-weight:800;text-decoration:none;float:right}
 </style></head><body>
+<div class=ctx id=ctx>FOH / ISKVW · contexto sin seleccionar <a href=context>EVENTO</a></div>
 <div class=tiles id=tiles></div>
 <div class="now tc-na" id=nowbox>
  <div class=nowtc id=tcval>--:--:--:--</div>
@@ -95,7 +98,7 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
  <div class=bar id=barwrap><i id=barfill></i><span class=pct id=barpct></span></div>
  <div class=nxt id=nx></div>
 </div>
-<div class=row><span id=batt></span><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 10px">REGISTRO &#9776;</a><span id=sub>...</span></div>
+<div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a></span><span id=sub>...</span></div>
 <div class=feed id=feed></div>
 <script>
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -134,6 +137,11 @@ function tick(){
   if(b.level!=null)bp.push('BAT '+b.level+'%'+(b.charging?' &#9889;':''));
   if(b.temperature)bp.push((b.temperature>=45?'<span class=hot>':'')+b.temperature+'&deg;C'+(b.temperature>=45?'</span>':''));
   document.getElementById('batt').innerHTML=bp.join(' &middot; ');
+  var cx=s.context||{},ce=cx.current;
+  document.getElementById('ctx').innerHTML=ce?
+   'FOH / ISKVW · '+esc(ce.name||ce.eventKey)+' · '+esc(ce.dateIso||ce.dateRaw||'fecha por confirmar')+
+   ' · '+esc(ce.venueName||'venue por confirmar')+' <a href=context>CAMBIAR</a>':
+   'FOH / ISKVW · contexto sin seleccionar <a href=context>SELECCIONAR</a>';
   return fetch('events?limit=10',{cache:'no-store'});
  }).then(function(r){return r.json()}).then(function(ev){
   document.getElementById('feed').innerHTML=(ev&&ev.length)?ev.slice().reverse().map(function(x){
@@ -164,6 +172,47 @@ setInterval(function(){paintTc();paintBar();},50);
 var wl=null;function lock(){if(navigator.wakeLock&&!wl)navigator.wakeLock.request('screen').then(function(l){wl=l;l.addEventListener('release',function(){wl=null})}).catch(function(){})}
 document.addEventListener('click',lock);document.addEventListener('visibilitychange',function(){if(!document.hidden)lock()});lock();
 tick();setInterval(tick,1000);
+</script></body></html>"""
+
+
+# Contexto de evento VJ/FOH. Es una seleccion exacta sobre el read model
+# existente de FLUJO; no conoce ni acepta eventRef de RD.
+_CONTEXT_HTML = """<!doctype html><html lang=es><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>FOH Evento</title>
+<style>
+*{box-sizing:border-box}body{font:16px/1.35 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;color:#e8eaed;padding:14px;max-width:720px;margin:0 auto}
+h1{font-size:20px;margin:0 0 4px}.sub{color:#8a92a6;font-size:12px;margin-bottom:14px}.card{background:#12151d;border:1px solid #293247;border-radius:14px;padding:14px;margin:10px 0}
+label{display:block;color:#9aa0b0;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin:12px 0 5px}
+select,button{width:100%;font:inherit;border-radius:10px;padding:11px;background:#0d1016;color:#e8eaed;border:1px solid #334155}
+button{background:#1d4ed8;border-color:#2563eb;font-weight:800;margin-top:12px}button.secondary{background:#12151d;border-color:#334155;color:#cbd5e1}
+.ok{color:#4ade80}.warn{color:#fbbf24}.err{color:#f87171}.meta{color:#cbd5e1;margin-top:8px}.key{font:12px ui-monospace,Menlo,Consolas,monospace;color:#93c5fd;word-break:break-all}
+a{color:#60a5fa;font-weight:800;text-decoration:none}ul{padding-left:18px;color:#cbd5e1}li{margin:5px 0}
+</style></head><body>
+<h1>FOH / ISKVW · evento</h1><div class=sub>Contexto del rubro VJ artistico. No es la superficie RD y no acepta datos de muestras.</div>
+<div class=card id=state>cargando catalogo VJ...</div>
+<div class=card><label for=event>Evento exacto del catalogo VJ</label><select id=event disabled><option>Cargando...</option></select>
+<button id=save disabled>Usar este evento en FOH</button><button class=secondary id=clear disabled>Quitar contexto actual</button></div>
+<div class=card><a href=panel>← volver al panel FOH</a></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+var data=null;
+function kitText(c){var k=c&&c.showKit;if(!k)return '<div class=meta>Kit FOH: sin enlace explicito</div>';
+ var files=[k.cueMap,k.setlist,k.durations].filter(Boolean).join(' · ');
+ return '<div class=meta><span class=ok>Kit FOH enlazado</span> · '+esc(k.root||'xio/show_kit')+(files?'<br>'+esc(files):'')+'</div>';}
+function currentText(c){if(!c)return '<span class=warn>Sin evento seleccionado. El registro FOH seguira funcionando, pero no tendra contexto VJ.</span>';
+ return '<span class=ok>Contexto activo</span><div class=meta>'+esc(c.name)+'<br>'+esc(c.dateIso||c.dateRaw||'fecha por confirmar')+' · '+esc(c.venueName||'venue por confirmar')+'<br><span class=key>'+esc(c.eventKey)+'</span></div>'+kitText(c);}
+function load(){fetch('context/data',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){
+ data=d;var st=document.getElementById('state');
+ if(!d.catalogAvailable){st.innerHTML='<span class=err>Catalogo VJ no disponible.</span><div class=meta>'+esc(d.error||'Instala el read model foh_vj_context.json generado desde FLUJO.')+'</div>';return;}
+ st.innerHTML=currentText(d.current)+'<div class=meta>'+d.events.length+' eventos conocidos · solo lectura de catalogo</div>';
+ var sel=document.getElementById('event');sel.innerHTML='<option value="">Seleccionar...</option>'+d.events.map(function(e){return '<option value="'+esc(e.eventKey)+'">'+esc(e.name)+' · '+esc(e.dateIso||e.dateRaw||'sin fecha')+'</option>';}).join('');
+ if(d.current)sel.value=d.current.eventKey;sel.disabled=false;document.getElementById('save').disabled=false;document.getElementById('clear').disabled=false;
+ }).catch(function(e){document.getElementById('state').innerHTML='<span class=err>Error de lectura: '+esc(e)+'</span>';})}
+document.getElementById('save').onclick=function(){var k=document.getElementById('event').value;if(!k)return;
+ fetch('context',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({eventKey:k})}).then(function(r){return r.json().then(function(d){return {ok:r.ok,data:d}})}).then(function(x){if(!x.ok)throw x.data.error||'no se pudo seleccionar';load()}).catch(function(e){document.getElementById('state').innerHTML='<span class=err>'+esc(e)+'</span>'})};
+document.getElementById('clear').onclick=function(){fetch('context',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clear:true})}).then(function(){load()})};
+load();
 </script></body></html>"""
 
 
@@ -330,6 +379,8 @@ class FohMonitorPlugin(PluginBase):
         "tc_freeze_seconds": 2,     # mismo valor este tiempo con paquetes => congelado
         "log_dir": "/sdcard/xio_termux/foh_logs",
         "battery_delta": 5,        # loguea bateria al cambiar >= esto (%)
+        # Read model VJ generado desde FLUJO. No se comparte con RD.
+        "foh_context_file": "",
     }
 
     def __init__(self, context):
@@ -350,7 +401,8 @@ class FohMonitorPlugin(PluginBase):
         self._audio = {"available": False, "reason": "no evaluado", "level_db": None,
                        "active": False, "last_seen": 0.0}
         self._setlist = {"songs": [], "durations": [], "index": -1,
-                         "loaded_at": None, "advanced_at": None}
+                         "loaded_at": None, "advanced_at": None,
+                         "fohEventKey": None}
         self._events = []          # ring pa el panel (el JSONL es la verdad)
         self._prev_active = {}     # canal -> bool (deteccion de transiciones)
         self._prev_batt = {}       # ultimo estado de bateria logueado
@@ -363,6 +415,10 @@ class FohMonitorPlugin(PluginBase):
         self._batt_at = 0.0
         self._log_lock = threading.Lock()
         self._log_dir_real = None  # resuelto en on_load
+        self._foh_context_catalog = {"schema": "xio-foh-vj-context-v1", "source": {}, "events": []}
+        self._foh_context_current = None
+        self._foh_context_file = None
+        self._foh_context_current_file = None
 
     # ── lifecycle ────────────────────────────────────────────────────
     def on_load(self):
@@ -373,6 +429,10 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/status", self._api_status, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
+        self.register_route("/context", self._api_context_page, methods=["GET"])
+        self.register_route("/context/data", self._api_context_get, methods=["GET"])
+        self.register_route("/context", self._api_context_post, methods=["POST"])
+        self.register_route("/mapping", self._api_mapping, methods=["GET"])
         self.register_route("/manifest.webmanifest", self._api_manifest, methods=["GET"])
         self.register_route("/events", self._api_events, methods=["GET"])
         self.register_route("/setlist", self._api_setlist_get, methods=["GET"])
@@ -385,6 +445,7 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/config", self._api_set_config, methods=["POST"])
 
         self._resolve_log_dir()
+        self._load_foh_context()
         self._load_setlist()  # sobrevivir restarts del server en pleno show
         self._start_listener("artnet", int(self._cfg("artnet_port")), self._parse_artnet)
         self._start_sacn()
@@ -416,7 +477,9 @@ class FohMonitorPlugin(PluginBase):
 
     # ── registro JSONL ───────────────────────────────────────────────
     def _resolve_log_dir(self):
-        d = str(self._cfg("log_dir"))
+        # The launcher may pin logs to a durable host directory.  Environment
+        # wins over a stale config.json copied with an older runtime.
+        d = os.environ.get("XIO_FOH_LOG_DIR", "").strip() or str(self._cfg("log_dir"))
         try:
             os.makedirs(d, exist_ok=True)
             probe = os.path.join(d, ".probe")
@@ -427,6 +490,93 @@ class FohMonitorPlugin(PluginBase):
             d = str(self.data_dir / "foh_logs")
             os.makedirs(d, exist_ok=True)
         self._log_dir_real = d
+
+    def _resolve_foh_context_file(self):
+        # The deployment env wins over a copied config value; the catalog itself
+        # is a read-only snapshot generated from FLUJO before the field session.
+        configured = (os.environ.get("XIO_FOH_CONTEXT_FILE", "").strip()
+                      or str(self._cfg("foh_context_file") or "").strip())
+        if configured:
+            return os.path.expanduser(configured)
+        return os.path.join(os.path.dirname(__file__), "foh_vj_context.json")
+
+    def _load_foh_context(self):
+        """Load the VJ read model and the current exact FOH selection.
+
+        The catalog is immutable during the operation. Only the selected
+        event key is persisted, and only when that exact key exists in the
+        catalog. It never reads or writes RD ``eventRef``.
+        """
+        self._foh_context_file = self._resolve_foh_context_file()
+        self._foh_context_current_file = os.path.join(
+            self._log_dir_real, "context_actual.json")
+        try:
+            with open(self._foh_context_file, encoding="utf-8") as f:
+                raw = json.load(f)
+            if not isinstance(raw, dict) or raw.get("schema") != "xio-foh-vj-context-v1":
+                raise ValueError("schema VJ/FOH invalido")
+            events = []
+            seen = set()
+            for event in raw.get("events") or []:
+                if not isinstance(event, dict):
+                    continue
+                key = str(event.get("eventKey") or "").strip()
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                events.append(dict(event))
+            self._foh_context_catalog = {
+                "schema": "xio-foh-vj-context-v1",
+                "source": raw.get("source") if isinstance(raw.get("source"), dict) else {},
+                "events": events,
+            }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            self._foh_context_catalog = {
+                "schema": "xio-foh-vj-context-v1", "source": {}, "events": []
+            }
+            self.logger.warning(f"foh VJ context unavailable: {exc}")
+        try:
+            with open(self._foh_context_current_file, encoding="utf-8") as f:
+                current = json.load(f)
+            key = str(current.get("eventKey") or "").strip() if isinstance(current, dict) else ""
+            self._foh_context_current = next(
+                (dict(e) for e in self._foh_context_catalog["events"]
+                 if e.get("eventKey") == key),
+                None,
+            )
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            self._foh_context_current = None
+
+    def _save_foh_context(self):
+        if not self._foh_context_current_file:
+            return
+        target = self._foh_context_current_file
+        temporary = target + ".tmp"
+        if self._foh_context_current is None:
+            try:
+                os.remove(target)
+            except FileNotFoundError:
+                pass
+            return
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump({"schema": "xio-foh-vj-context-selection-v1",
+                       "eventKey": self._foh_context_current["eventKey"]}, f,
+                      ensure_ascii=False, indent=2)
+        os.replace(temporary, target)
+
+    def _foh_context_view(self):
+        return {
+            "ok": True,
+            "domain": "vj_foh",
+            "catalogAvailable": bool(self._foh_context_catalog.get("events")),
+            "catalogFile": self._foh_context_file,
+            "selectionFile": self._foh_context_current_file,
+            "source": self._foh_context_catalog.get("source", {}),
+            "current": self._foh_context_current,
+            "events": self._foh_context_catalog.get("events", []),
+            "event_policy": "fohEventKey_must_exist_in_vj_catalog",
+            "rd_is_separate": True,
+        }
 
     # ── persistencia del setlist (restart del server NO borra el show) ─
     def _setlist_file(self):
@@ -456,6 +606,7 @@ class FohMonitorPlugin(PluginBase):
                 "index": max(-1, min(idx, len(songs) - 1)),
                 "loaded_at": data.get("loaded_at"),
                 "advanced_at": data.get("advanced_at"),
+                "fohEventKey": str(data.get("fohEventKey") or "").strip() or None,
             }
             self.logger.info(f"foh setlist recargado: {len(songs)} temas, index {self._setlist['index']}")
         except FileNotFoundError:
@@ -470,8 +621,10 @@ class FohMonitorPlugin(PluginBase):
     def _log_event(self, tipo, detalle):
         """Una linea JSON al archivo del dia (rotacion implicita por nombre)."""
         # cada evento lleva el ultimo timecode vigente pa correlacion post-show
+        current_key = (self._foh_context_current or {}).get("eventKey")
         ev = {"ts": datetime.now().isoformat(timespec="seconds"), "tipo": tipo,
-              "detalle": detalle, "tc": self._tc_current()}
+              "detalle": detalle, "tc": self._tc_current(), "domain": "vj_foh",
+              "fohEventKey": current_key}
         self._events.append(ev)
         self._events = self._events[-200:]
         try:
@@ -980,11 +1133,13 @@ class FohMonitorPlugin(PluginBase):
             audio["age"] = None
         audio.pop("last_seen", None)
         return jsonify({
+            "domain": "vj_foh",
             "channels": {k: c.snapshot(window) for k, c in self._channels.items()},
             "timecode": self._tc_state(),
             "sacn_mode": self._sacn_mode,
             "audio": audio,
             "setlist": self._setlist_view(),
+            "context": self._foh_context_current,
             "battery": self._battery(),
             "active_window": window,
             "log_file": self._log_path(),
@@ -999,6 +1154,54 @@ class FohMonitorPlugin(PluginBase):
         """GET /registro[?date=YYYYMMDD] -- registro del dia legible, mobile-first."""
         from flask import Response
         return Response(_REGISTRO_HTML, mimetype="text/html")
+
+    def _api_context_get(self):
+        from flask import jsonify
+        return jsonify(self._foh_context_view())
+
+    def _api_context_page(self):
+        from flask import Response
+        return Response(_CONTEXT_HTML, mimetype="text/html")
+
+    def _api_mapping(self):
+        """Serve the existing self-contained Mapping LED tool offline."""
+        from flask import Response, send_file
+        path = os.path.join(os.path.dirname(__file__), "static", "mapping.html")
+        if not os.path.isfile(path):
+            return Response("Mapping LED no disponible en este despliegue", status=404,
+                            mimetype="text/plain")
+        return send_file(path, mimetype="text/html", conditional=True)
+
+    def _api_context_post(self):
+        """Select or clear the exact VJ/FOH show context."""
+        from flask import request, jsonify
+        data = request.get_json(silent=True) or {}
+        if data.get("clear"):
+            previous = self._foh_context_current
+            self._foh_context_current = None
+            self._save_foh_context()
+            self._log_event("foh_context_cleared", {
+                "previousFohEventKey": (previous or {}).get("eventKey")
+            })
+            return jsonify(self._foh_context_view())
+        key = str(data.get("eventKey") or "").strip()
+        if not key:
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "eventKey es obligatorio; no se crea un evento implicito"}), 400
+        selected = next((dict(e) for e in self._foh_context_catalog.get("events", [])
+                         if e.get("eventKey") == key), None)
+        if selected is None:
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
+        self._foh_context_current = selected
+        self._save_foh_context()
+        self._log_event("foh_context_selected", {
+            "fohEventKey": selected.get("eventKey"),
+            "producerSlug": selected.get("producerSlug"),
+            "dateIso": selected.get("dateIso"),
+            "venueName": selected.get("venueName"),
+        })
+        return jsonify(self._foh_context_view())
 
     def _api_manifest(self):
         """PWA manifest: 'Agregar a pantalla de inicio' abre el panel fullscreen
@@ -1076,6 +1279,11 @@ class FohMonitorPlugin(PluginBase):
             "total": len(songs),
             "loaded_at": self._setlist["loaded_at"],
             "advanced_at": self._setlist["advanced_at"],
+            "fohEventKey": self._setlist.get("fohEventKey"),
+            "context_match": bool(
+                self._setlist.get("fohEventKey")
+                and self._setlist.get("fohEventKey") == (self._foh_context_current or {}).get("eventKey")
+            ),
         }
 
     def _api_setlist_get(self):
@@ -1097,7 +1305,8 @@ class FohMonitorPlugin(PluginBase):
         durations = self._norm_durations(data.get("durations"), len(songs))
         self._setlist = {"songs": songs, "durations": durations, "index": 0,
                          "loaded_at": datetime.now().isoformat(timespec="seconds"),
-                         "advanced_at": None}
+                         "advanced_at": None,
+                         "fohEventKey": (self._foh_context_current or {}).get("eventKey")}
         self._tc_song_index = -1  # re-dispara la auto-deteccion por TC
         self._save_setlist()
         self._log_event("setlist_next", {"accion": "cargada", "temas": len(songs), "actual": songs[0]})
@@ -1108,6 +1317,10 @@ class FohMonitorPlugin(PluginBase):
         songs = self._setlist["songs"]
         if not songs:
             return jsonify({"ok": False, "error": "sin setlist cargada"}), 400
+        if (self._setlist.get("fohEventKey")
+                and self._setlist.get("fohEventKey") != (self._foh_context_current or {}).get("eventKey")):
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "setlist ligado a otro fohEventKey; selecciona el evento correcto"}), 409
         if self._setlist["index"] < len(songs) - 1:
             self._setlist["index"] += 1
         self._setlist["advanced_at"] = datetime.now().isoformat(timespec="seconds")
@@ -1121,6 +1334,10 @@ class FohMonitorPlugin(PluginBase):
         from flask import jsonify
         if not self._setlist["songs"]:
             return jsonify({"ok": False, "error": "sin setlist cargada"}), 400
+        if (self._setlist.get("fohEventKey")
+                and self._setlist.get("fohEventKey") != (self._foh_context_current or {}).get("eventKey")):
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "setlist ligado a otro fohEventKey; selecciona el evento correcto"}), 409
         if self._setlist["index"] > 0:
             self._setlist["index"] -= 1
         cur = self._setlist["songs"][self._setlist["index"]]

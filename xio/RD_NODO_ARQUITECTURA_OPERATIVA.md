@@ -45,8 +45,9 @@ No se confía en que Android o el router oculten el puerto 5000.
   `192.168.198.x`, etc.). Por eso no se fija una IP en el contenido.
 - El `server.py` actual controla ADB y plugins y escucha en todas las
   interfaces. No debe ser el servidor que se entrega al público.
-- `run_server.sh` reconstruye `$HOME/xioserver` y borra su carpeta `data` al
-  desplegar. El estado del stand no puede vivir allí.
+- `run_server.sh` reconstruye `$HOME/xioserver`, pero conserva la biblioteca de
+  plugins y dirige el estado persistente a `/sdcard/xio_termux/`. El estado del
+  stand no vive dentro de la copia reemplazable del runtime.
 - `rd.db` contiene tablas de catálogo y trazabilidad de testeo. Una base de
   producción o `rd_datos.db` nunca se monta en el proceso público.
 

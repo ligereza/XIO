@@ -17,12 +17,12 @@ import java.util.List;
 /** Local append-friendly projection for the sample workflow. It never writes to RD's imported databases. */
 public final class RdFieldDb extends SQLiteOpenHelper {
     private static final String DB_NAME = "rd_field_local.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 7;
 
     public RdFieldDb(Context context) { super(context.getApplicationContext(), DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
-        db.execSQL("CREATE TABLE events (id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, venue TEXT, scheduled_at INTEGER, started_at INTEGER, status TEXT NOT NULL, synthetic INTEGER NOT NULL DEFAULT 0)");
+        db.execSQL("CREATE TABLE events (id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, venue TEXT, scheduled_at INTEGER, started_at INTEGER, status TEXT NOT NULL, synthetic INTEGER NOT NULL DEFAULT 0, start_date TEXT, end_date TEXT, producer TEXT, djs_json TEXT NOT NULL DEFAULT '[]', triangulation_json TEXT NOT NULL DEFAULT '{}', flyer_ref TEXT, flyer_sha256 TEXT, sync_status TEXT NOT NULL DEFAULT 'pending', review_status TEXT NOT NULL DEFAULT 'pendiente_revision_humana')");
         db.execSQL("CREATE TABLE samples (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, declared_substance TEXT, presentation TEXT, observed_color TEXT, status TEXT NOT NULL, phase TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(event_id) REFERENCES events(id))");
         db.execSQL("CREATE TABLE captures (id TEXT PRIMARY KEY, sample_id TEXT NOT NULL, kind TEXT NOT NULL, path TEXT NOT NULL, silhouette_svg_path TEXT, silhouette_preview_path TEXT, relief_svg_path TEXT, geometry_signature TEXT, relief_signature TEXT, silhouette_confidence REAL, relief_confidence REAL, circularity REAL, solidity REAL, symmetry REAL, contour_point_count INTEGER, sha256 TEXT, captured_at INTEGER NOT NULL, width INTEGER, height INTEGER, silhouette TEXT, aspect_ratio REAL, foreground_ratio REAL, color_label TEXT, brightness REAL, saturation REAL, texture_score REAL, mean_red INTEGER, mean_green INTEGER, mean_blue INTEGER, perceptual_hash INTEGER, marking_candidate TEXT, marking_score REAL, model_version TEXT, FOREIGN KEY(sample_id) REFERENCES samples(id))");
         db.execSQL("CREATE TABLE tests (id TEXT PRIMARY KEY, sample_id TEXT NOT NULL, ordinal INTEGER NOT NULL, method TEXT, reagent TEXT, started_at INTEGER, ended_at INTEGER, elapsed_ms INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, operator_result TEXT, interpretation TEXT, FOREIGN KEY(sample_id) REFERENCES samples(id))");
@@ -57,6 +57,17 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         }
         if (oldVersion < 5) db.execSQL("ALTER TABLE samples ADD COLUMN observed_color TEXT");
         if (oldVersion < 6) db.execSQL("ALTER TABLE captures ADD COLUMN silhouette_preview_path TEXT");
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE events ADD COLUMN start_date TEXT");
+            db.execSQL("ALTER TABLE events ADD COLUMN end_date TEXT");
+            db.execSQL("ALTER TABLE events ADD COLUMN producer TEXT");
+            db.execSQL("ALTER TABLE events ADD COLUMN djs_json TEXT NOT NULL DEFAULT '[]'");
+            db.execSQL("ALTER TABLE events ADD COLUMN triangulation_json TEXT NOT NULL DEFAULT '{}'");
+            db.execSQL("ALTER TABLE events ADD COLUMN flyer_ref TEXT");
+            db.execSQL("ALTER TABLE events ADD COLUMN flyer_sha256 TEXT");
+            db.execSQL("ALTER TABLE events ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
+            db.execSQL("ALTER TABLE events ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pendiente_revision_humana'");
+        }
     }
 
     public void ensureDemo() {
@@ -156,6 +167,50 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         for (SampleSession.ActionRecord action : session.timeline) { ContentValues actionValues = new ContentValues(); actionValues.put("sample_id", session.id); actionValues.put("at", action.at); actionValues.put("action", action.action); actionValues.put("payload", action.payload); db.insert("action_log", null, actionValues); }
     }
 
+    public void upsertEvent(String id, String name, String venue, String producer,
+                            String startDate, String endDate, String djsJson,
+                            String triangulationJson, String flyerRef, String flyerSha256,
+                            String syncStatus) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("id", id);
+        values.put("code", id);
+        values.put("name", name);
+        values.put("venue", venue);
+        values.put("scheduled_at", System.currentTimeMillis());
+        values.put("status", "draft");
+        values.put("synthetic", 0);
+        values.put("start_date", startDate);
+        values.put("end_date", endDate);
+        values.put("producer", producer);
+        values.put("djs_json", djsJson);
+        values.put("triangulation_json", triangulationJson);
+        values.put("flyer_ref", flyerRef);
+        values.put("flyer_sha256", flyerSha256);
+        values.put("sync_status", syncStatus == null || syncStatus.trim().isEmpty() ? "pending" : syncStatus);
+        values.put("review_status", "pendiente_revision_humana");
+        if (db.update("events", values, "id=?", new String[]{id}) == 0) db.insertOrThrow("events", null, values);
+    }
+
+    public void markEventSynced(String id, String reviewStatus) {
+        ContentValues values = new ContentValues();
+        values.put("sync_status", "synced");
+        values.put("review_status", reviewStatus == null || reviewStatus.trim().isEmpty() ? "pendiente_revision_humana" : reviewStatus);
+        getWritableDatabase().update("events", values, "id=?", new String[]{id});
+    }
+
+    public List<EventRow> recentEvents() {
+        List<EventRow> result = new ArrayList<>();
+        Cursor cursor = getReadableDatabase().query("events", null, null, null, null, null, "scheduled_at DESC", "60");
+        try { while (cursor.moveToNext()) result.add(eventRow(cursor)); } finally { cursor.close(); }
+        return result;
+    }
+
+    public EventRow findEvent(String id) {
+        Cursor cursor = getReadableDatabase().query("events", null, "id=?", new String[]{id}, null, null, null, "1");
+        try { return cursor.moveToFirst() ? eventRow(cursor) : null; } finally { cursor.close(); }
+    }
+
     public void insertCapture(String sampleId, SampleSession.Capture capture) {
         SQLiteDatabase db = getWritableDatabase();
         VisualFeatures f = capture.features;
@@ -198,6 +253,22 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         return new SampleRow(cursor.getString(cursor.getColumnIndexOrThrow("id")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getLong(cursor.getColumnIndexOrThrow("created_at")), cursor.getString(cursor.getColumnIndexOrThrow("declared_substance")), cursor.getString(cursor.getColumnIndexOrThrow("presentation")), cursor.getString(cursor.getColumnIndexOrThrow("observed_color")), cursor.getString(cursor.getColumnIndexOrThrow("status")), cursor.getString(cursor.getColumnIndexOrThrow("phase")), cursor.getInt(cursor.getColumnIndexOrThrow("paused")) == 1);
     }
 
+    private static EventRow eventRow(Cursor cursor) {
+        return new EventRow(
+                cursor.getString(cursor.getColumnIndexOrThrow("id")),
+                cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                cursor.getString(cursor.getColumnIndexOrThrow("venue")),
+                cursor.getString(cursor.getColumnIndexOrThrow("producer")),
+                cursor.getString(cursor.getColumnIndexOrThrow("start_date")),
+                cursor.getString(cursor.getColumnIndexOrThrow("end_date")),
+                cursor.getString(cursor.getColumnIndexOrThrow("djs_json")),
+                cursor.getString(cursor.getColumnIndexOrThrow("triangulation_json")),
+                cursor.getString(cursor.getColumnIndexOrThrow("flyer_ref")),
+                cursor.getString(cursor.getColumnIndexOrThrow("flyer_sha256")),
+                cursor.getString(cursor.getColumnIndexOrThrow("sync_status")),
+                cursor.getString(cursor.getColumnIndexOrThrow("review_status")));
+    }
+
     private static VisualFeatures featuresFrom(Cursor cursor) {
         String marking = cursor.getString(cursor.getColumnIndexOrThrow("marking_candidate"));
         return new VisualFeatures(cursor.getString(cursor.getColumnIndexOrThrow("color_label")), cursor.getString(cursor.getColumnIndexOrThrow("silhouette")), cursor.getFloat(cursor.getColumnIndexOrThrow("aspect_ratio")), cursor.getFloat(cursor.getColumnIndexOrThrow("foreground_ratio")), cursor.getFloat(cursor.getColumnIndexOrThrow("brightness")), cursor.getFloat(cursor.getColumnIndexOrThrow("saturation")), cursor.getFloat(cursor.getColumnIndexOrThrow("texture_score")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_red")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_green")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_blue")), cursor.getLong(cursor.getColumnIndexOrThrow("perceptual_hash")), marking == null ? "sin señal clara de marca" : marking, cursor.getFloat(cursor.getColumnIndexOrThrow("marking_score")), cursor.getFloat(cursor.getColumnIndexOrThrow("relief_confidence")), cursor.getString(cursor.getColumnIndexOrThrow("relief_signature")), cursor.getFloat(cursor.getColumnIndexOrThrow("silhouette_confidence")), cursor.getFloat(cursor.getColumnIndexOrThrow("circularity")), cursor.getFloat(cursor.getColumnIndexOrThrow("solidity")), cursor.getFloat(cursor.getColumnIndexOrThrow("symmetry")), cursor.getInt(cursor.getColumnIndexOrThrow("contour_point_count")), cursor.getString(cursor.getColumnIndexOrThrow("geometry_signature")));
@@ -210,6 +281,22 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         public final long createdAt;
         public final boolean paused;
         public SampleRow(String id, String eventId, String code, long createdAt, String declaredSubstance, String presentation, String observedColor, String status, String phase, boolean paused) { this.id = id; this.eventId = eventId; this.code = code; this.createdAt = createdAt; this.declaredSubstance = declaredSubstance; this.presentation = presentation; this.observedColor = observedColor; this.status = status; this.phase = phase; this.paused = paused; }
+    }
+
+    public static final class EventRow {
+        public final String id, name, venue, producer, startDate, endDate, djsJson,
+                triangulationJson, flyerRef, flyerSha256, syncStatus, reviewStatus;
+
+        public EventRow(String id, String name, String venue, String producer,
+                        String startDate, String endDate, String djsJson,
+                        String triangulationJson, String flyerRef, String flyerSha256,
+                        String syncStatus, String reviewStatus) {
+            this.id = id; this.name = name; this.venue = venue; this.producer = producer;
+            this.startDate = startDate; this.endDate = endDate; this.djsJson = djsJson;
+            this.triangulationJson = triangulationJson; this.flyerRef = flyerRef;
+            this.flyerSha256 = flyerSha256; this.syncStatus = syncStatus;
+            this.reviewStatus = reviewStatus;
+        }
     }
 
     private static final class SampleSessionEngineVersion { private static final String VALUE = "visual-contour-v0.3"; }

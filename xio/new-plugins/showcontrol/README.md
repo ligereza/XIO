@@ -122,7 +122,7 @@ POST /wol  {"mac":"AA:BB:CC:DD:EE:FF","verify_host":"1.2.3.4","verify_port":22,"
 ### OSC input (`orq` bidirectional -- the phone receives cues)
 ```bash
 POST /oscin        {"port":9001}                       # start listening (opt-in, off by default)
-POST /oscin        {"port":9001,"allow":["192.168.127.20"]}   # scope to source IPs
+POST /oscin        {"port":9001,"allow":["<IP-CLIENTE>"]}   # optional, use the current session IP
 POST /oscin/stop
 GET  /oscin                                            # listening?, port, rx/acted/ignored stats
 ```

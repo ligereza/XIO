@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#13242c">
+  <meta name="description" content="Herramienta local para registrar muestras y pruebas en terreno para Reduciendo Daño.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <title>XIO RD · Mesa de campo</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <p class="eyebrow">XIO / RD</p>
+          <p class="brand-name">Mesa de campo</p>
+        </div>
+      </div>
+      <div class="topbar-center">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="connectionLabel">Sin conexión · guardado local</span>
+        <span class="separator">/</span>
+        <span id="saveLabel">Listo para trabajar</span>
+      </div>
+      <div class="topbar-actions">
+        <button class="button button-quiet" id="openDirectorButton" type="button">Vista directiva</button>
+        <button class="button button-primary" id="exportButton" type="button"><span class="button-icon">↓</span> Exportar expediente</button>
+      </div>
+    </header>
+
+    <main class="app-grid">
+      <aside class="sidebar" aria-label="Navegación del evento">
+        <div class="sidebar-section event-context">
+          <div class="section-kicker">Evento activo</div>
+          <div class="event-title-row">
+            <div>
+              <h1 id="eventName">Sin evento</h1>
+            <p id="eventMeta">Conecta el host RD para cargar un evento preparado</p>
+            </div>
+          <button class="icon-button" id="newEventButton" type="button" aria-label="Crear evento" disabled title="Los eventos RD se preparan en el host">+</button>
+          </div>
+          <select id="eventSelect" class="select-control" aria-label="Seleccionar evento"></select>
+          <button id="eventStartButton" class="start-event" type="button"></button>
+        </div>
+
+        <div class="sidebar-section event-summary">
+          <div class="section-kicker">Lectura rápida</div>
+          <div class="summary-grid">
+            <button class="metric-block" data-filter="all" type="button"><strong id="sampleCount">0</strong><span>muestras</span></button>
+            <button class="metric-block" data-filter="tests" type="button"><strong id="testCount">0</strong><span>pruebas</span></button>
+            <button class="metric-block" data-filter="pending" type="button"><strong id="pendingCount">0</strong><span>pendientes</span></button>
+            <button class="metric-block" data-filter="corrections" type="button"><strong id="correctionCount">0</strong><span>correcciones</span></button>
+          </div>
+        </div>
+
+        <div class="sidebar-section sample-nav">
+          <div class="sample-nav-header">
+            <div class="section-kicker">Muestras del evento</div>
+            <button class="text-button" id="newSampleButton" type="button">+ Nueva</button>
+          </div>
+          <label class="search-field">
+            <span aria-hidden="true">⌕</span>
+            <input id="sampleSearch" type="search" placeholder="Buscar por ID o declaración" autocomplete="off">
+          </label>
+          <div id="sampleList" class="sample-list"></div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="privacy-seal"><span>◉</span><div><strong>Privado por diseño</strong><small>Sin nombres · sin nube</small></div></div>
+          <p class="version-note">RD Field v0.1 · prototipo local</p>
+        </div>
+      </aside>
+
+      <section class="workspace" aria-label="Registro de muestra">
+        <div id="emptyState" class="empty-state" hidden>
+          <div class="empty-illustration" aria-hidden="true"><span class="empty-ring"></span><span class="empty-cross"></span></div>
+          <p class="eyebrow">Mesa lista</p>
+          <h2>Abre un evento para comenzar</h2>
+          <p>Cada muestra conserva su historia, sus pruebas y su evidencia en el dispositivo.</p>
+          <button class="button button-primary" id="emptyNewEventButton" type="button" disabled>Esperando host RD</button>
+        </div>
+        <div id="sampleWorkspace"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="eventDialog" class="modal-dialog">
+    <form method="dialog" id="eventForm" class="modal-card">
+      <div class="modal-heading">
+        <div><p class="eyebrow">Contexto del host</p><h2>Evento preparado en RD</h2></div>
+        <button class="icon-button" value="cancel" type="submit" aria-label="Cerrar">×</button>
+      </div>
+      <p>Los eventos se preparan y revisan en el host RD antes del trabajo de campo. Esta superficie sólo permite seleccionarlos.</p>
+      <label class="field-label">Nombre del evento<input id="eventFormName" disabled maxlength="80" placeholder="Disponible sólo desde el host"></label>
+      <label class="field-label">Lugar o referencia<input id="eventFormVenue" disabled maxlength="80" placeholder="Disponible sólo desde el host"></label>
+      <label class="field-label">Inicio programado<input id="eventFormScheduled" disabled type="datetime-local"></label>
+      <div class="modal-actions"><button class="button button-primary" value="cancel" type="submit">Cerrar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="directorDialog" class="modal-dialog director-modal">
+    <div class="modal-card">
+      <div class="modal-heading">
+        <div><p class="eyebrow">Resumen de operación</p><h2 id="directorTitle">Vista directiva</h2></div>
+        <button class="icon-button" id="closeDirectorButton" type="button" aria-label="Cerrar">×</button>
+      </div>
+      <div id="directorContent"></div>
+    </div>
+  </dialog>
+
+  <input id="photoInput" type="file" accept="image/*" capture="environment" hidden>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>

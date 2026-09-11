@@ -3,7 +3,7 @@
 
 Cadena del show (puertos SIN colision, ver DIA_DEL_SHOW.md):
   LTC (M-Audio) -> Chataigne -> OSC /timecode a DOS destinos:
-      192.168.127.125:7000  (xio / foh_monitor: monitoreo)
+      255.255.255.255:7000  (xio / foh_monitor: monitoreo por broadcast)
       127.0.0.1:7001        (ESTE engine, en la misma laptop de Chataigne)
   Este engine, al CRUZAR cada timecode de cue_map_dref.json, manda a Resolume:
       /composition/layers/<L>/clips/<C>/connect  ->  RESOLUME_HOST:7000
@@ -21,7 +21,7 @@ Robustez:
 Uso:
     py cue_engine.py --dry-run                     # prueba sin Resolume
     py cue_engine.py                               # show (Resolume en esta laptop)
-    py cue_engine.py --resolume-host 192.168.127.30   # Resolume en otra maquina
+    py cue_engine.py --resolume-host <IP-RESOLUME>   # Resolume en otra maquina
     opciones: --listen-port 7001 --resolume-port 7000 --map cue_map_dref.json
 Solo stdlib.
 """

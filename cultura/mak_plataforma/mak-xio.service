@@ -10,6 +10,9 @@
 Description=MAK xio puente (monitor GET-only)
 [Service]
 WorkingDirectory=%h/xio_puente
+# xio.env is per-session because the Xiaomi hotspot can change IP/subnet.
+# Example: XIO_BASE=http://10.248.64.39:5000
+EnvironmentFile=-%h/xio_puente/xio.env
 ExecStart=/usr/bin/python3 %h/xio_puente/monitor.py
 Restart=always
 RestartSec=10

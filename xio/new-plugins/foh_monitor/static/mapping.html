@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Event Rigging Master Console v9.0 - Max & Colega</title>
+<style>
+  :root {
+    --bg-dark: #07080b;
+    --panel-bg: #10121a;
+    --tab-bg: #151824;
+    --card-bg: #191c28;
+    --border-color: #232736;
+    --text-main: #f0f2f8;
+    --text-muted: #8c92a4;
+    --accent-cyan: #00f0ff;
+    --accent-blue: #0077ff;
+    --accent-orange: #ffaa00;
+    --accent-green: #00e676;
+    --accent-purple: #df70ff;
+    --truss-color: #555b70;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    background: linear-gradient(90deg, #0b0c12 0%, #161924 100%);
+    border-bottom: 1px solid var(--border-color);
+    padding: 10px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 20;
+  }
+
+  .logo-area { display: flex; align-items: center; gap: 12px; }
+
+  .logo-badge {
+    background: var(--accent-cyan); color: #000; font-weight: 800; font-size: 11px;
+    padding: 5px 10px; border-radius: 4px; letter-spacing: 1px; text-transform: uppercase;
+    box-shadow: 0 0 12px rgba(0,240,255,0.4);
+  }
+
+  h1 { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+
+  .header-actions { display: flex; align-items: center; gap: 14px; }
+
+  .total-badge {
+    background: rgba(0, 230, 118, 0.15); color: var(--accent-green);
+    border: 1px solid rgba(0, 230, 118, 0.4); padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 8px;
+  }
+
+  .btn-export-top {
+    background: linear-gradient(135deg, var(--accent-green), #00b359);
+    color: #000; border: none; padding: 7px 14px; border-radius: 6px;
+    font-size: 12px; font-weight: 800; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 15px rgba(0,230,118,0.3);
+  }
+  .btn-export-top:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,230,118,0.5); }
+
+  main { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+  .sidebar {
+    width: 440px; background-color: var(--panel-bg); border-right: 1px solid var(--border-color);
+    display: flex; flex-direction: column; overflow: hidden; z-index: 15;
+  }
+
+  .sidebar-tabs { display: flex; background: var(--tab-bg); border-bottom: 2px solid var(--border-color); }
+  .tab-btn {
+    flex: 1; background: transparent; border: none; color: var(--text-muted);
+    padding: 13px 6px; font-size: 10px; font-weight: 800; cursor: pointer;
+    transition: all 0.2s; border-bottom: 3px solid transparent; white-space: nowrap;
+    display: flex; align-items: center; justify-content: center; gap: 6px; text-transform: uppercase;
+  }
+  .tab-btn:hover { color: #fff; background: rgba(255,255,255,0.02); }
+  .tab-btn.active { color: var(--accent-cyan); border-bottom-color: var(--accent-cyan); background: rgba(0,240,255,0.06); }
+  .tab-btn.active.video { color: #4da6ff; border-bottom-color: #0077ff; background: rgba(0,119,255,0.08); }
+  .tab-btn.active.map { color: #00e676; border-bottom-color: #00e676; background: rgba(0,230,118,0.08); }
+
+  .tab-content { flex: 1; overflow-y: auto; display: none; flex-direction: column; }
+  .tab-content.active { display: flex; }
+
+  .section-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px;
+    color: var(--accent-cyan); padding: 12px 20px 6px; border-bottom: 1px solid rgba(255,255,255,0.05);
+    background: rgba(0, 240, 255, 0.04); display: flex; justify-content: space-between; align-items: center;
+  }
+  .section-title.purple { color: #df70ff; background: rgba(189, 0, 255, 0.04); }
+  .section-title.orange { color: #ffaa00; background: rgba(255, 170, 0, 0.04); }
+  .section-title.green { color: #00e676; background: rgba(0, 230, 118, 0.04); }
+  .section-title.blue { color: #4da6ff; background: rgba(0, 119, 255, 0.05); }
+
+  .control-group { padding: 10px 20px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .control-label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px; font-weight: 500; }
+
+  .val-badge { background: rgba(0, 240, 255, 0.15); color: var(--accent-cyan); padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; font-weight: bold; }
+  .val-badge.locked { background: rgba(255, 170, 0, 0.15); color: var(--accent-orange); border: 1px solid rgba(255, 170, 0, 0.3); }
+  .val-badge.green { background: rgba(0, 230, 118, 0.15); color: var(--accent-green); border: 1px solid rgba(0, 230, 118, 0.3); }
+  .val-badge.purple { background: rgba(189, 0, 255, 0.15); color: #df70ff; border: 1px solid rgba(189, 0, 255, 0.3); }
+  .val-badge.blue { background: rgba(0, 119, 255, 0.15); color: #4da6ff; border: 1px solid rgba(0, 119, 255, 0.3); }
+
+  input[type="range"] { width: 100%; height: 5px; background: #222533; border-radius: 3px; outline: none; -webkit-appearance: none; margin-top: 4px; }
+  input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px; height: 15px; border-radius: 50%; background: var(--accent-cyan); cursor: pointer; box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+
+  select { width: 100%; background: #1b1e2b; border: 1px solid var(--border-color); color: #fff; padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; outline: none; margin-top: 4px; cursor: pointer; }
+  select:focus { border-color: var(--accent-cyan); }
+
+  .preset-row { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
+  .btn-preset { flex: 1; min-width: 80px; background: #1b1e2b; border: 1px solid var(--border-color); color: var(--text-main); padding: 6px 6px; font-size: 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; text-align: center; font-weight: 600; }
+  .btn-preset:hover { background: #262a3b; border-color: var(--accent-cyan); }
+  .btn-preset.active { background: var(--accent-cyan); color: #000; border-color: var(--accent-cyan); }
+
+  .btn-flip { width: 100%; background: #2a1b3d; border: 1px solid #df70ff; color: #fff; padding: 8px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s; margin-top: 6px; display: flex; justify-content: center; align-items: center; gap: 6px; }
+  .btn-flip:hover { background: #3d255a; box-shadow: 0 0 10px rgba(223, 112, 255, 0.4); }
+  .btn-flip.active { background: #df70ff; color: #000; }
+
+  .btn-action-map { width: 100%; background: linear-gradient(135deg, #0077ff, #00d5ff); color: #000; border: none; padding: 10px; border-radius: 6px; font-size: 12px; font-weight: 800; cursor: pointer; transition: all 0.2s; display: flex; justify-content: center; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(0, 119, 255, 0.3); margin-top: 8px; }
+  .btn-action-map:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0, 213, 255, 0.5); }
+
+  .btn-download { width: 100%; background: #1c2233; border: 1px solid var(--accent-cyan); color: #fff; padding: 9px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; transition: all 0.2s; margin-top: 6px; display: flex; justify-content: center; align-items: center; gap: 6px; }
+  .btn-download:hover { background: #262f47; }
+
+  .info-box { margin: 12px 20px; background: rgba(0, 240, 255, 0.05); border-left: 3px solid var(--accent-cyan); padding: 10px 12px; border-radius: 0 6px 6px 0; font-size: 11px; line-height: 1.4; color: #c8f8ff; }
+
+  .preset-card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 8px; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; margin: 6px 20px; }
+  .preset-card:hover { border-color: var(--accent-cyan); background: rgba(0,240,255,0.05); }
+  .preset-card.active { border-color: var(--accent-cyan); box-shadow: 0 0 12px rgba(0,240,255,0.2); background: rgba(0,240,255,0.08); }
+
+  .viewport { flex: 1; display: flex; flex-direction: column; background-color: #050608; position: relative; }
+
+  .toolbar {
+    position: absolute; top: 16px; left: 16px; z-index: 10;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    background: rgba(16, 18, 26, 0.92); backdrop-filter: blur(10px);
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-color);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+  }
+
+  .btn { background: transparent; border: none; color: var(--text-muted); padding: 7px 12px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 6px; }
+  .btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+  .btn.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 12px rgba(0,240,255,0.4); }
+  .btn.active.video { background: #0077ff; color: #fff; box-shadow: 0 0 12px rgba(0,119,255,0.5); }
+  .btn.active.map { background: #00e676; color: #000; box-shadow: 0 0 12px rgba(0,230,118,0.5); }
+
+  .zoom-badge { font-family: monospace; font-size: 11px; color: var(--accent-cyan); padding: 0 6px; font-weight: bold; }
+
+  .canvas-container { flex: 1; width: 100%; height: 100%; position: relative; }
+  canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+
+  .stats-panel {
+    position: absolute; bottom: 16px; left: 16px; right: 16px;
+    background: rgba(16, 18, 26, 0.95); backdrop-filter: blur(10px);
+    padding: 10px 16px; border-radius: 6px; border: 1px solid var(--border-color);
+    font-size: 11px; display: flex; justify-content: space-between; align-items: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+  }
+
+  .stat-group { display: flex; gap: 20px; }
+  .stat-item { display: flex; flex-direction: column; }
+  .stat-label { color: var(--text-muted); font-size: 10px; }
+  .stat-val { color: var(--accent-cyan); font-family: monospace; font-weight: bold; font-size: 12px; margin-top: 2px; }
+
+  /* Modal Ficha Técnica */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.8); backdrop-filter: blur(5px);
+    display: none; justify-content: center; align-items: center; z-index: 100;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-card {
+    background: #151824; border: 1px solid var(--accent-cyan); border-radius: 12px;
+    width: 620px; max-width: 95vw; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+    display: flex; flex-direction: column; gap: 16px; max-height: 90vh; overflow-y: auto;
+  }
+  .modal-title { font-size: 16px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
+  .modal-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .modal-table th, .modal-table td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-color); }
+  .modal-table th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; }
+  .modal-table td { font-family: monospace; color: #fff; }
+  .btn-close-modal { background: var(--accent-cyan); color: #000; border: none; padding: 10px; border-radius: 6px; font-weight: 800; cursor: pointer; width: 100%; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-area">
+    <span class="logo-badge">COLEGA MAX // DEFINITIVE v9.0</span>
+    <h1>Event Rigging & Pixel Mapping Suite (Editor Libre de Módulos LED)</h1>
+  </div>
+  <div class="header-actions">
+    <div class="total-badge">
+      <span>GRAN TOTAL LED:</span>
+      <span id="global-led-area" style="font-size:14px; font-family:monospace;">28.00 m²</span>
+    </div>
+    <button class="btn-export-top" onclick="showExportModal()">
+      <span>📋 Ficha Técnica & Mapeo</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <aside class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="tab-btn active" id="btn-tab-rigging" onclick="switchSection('rigging')">
+        <span>🌟 1. RIGGING & VENUE 3D</span>
+      </button>
+      <button class="tab-btn video" id="btn-tab-video" onclick="switchSection('video')">
+        <span>🖥️ 2. MÓDULOS LED X/Y</span>
+      </button>
+      <button class="tab-btn map" id="btn-tab-map" onclick="switchSection('map')">
+        <span>⚡ 3. PIXEL MAP & PRESETS</span>
+      </button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECCIÓN 1: RIGGING, TRUSS, ESCENARIO, DISTANCIAS & LUCES -->
+    <!-- ========================================== -->
+    <div class="tab-content active" id="sec-rigging">
+      
+      <div class="section-title purple">
+        <span>🎪 Posición de Tarima y Escenario (Fondo Pista)</span>
+      </div>
+      <div class="control-group" style="background: rgba(189, 0, 255, 0.04);">
+        <div class="control-label"><span>Distancia Tarima atrás de Cielo (Eje Z)</span><span class="val-badge purple" id="val-stage-dist">3.50 m</span></div>
+        <input type="range" id="slider-stage-dist" min="1.00" max="8.00" step="0.25" value="3.50">
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Ancho de Plataforma Tarima (m)</span><span class="val-badge purple" id="val-stage-w">9.00 m</span></div>
+        <input type="range" id="slider-stage-w" min="6.00" max="14.00" step="0.50" value="9.00">
+        <div class="control-label" style="margin-top:8px;"><span>Fondo de Plataforma Tarima (m)</span><span class="val-badge purple" id="val-stage-depth">4.00 m</span></div>
+        <input type="range" id="slider-stage-depth" min="2.00" max="8.00" step="0.50" value="4.00">
+        <div class="control-label" style="margin-top:8px;"><span>Separación Tótems y Pantalla Central (GAP)</span><span class="val-badge purple" id="val-totem-gap">0.50 m</span></div>
+        <input type="range" id="slider-totem-gap" min="0.20" max="1.50" step="0.10" value="0.50">
+      </div>
+
+      <div class="section-title">
+        <span>🌟 Rigging Cielo Colgante & Orientación</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Rigging LED (0° = Frente, 90° = Cenital)</span><span class="val-badge" id="val-tilt">0° (Vertical)</span></div>
+        <input type="range" id="slider-tilt" min="0" max="90" step="5" value="0">
+        <div class="preset-row">
+          <button class="btn-preset active" id="preset-0" onclick="setTilt(0)">0° Frente</button>
+          <button class="btn-preset" id="preset-45" onclick="setTilt(45)">45° Inclinado</button>
+          <button class="btn-preset" id="preset-90" onclick="setTilt(90)">90° Cenital Piso</button>
+        </div>
+        <button class="btn-flip" id="btn-flip" onclick="toggleFlip()">
+          🔄 Invertir Cara Emisora / Backface
+        </button>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>GAP Central Lado Largo (3+3 Mods)</span><span class="val-badge" id="val-gap-long">2.00 m</span></div>
+        <input type="range" id="slider-gap-long" min="0.5" max="5.0" step="0.25" value="2.0">
+        <div class="control-label" style="margin-top:8px;"><span>GAP Central Lado Corto (2+2 Mods)</span><span class="val-badge" id="val-gap-short">1.00 m</span></div>
+        <input type="range" id="slider-gap-short" min="0.0" max="4.0" step="0.25" value="1.0">
+        <div class="control-label" style="margin-top:8px;"><span>Retranqueo Esquina (Setback libre)</span><span class="val-badge" id="val-setback">0.50 m</span></div>
+        <input type="range" id="slider-setback" min="0.10" max="2.00" step="0.10" value="0.50">
+      </div>
+
+      <div class="section-title orange">
+        <span>⚙️ Vínculos Matemáticos de Truss (Aluminio)</span>
+      </div>
+      <div class="control-group" style="background: rgba(255,170,0,0.03);">
+        <div class="control-label"><span style="color:#ffd88a;">🔒 Truss Cielo Interno (X por Z)</span><span class="val-badge locked" id="val-inner-dims">8.00m x 6.00m</span></div>
+        <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">🔒 Truss Exterior Total: <b id="val-outer-dims">10.50m x 8.50m</b> (Offset 1.25m)</div>
+      </div>
+
+      <div class="section-title orange">
+        <span>💡 Iluminación Beams & Motores de Techo</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Cantidad de Focos (Beams) en Truss</span><span class="val-badge locked" id="val-light-count">6 focos</span></div>
+        <input type="range" id="slider-light-count" min="2" max="12" step="2" value="6">
+        <div class="control-label" style="margin-top:8px;"><span>Altura Colgado Focos Y (m)</span><span class="val-badge locked" id="val-light-y">3.45 m</span></div>
+        <input type="range" id="slider-light-y" min="2.00" max="6.00" step="0.25" value="3.45">
+        <div class="control-label" style="margin-top:8px;"><span>Altura Techo / Anclaje Eslingas Y (m)</span><span class="val-badge green" id="val-roof-y">6.00 m</span></div>
+        <input type="range" id="slider-roof-y" min="4.00" max="12.00" step="0.50" value="6.00">
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECCIÓN 2: EDITOR LIBRE DE MÓDULOS LED X/Y -->
+    <!-- ========================================== -->
+    <div class="tab-content" id="sec-video">
+      
+      <div class="section-title blue">
+        <span>📦 Editor del Módulo / Gabinete Base (Patrón Universal)</span>
+      </div>
+      <div class="control-group" style="background:rgba(0,119,255,0.06);">
+        <div style="font-size:11px; color:#fff; font-weight:bold; margin-bottom:6px;">⚡ Presets Rápidos de Gabinetes LED:</div>
+        <div class="preset-row">
+          <button class="btn-preset active" id="pmod-1x05" onclick="setModPreset(1.0, 0.5, 256, 128, '1x05')">1.0x0.5m (256x128px)</button>
+          <button class="btn-preset" id="pmod-05x1" onclick="setModPreset(0.5, 1.0, 128, 256, '05x1')">0.5x1.0m (128x256px)</button>
+          <button class="btn-preset" id="pmod-1x1" onclick="setModPreset(1.0, 1.0, 256, 256, '1x1')">1.0x1.0m (256x256px)</button>
+          <button class="btn-preset" id="pmod-2x1" onclick="setModPreset(2.0, 1.0, 512, 256, '2x1')">2.0x1.0m (512x256px)</button>
+        </div>
+
+        <div class="control-label" style="margin-top:12px;"><span>Ancho Físico del Módulo Base (m):</span><span class="val-badge blue" id="val-mod-w">1.00 m</span></div>
+        <input type="range" id="slider-mod-w" min="0.25" max="3.00" step="0.25" value="1.00">
+        
+        <div class="control-label" style="margin-top:8px;"><span>Alto Físico del Módulo Base (m):</span><span class="val-badge blue" id="val-mod-h">0.50 m</span></div>
+        <input type="range" id="slider-mod-h" min="0.25" max="3.00" step="0.25" value="0.50">
+
+        <div class="control-label" style="margin-top:8px;"><span>Resolución Horizontal Módulo (px):</span><span class="val-badge blue" id="val-mod-px-w">256 px</span></div>
+        <input type="range" id="slider-mod-px-w" min="64" max="512" step="32" value="256">
+
+        <div class="control-label" style="margin-top:8px;"><span>Resolución Vertical Módulo (px):</span><span class="val-badge blue" id="val-mod-px-h">128 px</span></div>
+        <input type="range" id="slider-mod-px-h" min="64" max="512" step="32" value="128">
+
+        <div style="font-size:11px; color:#cce6ff; margin-top:8px; line-height:1.4; background:#111522; padding:8px; border-radius:6px; border:1px solid #0077ff;">
+          ⚡ <b>Prioridad de Valor Activa:</b> Cada gabinete mide exactamente <b id="lbl-mod-desc">1.00m x 0.50m (256x128 px)</b>. Todas las pantallas se construyen multiplicando esta unidad por sus columnas X y filas Y.
+        </div>
+      </div>
+
+      <div class="section-title blue">
+        <span>📺 1. Pantalla Central Escenario (Tarima)</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Columnas de Módulos (X):</span><span class="val-badge blue" id="val-scr-cols">4 cols</span></div>
+        <input type="range" id="slider-scr-cols" min="1" max="16" step="1" value="4">
+        <div class="control-label" style="margin-top:8px;"><span>Filas de Módulos (Y):</span><span class="val-badge blue" id="val-scr-rows">6 filas</span></div>
+        <input type="range" id="slider-scr-rows" min="1" max="16" step="1" value="6">
+        <div style="font-size:11px; color:#cce6ff; margin-top:6px; font-family:monospace; background:#141722; padding:6px; border-radius:4px; border:1px solid #0077ff;" id="txt-scr-px">
+          ⚡ Medida: 4.00m x 3.00m | Res: 1024 x 768 px (12.00 m²)
+        </div>
+      </div>
+
+      <div class="section-title orange">
+        <span>🗼 2. Tótems Laterales en Tarima</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Cantidad de Tótems:</span><span class="val-badge locked" id="val-tot-count">4 Tótems</span></div>
+        <input type="range" id="slider-tot-count" min="2" max="8" step="2" value="4">
+        <div class="control-label" style="margin-top:8px;"><span>Columnas de Módulos por Tótem (X):</span><span class="val-badge locked" id="val-tot-cols">1 col</span></div>
+        <input type="range" id="slider-tot-cols" min="1" max="4" step="1" value="1">
+        <div class="control-label" style="margin-top:8px;"><span>Filas de Módulos por Tótem (Y):</span><span class="val-badge locked" id="val-tot-rows">6 filas</span></div>
+        <input type="range" id="slider-tot-rows" min="1" max="16" step="1" value="6">
+        <div style="font-size:11px; color:#ffd88a; margin-top:6px; font-family:monospace; background:#1a1914; padding:6px; border-radius:4px; border:1px solid #ffaa00;" id="txt-tot-px">
+          ⚡ Medida: 0.50m x 3.00m | Res: 4x (128 x 768 px) (6.00 m² total)
+        </div>
+      </div>
+
+      <div class="section-title purple">
+        <span>🌟 3. Módulos Cielo Cenital (Anillo)</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Módulos Lado Largo Norte/Sur (X):</span><span class="val-badge purple" id="val-sky-long">6 mods</span></div>
+        <input type="range" id="slider-sky-long" min="2" max="16" step="2" value="6">
+        <div class="control-label" style="margin-top:8px;"><span>Módulos Lado Corto Oeste/Este (Y):</span><span class="val-badge purple" id="val-sky-short">4 mods</span></div>
+        <input type="range" id="slider-sky-short" min="2" max="12" step="2" value="4">
+        <div style="font-size:11px; color:#edd0ff; margin-top:6px; font-family:monospace; background:#1b1422; padding:6px; border-radius:4px; border:1px solid #df70ff;" id="txt-sky-px">
+          ⚡ Medida: Largo 6.00m (1536 px) / Corto 4.00m (1024 px) | 10.00 m²
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECCIÓN 3: PIXEL MAP NOVASTAR & PRESETS UNIVERSALES -->
+    <!-- ========================================== -->
+    <div class="tab-content" id="sec-map">
+      <div class="section-title green">
+        <span>⚡ Carga Rápida de Presets de Montaje</span>
+      </div>
+      <div class="preset-card active" id="pre-map-1" onclick="loadPreset(1)">
+        <div><b style="color:#fff; font-size:12px;">⚡ 1. Club Discoteca (28 m² - Proyecto Actual)</b><div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Tarima 4x3 + 4 Tótems + Cielo 8x6m (3+3 / 2+2)</div></div>
+        <span class="val-badge green">28 m²</span>
+      </div>
+      <div class="preset-card" id="pre-map-2" onclick="loadPreset(2)">
+        <div><b style="color:#fff; font-size:12px;">⚡ 2. Concierto Frontal Festival (45 m²)</b><div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Fondo 8x4m + 6 Tótems 3.5m + Cenefa DJ Booth</div></div>
+        <span class="val-badge green">45 m²</span>
+      </div>
+      <div class="preset-card" id="pre-map-3" onclick="loadPreset(3)">
+        <div><b style="color:#fff; font-size:12px;">⚡ 3. Arena 360° Cenital (16 m²)</b><div style="font-size:10px; color:var(--text-muted); margin-top:2px;">Truss central con pantallas 90° Hacia Piso</div></div>
+        <span class="val-badge green">16 m²</span>
+      </div>
+
+      <div class="section-title blue">
+        <span>🖥️ Procesador de Salida & Bin Packing</span>
+      </div>
+      <div class="control-group">
+        <div class="control-label"><span>Lienzo de Salida Procesador (Output Canvas)</span></div>
+        <select id="sel-canvas" onchange="optimizePixelMap()">
+          <option value="1920x1080" selected>1920 x 1080 (Full HD 1080p - NovaStar VX4S/VX6S)</option>
+          <option value="2560x1440">2560 x 1440 (2K QHD - Salida Ampliada)</option>
+          <option value="3840x2160">3840 x 2160 (4K UHD - NovaStar 4K/VX1000)</option>
+          <option value="3840x1080">3840 x 1080 (Dual HD Wide - Doble Salida)</option>
+        </select>
+      </div>
+
+      <div class="control-group" style="background:rgba(0,119,255,0.05);">
+        <div class="control-label">
+          <span>Eficiencia de Empaquetado (Bin Packing)</span>
+          <span class="val-badge blue" id="val-map-eff">84% Utilizado</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px; line-height:1.4;" id="map-status-text">
+          ⚡ Mapeo óptimo calculado. Cero solapamiento entre pantallas.
+        </div>
+        <button class="btn-action-map" onclick="optimizePixelMap()">
+          ⚡ Auto-Mapear Óptimo (Bin Packing)
+        </button>
+        <button class="btn-download" onclick="downloadPixelMapPNG()">
+          📥 Descargar Patrón Raster (PNG 1:1 para VJ)
+        </button>
+      </div>
+
+      <div class="info-box" style="border-color:#0077ff; background:rgba(0,119,255,0.05); color:#cce6ff;">
+        🖥️ <b>Mapeo en Vivo:</b> Al cambiar las medidas de gabinete, columnas X o filas Y en la pestaña 2, el canvas reorganiza automáticamente todos los bloques en el lienzo NovaStar.
+      </div>
+    </div>
+  </aside>
+
+  <div class="viewport">
+    <div class="toolbar">
+      <button class="btn active" id="btn-top" onclick="setMode('top')">📐 Planta 2D</button>
+      <button class="btn" id="btn-iso" onclick="setMode('iso')">🌟 3D Aéreo</button>
+      <button class="btn" id="btn-floor" onclick="setMode('floor')">👀 3D Pista / Tarima</button>
+      <button class="btn" id="btn-map" onclick="setMode('map')" style="color:#4da6ff;">🖥️ Raster Pixel Map (1:1 VJ)</button>
+      <span style="width:1px; background:var(--border-color); margin:0 2px;"></span>
+      <button class="btn" id="btn-zoom-in" title="Acercar">🔍+ Acercar</button>
+      <button class="btn" id="btn-zoom-out" title="Alejar">🔍- Alejar</button>
+      <button class="btn" id="btn-zoom-reset" title="Restablecer">🔄 Reset</button>
+      <span class="zoom-badge" id="zoom-display">Zoom: 100%</span>
+    </div>
+
+    <div class="canvas-container">
+      <canvas id="stage-canvas"></canvas>
+    </div>
+
+    <div class="stats-panel">
+      <div class="stat-group">
+        <div class="stat-item">
+          <span class="stat-label">Gabinetes LED Estimados (Módulos):</span>
+          <span class="stat-val" id="stat-cab-count">56 Gabinetes</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Consumo Eléctrico Máx (Est.):</span>
+          <span class="stat-val" id="stat-power">16.8 kW (~73 Amps 230V)</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Peso Estimado LED (~12kg/m²):</span>
+          <span class="stat-val" id="stat-weight">336 kg de Carga</span>
+        </div>
+      </div>
+      <div class="stat-item" style="text-align:right;">
+        <span class="stat-label">Consola Studio v9.0:</span>
+        <span class="stat-val" style="color:#00e676;">Medidas Módulo Libre 0.5x1, 1x1, 2x1</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Modal Ficha Técnica -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal-card">
+    <div class="modal-title">📋 Ficha Técnica & Mapeo de Vídeo</div>
+    <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">
+      Resumen automático para cotización, montaje y configuración NovaStar generada por Colega Max.
+    </div>
+    <table class="modal-table">
+      <thead>
+        <tr><th>Módulo / Pantalla</th><th>Especificación Física</th><th>Resolución Píxeles (px)</th><th>Posición NovaStar (X, Y)</th></tr>
+      </thead>
+      <tbody id="modal-tbody">
+      </tbody>
+    </table>
+    <div style="background:rgba(0,240,255,0.1); padding:10px; border-radius:6px; font-size:12px; display:flex; justify-content:space-between;">
+      <b>GRAN TOTAL LED:</b> <span id="modal-total-m2" style="font-family:monospace; font-weight:bold; color:var(--accent-cyan); font-size:14px;">28.00 m²</span>
+    </div>
+    <button class="btn-close-modal" onclick="hideExportModal()">✅ Cerrar y Seguir Diseñando</button>
+  </div>
+</div>
+
+<script>
+  const state = {
+    mode: 'top',
+    camYaw: 0.78,
+    camPitch: 0.45,
+    camDist: 26,
+    panX: 0,
+    panY: 30,
+    zoom2D: 38,
+    zoom3D: 1.0,
+    zoomMap: 0.35,
+    isDragging: false,
+    lastMouseX: 0,
+    lastMouseY: 0,
+    
+    stageDist: 3.5,
+    stageW: 9.0,
+    stageDepth: 4.0,
+    totemGap: 0.5,
+    
+    scrCols: 4,
+    scrRows: 6,
+    totCount: 4,
+    totCols: 1,
+    totRows: 6,
+    skyLongMods: 6,
+    skyShortMods: 4,
+    
+    // Módulo Libre configurable
+    modW: 1.0,
+    modH: 0.5,
+    modPxW: 256,
+    modPxH: 128,
+    
+    tilt: 0,
+    flipFace: false,
+    gapLong: 2.0,
+    gapShort: 1.0,
+    setback: 0.5,
+    offset: 1.25,
+    
+    lightCount: 6,
+    lightY: 3.45,
+    roofY: 6.0,
+    
+    innerX: 8.0,
+    innerZ: 6.0,
+    outerX: 10.5,
+    outerZ: 8.5,
+    activePreset: 1,
+
+    mapCanvas: "1920x1080",
+    mapBlocks: []
+  };
+
+  function switchSection(secName) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+    if (secName === 'rigging') {
+      document.getElementById('btn-tab-rigging').classList.add('active');
+      document.getElementById('sec-rigging').classList.add('active');
+      if (state.mode === 'map') setMode('iso');
+    } else if (secName === 'video') {
+      document.getElementById('btn-tab-video').classList.add('active');
+      document.getElementById('sec-video').classList.add('active');
+    } else if (secName === 'map') {
+      document.getElementById('btn-tab-map').classList.add('active');
+      document.getElementById('sec-map').classList.add('active');
+      setMode('map');
+    }
+  }
+  window.switchSection = switchSection;
+
+  function setMode(modeName) {
+    state.mode = modeName;
+    document.querySelectorAll('.toolbar .btn').forEach(b => b.classList.remove('active'));
+    if (modeName === 'top') { document.getElementById('btn-top').classList.add('active'); }
+    else if (modeName === 'iso') { state.camPitch = 0.45; state.camDist = 26; state.zoom3D = 1.0; document.getElementById('btn-iso').classList.add('active'); }
+    else if (modeName === 'floor') { state.camPitch = -0.15; state.camDist = 20; state.zoom3D = 1.0; document.getElementById('btn-floor').classList.add('active'); }
+    else if (modeName === 'map') { document.getElementById('btn-map').classList.add('active'); }
+    updateZoomDisplay();
+    draw();
+  }
+  window.setMode = setMode;
+
+  function setModPreset(w, h, pxW, pxH, btnId) {
+    state.modW = w; state.modH = h;
+    state.modPxW = pxW; state.modPxH = pxH;
+    
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('slider-mod-w', w); setVal('slider-mod-h', h);
+    setVal('slider-mod-px-w', pxW); setVal('slider-mod-px-h', pxH);
+
+    document.querySelectorAll('#sec-video .preset-row .btn-preset').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById('pmod-' + btnId);
+    if (btn) btn.classList.add('active');
+
+    recomputeGeometry();
+    optimizePixelMap();
+    draw();
+  }
+  window.setModPreset = setModPreset;
+
+  function loadPreset(num) {
+    state.activePreset = num;
+    document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+    const p1 = document.getElementById('pre-' + num);
+    const p2 = document.getElementById('pre-map-' + num);
+    if (p1) p1.classList.add('active');
+    if (p2) p2.classList.add('active');
+
+    if (num === 1) {
+      state.stageDist = 3.5; state.stageW = 9.0; state.stageDepth = 4.0; state.totemGap = 0.5;
+      state.scrCols = 4; state.scrRows = 6; state.totCount = 4; state.totCols = 1; state.totRows = 6;
+      state.skyLongMods = 6; state.skyShortMods = 4;
+      state.modW = 1.0; state.modH = 0.5; state.modPxW = 256; state.modPxH = 128;
+      state.tilt = 0; state.flipFace = false; state.gapLong = 2.0; state.gapShort = 1.0; state.setback = 0.5;
+      state.lightCount = 6; state.lightY = 3.45; state.roofY = 6.0;
+      setModPreset(1.0, 0.5, 256, 128, '1x05');
+    } else if (num === 2) {
+      state.stageDist = 4.0; state.stageW = 12.0; state.stageDepth = 5.0; state.totemGap = 0.4;
+      state.scrCols = 8; state.scrRows = 8; state.totCount = 6; state.totCols = 1; state.totRows = 7;
+      state.skyLongMods = 8; state.skyShortMods = 6;
+      state.modW = 1.0; state.modH = 0.5; state.modPxW = 256; state.modPxH = 128;
+      state.tilt = 0; state.flipFace = false; state.gapLong = 3.0; state.gapShort = 1.5; state.setback = 0.5;
+      state.lightCount = 8; state.lightY = 4.5; state.roofY = 7.0;
+      setModPreset(1.0, 0.5, 256, 128, '1x05');
+    } else if (num === 3) {
+      state.stageDist = 3.0; state.stageW = 8.0; state.stageDepth = 4.0; state.totemGap = 0.5;
+      state.scrCols = 4; state.scrRows = 6; state.totCount = 4; state.totCols = 1; state.totRows = 6;
+      state.skyLongMods = 8; state.skyShortMods = 6;
+      state.modW = 1.0; state.modH = 1.0; state.modPxW = 256; state.modPxH = 256;
+      state.tilt = 90; state.flipFace = false; state.gapLong = 1.0; state.gapShort = 1.0; state.setback = 0.5;
+      state.lightCount = 8; state.lightY = 4.2; state.roofY = 7.5;
+      setModPreset(1.0, 1.0, 256, 256, '1x1');
+    }
+
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    setVal('slider-stage-dist', state.stageDist);
+    setVal('slider-stage-w', state.stageW);
+    setVal('slider-stage-depth', state.stageDepth);
+    setVal('slider-totem-gap', state.totemGap);
+    
+    setVal('slider-scr-cols', state.scrCols);
+    setVal('slider-scr-rows', state.scrRows);
+    setVal('slider-tot-count', state.totCount);
+    setVal('slider-tot-cols', state.totCols);
+    setVal('slider-tot-rows', state.totRows);
+    setVal('slider-sky-long', state.skyLongMods);
+    setVal('slider-sky-short', state.skyShortMods);
+
+    setVal('slider-tilt', state.tilt);
+    setVal('slider-gap-long', state.gapLong);
+    setVal('slider-gap-short', state.gapShort);
+    setVal('slider-setback', state.setback);
+    setVal('slider-light-count', state.lightCount);
+    setVal('slider-light-y', state.lightY);
+    setVal('slider-roof-y', state.roofY);
+
+    updateTiltUI();
+    recomputeGeometry();
+    optimizePixelMap();
+    draw();
+  }
+  window.loadPreset = loadPreset;
+
+  function setTilt(val) {
+    state.tilt = val;
+    const el = document.getElementById('slider-tilt');
+    if (el) el.value = val;
+    updateTiltUI();
+    recomputeGeometry();
+    draw();
+  }
+  window.setTilt = setTilt;
+
+  function toggleFlip() {
+    state.flipFace = !state.flipFace;
+    const btn = document.getElementById('btn-flip');
+    if (btn) {
+      if (state.flipFace) btn.classList.add('active');
+      else btn.classList.remove('active');
+    }
+    draw();
+  }
+  window.toggleFlip = toggleFlip;
+
+  function updateTiltUI() {
+    const val = state.tilt;
+    let desc = `${val}° `;
+    if (val === 0) desc += "(Vertical)";
+    else if (val === 90) desc += "(Cenital Piso)";
+    else desc += "(Inclinada)";
+    
+    const el = document.getElementById('val-tilt');
+    if (el) el.textContent = desc;
+
+    document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('active'));
+    const preBtn = document.getElementById('preset-' + val);
+    if (preBtn) preBtn.classList.add('active');
+  }
+
+  function optimizePixelMap() {
+    const canvasSel = document.getElementById('sel-canvas');
+    if (canvasSel) state.mapCanvas = canvasSel.value;
+
+    const [canW, canH] = state.mapCanvas.split('x').map(Number);
+
+    state.mapBlocks = [];
+
+    const cW_m = state.scrCols * state.modW, cH_m = state.scrRows * state.modH;
+    const cW_px = state.scrCols * state.modPxW, cH_px = state.scrRows * state.modPxH;
+    state.mapBlocks.push({ name: 'Pantalla Central Escenario', spec: `${cW_m.toFixed(1)}x${cH_m.toFixed(1)}m`, w: cW_px, h: cH_px, x: 0, y: 0, color: '#00f0ff' });
+
+    const tW_m = state.totCols * state.modW, tH_m = state.totRows * state.modH;
+    const tW_px = state.totCols * state.modPxW, tH_px = state.totRows * state.modPxH;
+    for (let i = 1; i <= state.totCount; i++) {
+      state.mapBlocks.push({ name: `Tótem Lateral ${i}`, spec: `${tW_m.toFixed(1)}x${tH_m.toFixed(1)}m`, w: tW_px, h: tH_px, x: 0, y: 0, color: '#ffaa00' });
+    }
+
+    const skyLW_m = (state.skyLongMods / 2) * state.modW, skySW_m = (state.skyShortMods / 2) * state.modW;
+    const skyLW_px = (state.skyLongMods / 2) * state.modPxW, skyLH_px = state.modPxH;
+    const skySW_px = (state.skyShortMods / 2) * state.modPxW;
+    
+    state.mapBlocks.push({ name: 'Cielo Lado Largo Norte', spec: `${skyLW_m.toFixed(1)}x${state.modH}m`, w: skyLW_px, h: skyLH_px, x: 0, y: 0, color: '#df70ff' });
+    state.mapBlocks.push({ name: 'Cielo Lado Largo Sur', spec: `${skyLW_m.toFixed(1)}x${state.modH}m`, w: skyLW_px, h: skyLH_px, x: 0, y: 0, color: '#df70ff' });
+    state.mapBlocks.push({ name: 'Cielo Lado Corto Oeste', spec: `${skySW_m.toFixed(1)}x${state.modH}m`, w: skySW_px, h: skyLH_px, x: 0, y: 0, color: '#00e676' });
+    state.mapBlocks.push({ name: 'Cielo Lado Corto Este', spec: `${skySW_m.toFixed(1)}x${state.modH}m`, w: skySW_px, h: skyLH_px, x: 0, y: 0, color: '#00e676' });
+
+    let curX = 0, curY = 0, rowMaxH = 0;
+    let totalBlockAreaPx = 0;
+
+    state.mapBlocks.forEach(b => {
+      totalBlockAreaPx += b.w * b.h;
+      if (curX + b.w > canW) {
+        curX = 0;
+        curY += rowMaxH + 16;
+        rowMaxH = 0;
+      }
+      b.x = curX;
+      b.y = curY;
+      curX += b.w + 16;
+      if (b.h > rowMaxH) rowMaxH = b.h;
+    });
+
+    const eff = Math.min(100, Math.round((totalBlockAreaPx / (canW * canH)) * 100));
+    const effEl = document.getElementById('val-map-eff');
+    if (effEl) effEl.textContent = `${eff}% Utilizado`;
+    
+    const statusEl = document.getElementById('map-status-text');
+    if (statusEl) {
+      if (curY + rowMaxH > canH) {
+        statusEl.innerHTML = `⚠️ <b>Atención:</b> El mapeo excede la altura de ${canH}px. Sugerimos usar salida 4K o reducir pitch.`;
+        statusEl.style.color = '#ffaa00';
+      } else {
+        statusEl.innerHTML = `⚡ <b>Mapeo Óptimo:</b> ${state.mapBlocks.length} bloques ordenados en canvas ${canW}x${canH}px. Cero solapamiento.`;
+        statusEl.style.color = '#00e676';
+      }
+    }
+
+    const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    setTxt('txt-scr-px', `⚡ Medida: ${cW_m.toFixed(2)}m x ${cH_m.toFixed(2)}m | Res: ${cW_px} x ${cH_px} px (${(cW_m * cH_m).toFixed(2)} m²)`);
+    setTxt('txt-tot-px', `⚡ Medida: ${tW_m.toFixed(2)}m x ${tH_m.toFixed(2)}m | Res: ${state.totCount}x (${tW_px} x ${tH_px} px) (${(state.totCount * tW_m * tH_m).toFixed(2)} m² total)`);
+    const totalSkyMods = state.skyLongMods + state.skyShortMods;
+    setTxt('txt-sky-px', `⚡ Medida: Largo ${skyLW_m.toFixed(2)}m / Corto ${skySW_m.toFixed(2)}m | Res: ${totalSkyMods} Módulos (${(totalSkyMods * state.modW * state.modH).toFixed(2)} m² total)`);
+
+    recomputeGeometry();
+    draw();
+  }
+  window.optimizePixelMap = optimizePixelMap;
+
+  function downloadPixelMapPNG() {
+    const [canW, canH] = state.mapCanvas.split('x').map(Number);
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = canW; offCanvas.height = canH;
+    const oCtx = offCanvas.getContext('2d');
+
+    oCtx.fillStyle = '#000000'; oCtx.fillRect(0, 0, canW, canH);
+    oCtx.strokeStyle = '#1a1e2b'; oCtx.lineWidth = 1;
+    for (let x = 0; x < canW; x += 128) { oCtx.beginPath(); oCtx.moveTo(x, 0); oCtx.lineTo(x, canH); oCtx.stroke(); }
+    for (let y = 0; y < canH; y += 128) { oCtx.beginPath(); oCtx.moveTo(0, y); oCtx.lineTo(canW, y); oCtx.stroke(); }
+
+    state.mapBlocks.forEach(b => {
+      oCtx.fillStyle = b.color; oCtx.fillRect(b.x, b.y, b.w, b.h);
+      oCtx.strokeStyle = '#ffffff'; oCtx.lineWidth = 2; oCtx.strokeRect(b.x, b.y, b.w, b.h);
+      
+      oCtx.fillStyle = '#000000'; oCtx.font = 'bold 24px monospace';
+      oCtx.fillText(`${b.name}`, b.x + 16, b.y + 36);
+      oCtx.font = '20px monospace';
+      oCtx.fillText(`Res: ${b.w}x${b.h} px | Pos: (${b.x}, ${b.y})`, b.x + 16, b.y + 64);
+    });
+
+    const link = document.createElement('a');
+    link.download = `PixelMap_NovaStar_${state.mapCanvas}_${state.modW}x${state.modH}m.png`;
+    link.href = offCanvas.toDataURL('image/png');
+    link.click();
+  }
+  window.downloadPixelMapPNG = downloadPixelMapPNG;
+
+  function recomputeGeometry() {
+    const skyLW_m = (state.skyLongMods / 2) * state.modW;
+    const skySW_m = (state.skyShortMods / 2) * state.modW;
+
+    state.innerX = (2 * skyLW_m) + state.gapLong;
+    state.innerZ = (2 * skySW_m) + state.gapShort + (2 * state.setback);
+
+    state.outerX = state.innerX + (2 * state.offset);
+    state.outerZ = state.innerZ + (2 * state.offset);
+
+    const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+    setTxt('val-stage-dist', state.stageDist.toFixed(2) + ' m');
+    setTxt('val-stage-w', state.stageW.toFixed(2) + ' m');
+    setTxt('val-stage-depth', state.stageDepth.toFixed(2) + ' m');
+    setTxt('val-totem-gap', state.totemGap.toFixed(2) + ' m');
+
+    setTxt('val-mod-w', state.modW.toFixed(2) + ' m');
+    setTxt('val-mod-h', state.modH.toFixed(2) + ' m');
+    setTxt('val-mod-px-w', `${state.modPxW} px`);
+    setTxt('val-mod-px-h', `${state.modPxH} px`);
+    setTxt('lbl-mod-desc', `${state.modW.toFixed(2)}m x ${state.modH.toFixed(2)}m (${state.modPxW}x${state.modPxH} px)`);
+
+    setTxt('val-scr-cols', `${state.scrCols} cols`);
+    setTxt('val-scr-rows', `${state.scrRows} filas`);
+    setTxt('val-tot-count', `${state.totCount} Tótems`);
+    setTxt('val-tot-cols', `${state.totCols} col`);
+    setTxt('val-tot-rows', `${state.totRows} filas`);
+    setTxt('val-sky-long', `${state.skyLongMods} mods`);
+    setTxt('val-sky-short', `${state.skyShortMods} mods`);
+
+    setTxt('val-gap-long', state.gapLong.toFixed(2) + ' m');
+    setTxt('val-gap-short', state.gapShort.toFixed(2) + ' m');
+    setTxt('val-setback', state.setback.toFixed(2) + ' m');
+    
+    setTxt('val-light-count', `${state.lightCount} focos`);
+    setTxt('val-light-y', state.lightY.toFixed(2) + ' m');
+    setTxt('val-roof-y', state.roofY.toFixed(2) + ' m');
+
+    setTxt('val-inner-dims', `${state.innerX.toFixed(2)}m x ${state.innerZ.toFixed(2)}m`);
+    setTxt('val-outer-dims', `${state.outerX.toFixed(2)}m x ${state.outerZ.toFixed(2)}m`);
+
+    const cW_m = state.scrCols * state.modW, cH_m = state.scrRows * state.modH;
+    const tW_m = state.totCols * state.modW, tH_m = state.totRows * state.modH;
+    let stageArea = cW_m * cH_m;
+    let totemArea = state.totCount * (tW_m * tH_m);
+    let skyArea = (state.skyLongMods + state.skyShortMods) * (state.modW * state.modH);
+    let totalLED = stageArea + totemArea + skyArea;
+
+    setTxt('global-led-area', totalLED.toFixed(2) + ' m²');
+    setTxt('stat-cab-count', `${Math.round(totalLED / (state.modW * state.modH))} Gabinetes (${state.modW}x${state.modH}m)`);
+    setTxt('stat-power', `${(totalLED * 0.6).toFixed(1)} kW (~${Math.round(totalLED * 0.6 * 4.3)} Amps 230V)`);
+    setTxt('stat-weight', `${Math.round(totalLED * 12)} kg de Carga`);
+  }
+
+  function bindControls() {
+    const bind = (id, prop) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', (e) => {
+          state[prop] = parseFloat(e.target.value);
+          recomputeGeometry();
+          optimizePixelMap();
+          draw();
+        });
+      }
+    };
+
+    bind('slider-stage-dist', 'stageDist');
+    bind('slider-stage-w', 'stageW');
+    bind('slider-stage-depth', 'stageDepth');
+    bind('slider-totem-gap', 'totemGap');
+    
+    bind('slider-mod-w', 'modW');
+    bind('slider-mod-h', 'modH');
+    bind('slider-mod-px-w', 'modPxW');
+    bind('slider-mod-px-h', 'modPxH');
+
+    bind('slider-scr-cols', 'scrCols');
+    bind('slider-scr-rows', 'scrRows');
+    bind('slider-tot-count', 'totCount');
+    bind('slider-tot-cols', 'totCols');
+    bind('slider-tot-rows', 'totRows');
+    bind('slider-sky-long', 'skyLongMods');
+    bind('slider-sky-short', 'skyShortMods');
+
+    bind('slider-gap-long', 'gapLong');
+    bind('slider-gap-short', 'gapShort');
+    bind('slider-setback', 'setback');
+    bind('slider-light-count', 'lightCount');
+    bind('slider-light-y', 'lightY');
+    bind('slider-roof-y', 'roofY');
+
+    const bindBtn = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+
+    bindBtn('btn-zoom-in', () => {
+      if (state.mode === 'top') state.zoom2D = Math.min(300, state.zoom2D * 1.25);
+      else if (state.mode === 'map') state.zoomMap = Math.min(2.0, state.zoomMap * 1.25);
+      else state.zoom3D = Math.min(6.0, state.zoom3D * 1.25);
+      updateZoomDisplay(); draw();
+    });
+    bindBtn('btn-zoom-out', () => {
+      if (state.mode === 'top') state.zoom2D = Math.max(5, state.zoom2D * 0.8);
+      else if (state.mode === 'map') state.zoomMap = Math.max(0.1, state.zoomMap * 0.8);
+      else state.zoom3D = Math.max(0.2, state.zoom3D * 0.8);
+      updateZoomDisplay(); draw();
+    });
+    bindBtn('btn-zoom-reset', () => {
+      if (state.mode === 'top') { state.zoom2D = 38; state.panX = 0; state.panY = 30; }
+      else if (state.mode === 'map') { state.zoomMap = 0.35; state.panX = 0; state.panY = 0; }
+      else { state.camDist = 26; state.camPitch = 0.45; state.camYaw = 0.78; state.zoom3D = 1.0; }
+      updateZoomDisplay(); draw();
+    });
+  }
+
+  function updateZoomDisplay() {
+    let val = 100;
+    if (state.mode === 'top') val = Math.round((state.zoom2D / 38) * 100);
+    else if (state.mode === 'map') val = Math.round((state.zoomMap / 0.35) * 100);
+    else val = Math.round(state.zoom3D * 100);
+
+    const el = document.getElementById('zoom-display');
+    if (el) el.textContent = `Zoom: ${val}%`;
+  }
+
+  function showExportModal() {
+    const tbody = document.getElementById('modal-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    state.mapBlocks.forEach(b => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><b>${b.name}</b></td><td>${b.spec}</td><td>${b.w} x ${b.h} px (${((b.w*b.h)/65536).toFixed(1)} m²)</td><td>X: ${b.x} | Y: ${b.y}</td>`;
+      tbody.appendChild(tr);
+    });
+    const tot = parseFloat(document.getElementById('global-led-area').textContent);
+    const totalEl = document.getElementById('modal-total-m2');
+    if (totalEl) totalEl.textContent = tot.toFixed(2) + ' m²';
+    const modalEl = document.getElementById('export-modal');
+    if (modalEl) modalEl.classList.add('show');
+  }
+  function hideExportModal() { const el = document.getElementById('export-modal'); if (el) el.classList.remove('show'); }
+  window.showExportModal = showExportModal;
+  window.hideExportModal = hideExportModal;
+
+  const canvas = document.getElementById('stage-canvas');
+  const ctx = canvas ? canvas.getContext('2d') : null;
+  function resizeCanvas() {
+    if (!canvas) return;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    canvas.width = rect.width; canvas.height = rect.height; draw();
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  if (canvas) {
+    canvas.addEventListener('mousedown', (e) => { state.isDragging = true; state.lastMouseX = e.clientX; state.lastMouseY = e.clientY; });
+    window.addEventListener('mouseup', () => state.isDragging = false);
+    canvas.addEventListener('mousemove', (e) => {
+      if (!state.isDragging) return;
+      const dx = e.clientX - state.lastMouseX, dy = e.clientY - state.lastMouseY;
+      state.lastMouseX = e.clientX; state.lastMouseY = e.clientY;
+      if (state.mode === 'top' || state.mode === 'map') { state.panX += dx; state.panY += dy; }
+      else { state.camYaw += dx * 0.01; state.camPitch = Math.max(-1.4, Math.min(1.4, state.camPitch + dy * 0.01)); }
+      draw();
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      if (state.mode === 'top') state.zoom2D = Math.max(5, Math.min(300, state.zoom2D * (e.deltaY < 0 ? 1.15 : 0.85)));
+      else if (state.mode === 'map') state.zoomMap = Math.max(0.1, Math.min(2.0, state.zoomMap * (e.deltaY < 0 ? 1.15 : 0.85)));
+      else state.zoom3D = Math.max(0.2, Math.min(6.0, state.zoom3D * (e.deltaY < 0 ? 1.15 : 0.85)));
+      updateZoomDisplay(); draw();
+    });
+  }
+
+  function draw() {
+    if (!ctx || !canvas) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'; ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+    for (let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+    if (state.mode === 'top') drawTopView();
+    else if (state.mode === 'map') drawPixelMapView();
+    else drawIsoView();
+  }
+
+  function drawPixelMapView() {
+    ctx.save();
+    ctx.translate(canvas.width / 2 + state.panX, canvas.height / 2 + state.panY);
+    const [canW, canH] = state.mapCanvas.split('x').map(Number);
+    const scale = state.zoomMap;
+
+    const wPx = canW * scale, hPx = canH * scale;
+    
+    ctx.fillStyle = '#0a0d14'; ctx.fillRect(-wPx/2, -hPx/2, wPx, hPx);
+    ctx.strokeStyle = '#0077ff'; ctx.lineWidth = 2; ctx.strokeRect(-wPx/2, -hPx/2, wPx, hPx);
+
+    ctx.fillStyle = '#0077ff'; ctx.font = 'bold 12px monospace';
+    ctx.fillText(`🖥️ CANVAS NOVASTAR / RESOLUME (${canW} x ${canH} px)`, -wPx/2, -hPx/2 - 10);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+    for (let x = 0; x < canW; x += 256) {
+      const xPos = -wPx/2 + (x * scale);
+      ctx.beginPath(); ctx.moveTo(xPos, -hPx/2); ctx.lineTo(xPos, hPx/2); ctx.stroke();
+    }
+    for (let y = 0; y < canH; y += 256) {
+      const yPos = -hPx/2 + (y * scale);
+      ctx.beginPath(); ctx.moveTo(-wPx/2, yPos); ctx.lineTo(wPx/2, yPos); ctx.stroke();
+    }
+
+    state.mapBlocks.forEach(b => {
+      const bx = -wPx/2 + (b.x * scale), by = -hPx/2 + (b.y * scale);
+      const bw = b.w * scale, bh = b.h * scale;
+
+      ctx.fillStyle = b.color; ctx.globalAlpha = 0.8; ctx.fillRect(bx, by, bw, bh);
+      ctx.globalAlpha = 1.0; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(bx, by, bw, bh);
+
+      if (bw > 40 && bh > 20) {
+        ctx.fillStyle = '#000'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+        ctx.fillText(b.name.split(' ')[0], bx + bw/2, by + bh/2 - 4);
+        ctx.font = '9px monospace';
+        ctx.fillText(`${b.w}x${b.h}px`, bx + bw/2, by + bh/2 + 8);
+      }
+    });
+
+    ctx.restore();
+  }
+
+  function drawTopView() {
+    ctx.save();
+    ctx.translate(canvas.width / 2 + state.panX, canvas.height / 2 + state.panY);
+    const s = state.zoom2D;
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'; ctx.setLineDash([5, 5]);
+    ctx.beginPath(); ctx.moveTo(-canvas.width, 0); ctx.lineTo(canvas.width, 0);
+    ctx.moveTo(0, -canvas.height); ctx.lineTo(0, canvas.height); ctx.stroke(); ctx.setLineDash([]);
+
+    const tThick = 0.3 * s;
+    const outW = state.outerX * s, outH = state.outerZ * s;
+    const inW = state.innerX * s, inH = state.innerZ * s;
+
+    const stageZ = -outH/2 - (state.stageDist * s);
+    const stageW_px = state.stageW * s, stageD_px = state.stageDepth * s;
+
+    ctx.fillStyle = 'rgba(189, 0, 255, 0.12)'; ctx.strokeStyle = '#9a30cc'; ctx.lineWidth = 2;
+    ctx.fillRect(-stageW_px/2, stageZ - stageD_px, stageW_px, stageD_px);
+    ctx.strokeRect(-stageW_px/2, stageZ - stageD_px, stageW_px, stageD_px);
+    ctx.fillStyle = '#df70ff'; ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(`🎪 TARIMA (${state.stageW}m x ${state.stageDepth}m)`, -stageW_px/2 + 10, stageZ - 10);
+
+    const cW_m = state.scrCols * state.modW, cH_m = state.scrRows * state.modH;
+    const cScrW = cW_m * s, cScrH = 0.2 * s;
+    const cScrZ = stageZ - stageD_px + (0.3 * s);
+    ctx.fillStyle = '#00f0ff'; ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 10;
+    ctx.fillRect(-cScrW/2, cScrZ, cScrW, cScrH);
+    ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.strokeRect(-cScrW/2, cScrZ, cScrW, cScrH);
+    ctx.fillStyle = '#000'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${cW_m.toFixed(1)}x${cH_m.toFixed(1)}m (${(cW_m*cH_m).toFixed(1)} m²)`, 0, cScrZ + cScrH/2 + 3);
+
+    const tW_m = state.totCols * state.modW;
+    const totW = tW_m * s, gapTot = state.totemGap * s;
+    const countSide = state.totCount / 2;
+    for (let i = 1; i <= countSide; i++) {
+      const lx = -cScrW/2 - (i*gapTot) - ((i-0.5)*totW) - totW/2;
+      const rx = cScrW/2 + ((i-1)*gapTot) + ((i-0.5)*totW) + gapTot - totW/2;
+      ctx.fillStyle = '#ffaa00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 8;
+      ctx.fillRect(lx, cScrZ, totW, cScrH); ctx.fillRect(rx, cScrZ, totW, cScrH);
+      ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.strokeRect(lx, cScrZ, totW, cScrH); ctx.strokeRect(rx, cScrZ, totW, cScrH);
+      ctx.fillStyle = '#000'; ctx.font = 'bold 8px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText("Tótem", lx + totW/2, cScrZ + cScrH/2 + 3);
+      ctx.fillText("Tótem", rx + totW/2, cScrZ + cScrH/2 + 3);
+    }
+
+    drawDimV(-outW/2 - 20, stageZ, -outW/2 - 20, -outH/2, `Dist. Tarima ${state.stageDist.toFixed(2)}m`, '#df70ff');
+
+    drawTruss2D(-outW/2, -outH/2, outW, outH, tThick, `Truss Exterior (${state.outerX.toFixed(2)}m x ${state.outerZ.toFixed(2)}m)`);
+    drawTruss2D(-inW/2, -inH/2, inW, inH, tThick, `Truss Interno (${state.innerX.toFixed(2)}m x ${state.innerZ.toFixed(2)}m)`);
+
+    const baseThick = 0.15;
+    const rad = state.tilt * Math.PI / 180;
+    const projDepth = baseThick * Math.cos(rad) + state.modH * Math.sin(rad);
+    const ledDepthPx = projDepth * s;
+
+    const mod3Len = ((state.skyLongMods / 2) * state.modW) * s, mod2Len = ((state.skyShortMods / 2) * state.modW) * s;
+    const gapShortPx = state.gapShort * s, setbackPx = state.setback * s;
+
+    const northY = -inH/2, southY = inH/2 - ledDepthPx;
+    drawLedStrip2D(-inW/2, northY, mod3Len, ledDepthPx, `${state.skyLongMods/2} Mods`, 'north');
+    drawLedStrip2D(inW/2 - mod3Len, northY, mod3Len, ledDepthPx, `${state.skyLongMods/2} Mods`, 'north');
+    drawLedStrip2D(-inW/2, southY, mod3Len, ledDepthPx, `${state.skyLongMods/2} Mods`, 'south');
+    drawLedStrip2D(inW/2 - mod3Len, southY, mod3Len, ledDepthPx, `${state.skyLongMods/2} Mods`, 'south');
+
+    const westX = -inW/2, eastX = inW/2 - ledDepthPx;
+    drawLedStrip2D(westX, -inH/2 + setbackPx, ledDepthPx, mod2Len, `${state.skyShortMods/2} Mods`, 'west');
+    drawLedStrip2D(westX, -inH/2 + setbackPx + mod2Len + gapShortPx, ledDepthPx, mod2Len, `${state.skyShortMods/2} Mods`, 'west');
+    drawLedStrip2D(eastX, -inH/2 + setbackPx, ledDepthPx, mod2Len, `${state.skyShortMods/2} Mods`, 'east');
+    drawLedStrip2D(eastX, -inH/2 + setbackPx + mod2Len + gapShortPx, ledDepthPx, mod2Len, `${state.skyShortMods/2} Mods`, 'east');
+
+    drawDimH(-inW/2, -inH/2 - 45, inW/2, -inH/2 - 45, `Truss Interno X: ${state.innerX.toFixed(2)}m`);
+    drawDimH(-inW/2 + mod3Len, -inH/2 - 16, inW/2 - mod3Len, -inH/2 - 16, `GAP ${state.gapLong.toFixed(2)}m`, '#ffaa00');
+    drawDimH(-outW/2, outH/2 + 35, outW/2, outH/2 + 35, `Truss Exterior X: ${state.outerX.toFixed(2)}m`, '#8c92a4');
+
+    drawDimV(-outW/2 - 45, -outH/2, -outW/2 - 45, outH/2, `Truss Ext Z: ${state.outerZ.toFixed(2)}m`, '#8c92a4');
+    drawDimV(inW/2 + 35, -inH/2, inW/2 + 35, inH/2, `Truss Int Z: ${state.innerZ.toFixed(2)}m`);
+    if (state.setback > 0) drawDimV(inW/2 + 10, -inH/2, inW/2 + 10, -inH/2 + setbackPx, `Setback ${state.setback.toFixed(2)}m`, '#00e676');
+
+    ctx.restore();
+  }
+
+  function drawTruss2D(x, y, w, h, thick, label) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(85, 91, 112, 0.25)'; ctx.strokeStyle = '#6a708a'; ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h); ctx.strokeRect(x + thick, y + thick, w - 2 * thick, h - 2 * thick);
+    ctx.fillRect(x, y, w, thick); ctx.fillRect(x, y + h - thick, w, thick);
+    ctx.fillRect(x, y + thick, thick, h - 2 * thick); ctx.fillRect(x + w - thick, y + thick, thick, h - 2 * thick);
+    if (label) { ctx.fillStyle = '#a0a6bc'; ctx.font = '11px sans-serif'; ctx.fillText(label, x + thick + 8, y - 6); }
+    ctx.restore();
+  }
+
+  function drawLedStrip2D(x, y, w, h, label) {
+    ctx.save();
+    if (state.tilt < 45 || state.flipFace) { ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 10; ctx.fillStyle = '#00d5ff'; }
+    else ctx.fillStyle = '#161820';
+    ctx.fillRect(x, y, w, h); ctx.shadowBlur = 0;
+    ctx.strokeStyle = (state.tilt < 45 || state.flipFace) ? '#fff' : '#444'; ctx.lineWidth = 1.2; ctx.strokeRect(x, y, w, h);
+    if (label && (w > 35 || h > 35)) {
+      ctx.fillStyle = (state.tilt < 45 || state.flipFace) ? '#000' : '#fff';
+      ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, x + w/2, y + h/2);
+    }
+    ctx.restore();
+  }
+
+  function drawDimH(x1, y1, x2, y2, text, color = '#00f0ff') {
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.font = '11px monospace'; ctx.textAlign = 'center'; ctx.fillText(text, (x1 + x2) / 2, y1 - 6);
+    ctx.restore();
+  }
+
+  function drawDimV(x1, y1, x2, y2, text, color = '#00f0ff') {
+    ctx.save(); ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.font = '11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(text, x1 + 8, (y1 + y2) / 2);
+    ctx.restore();
+  }
+
+  function project3D(x, y, z) {
+    let x1 = x * Math.cos(state.camYaw) - z * Math.sin(state.camYaw);
+    let z1 = x * Math.sin(state.camYaw) + z * Math.cos(state.camYaw);
+    let y2 = y * Math.cos(state.camPitch) - z1 * Math.sin(state.camPitch);
+    let z2 = -y * Math.sin(state.camPitch) + z1 * Math.cos(state.camPitch);
+    let scale = (450 / (450 + z2 + (state.camDist + 10) * 10)) * state.zoom3D;
+    return { x: canvas.width / 2 + x1 * scale * 35, y: canvas.height / 2 - y2 * scale * 35, z: z2 };
+  }
+
+  function drawIsoView() {
+    const queue = [];
+    const addPoly = (pts, fill, stroke, shadow = false, layer = 1) => {
+      const proj = pts.map(p => project3D(p[0], p[1], p[2]));
+      const avgZ = proj.reduce((acc, p) => acc + p.z, 0) / proj.length;
+      queue.push({ z: avgZ, proj, fill, stroke, shadow, layer });
+    };
+    const addLine = (p1, p2, color, width = 1, layer = 1) => {
+      const a = project3D(...p1), b = project3D(...p2);
+      queue.push({ z: (a.z+b.z)/2, line: true, a, b, color, width, layer });
+    };
+    const addBox = (cx, cy, cz, w, h, d, fill, stroke, shadow = false, layer = 1) => {
+      const x0 = cx-w/2, x1 = cx+w/2, y0 = cy-h/2, y1 = cy+h/2, z0 = cz-d/2, z1 = cz+d/2;
+      addPoly([[x0,y1,z0], [x1,y1,z0], [x1,y0,z0], [x0,y0,z0]], fill, stroke, shadow, layer);
+      addPoly([[x1,y1,z1], [x0,y1,z1], [x0,y0,z1], [x1,y0,z1]], fill, stroke, shadow, layer);
+      addPoly([[x0,y1,z1], [x0,y1,z0], [x0,y0,z0], [x0,y0,z1]], fill, stroke, shadow, layer);
+      addPoly([[x1,y1,z0], [x1,y1,z1], [x1,y0,z1], [x1,y0,z0]], fill, stroke, shadow, layer);
+      addPoly([[x0,y1,z1], [x1,y1,z1], [x1,y1,z0], [x0,y1,z0]], fill, stroke, shadow, layer);
+      addPoly([[x0,y0,z0], [x1,y0,z0], [x1,y0,z1], [x0,y0,z1]], fill, stroke, shadow, layer);
+    };
+
+    for (let i = -8; i <= 8; i += 2) addLine([i, 0, -8], [i, 0, 8], 'rgba(255,255,255,0.08)', 1, 0);
+    for (let j = -8; j <= 8; j += 2) addLine([-8, 0, j], [8, 0, j], 'rgba(255,255,255,0.08)', 1, 0);
+
+    const stageZ_center = -state.outerZ/2 - state.stageDist - (state.stageDepth/2);
+    const stageH = 0.60;
+    addBox(0, stageH/2, stageZ_center, state.stageW, stageH, state.stageDepth, 'rgba(40, 20, 50, 0.9)', '#9a30cc', false, 0);
+    
+    const cW_m = state.scrCols * state.modW, cH_m = state.scrRows * state.modH;
+    const cScrZ_3D = stageZ_center - (state.stageDepth/2) + 0.25;
+    addBox(0, stageH + cH_m/2, cScrZ_3D, cW_m, cH_m, 0.20, 'rgba(0, 240, 255, 0.95)', '#ffffff', true, 1);
+    addLine([-cW_m/2, stageH + cH_m, cScrZ_3D], [-cW_m/2 - 1, 0, cScrZ_3D + 6.0], 'rgba(0, 240, 255, 0.12)', 2, 1);
+    addLine([cW_m/2, stageH + cH_m, cScrZ_3D], [cW_m/2 + 1, 0, cScrZ_3D + 6.0], 'rgba(0, 240, 255, 0.12)', 2, 1);
+
+    const totGap = state.totemGap, totCount = state.totCount;
+    const tW_m = state.totCols * state.modW, tH_m = state.totRows * state.modH;
+    for (let i = 1; i <= totCount/2; i++) {
+      const lx = -cW_m/2 - (i*totGap) - ((i-0.5)*tW_m);
+      const rx = cW_m/2 + ((i-1)*totGap) + ((i-0.5)*tW_m) + totGap;
+      addBox(lx, stageH + tH_m/2, cScrZ_3D, tW_m, tH_m, 0.20, 'rgba(255, 170, 0, 0.95)', '#ffffff', true, 1);
+      addBox(rx, stageH + tH_m/2, cScrZ_3D, tW_m, tH_m, 0.20, 'rgba(255, 170, 0, 0.95)', '#ffffff', true, 1);
+    }
+
+    const H = 3.8, tThick = 0.3, ox = state.outerX, oz = state.outerZ;
+    addBox(0, H, -oz/2, ox, tThick, tThick, 'rgba(70, 75, 90, 0.85)', '#8c92a4', false, 2);
+    addBox(0, H, oz/2, ox, tThick, tThick, 'rgba(70, 75, 90, 0.85)', '#8c92a4', false, 2);
+    addBox(-ox/2, H, 0, tThick, tThick, oz - 2*tThick, 'rgba(70, 75, 90, 0.85)', '#8c92a4', false, 2);
+    addBox(ox/2, H, 0, tThick, tThick, oz - 2*tThick, 'rgba(70, 75, 90, 0.85)', '#8c92a4', false, 2);
+
+    const roofY = state.roofY;
+    addLine([-ox/2, H, -oz/2], [-ox/2, roofY, -oz/2], '#ffaa00', 1.5, 2);
+    addLine([ox/2, H, -oz/2], [ox/2, roofY, -oz/2], '#ffaa00', 1.5, 2);
+    addLine([-ox/2, H, oz/2], [-ox/2, roofY, oz/2], '#ffaa00', 1.5, 2);
+    addLine([ox/2, H, oz/2], [ox/2, roofY, oz/2], '#ffaa00', 1.5, 2);
+
+    const ix = state.innerX, iz = state.innerZ;
+    addBox(0, H, -iz/2, ix, tThick, tThick, 'rgba(90, 96, 115, 0.9)', '#b0b6cc', false, 2);
+    addBox(0, H, iz/2, ix, tThick, tThick, 'rgba(90, 96, 115, 0.9)', '#b0b6cc', false, 2);
+    addBox(-ix/2, H, 0, tThick, tThick, iz - 2*tThick, 'rgba(90, 96, 115, 0.9)', '#b0b6cc', false, 2);
+    addBox(ix/2, H, 0, tThick, tThick, iz - 2*tThick, 'rgba(90, 96, 115, 0.9)', '#b0b6cc', false, 2);
+
+    addLine([-ix/2, H, -iz/2], [-ix/2, roofY, -iz/2], '#ffaa00', 2, 2);
+    addLine([ix/2, H, -iz/2], [ix/2, roofY, -iz/2], '#ffaa00', 2, 2);
+    addLine([-ix/2, H, iz/2], [-ix/2, roofY, iz/2], '#ffaa00', 2, 2);
+    addLine([ix/2, H, iz/2], [ix/2, roofY, iz/2], '#ffaa00', 2, 2);
+
+    const addLedBlockRigged = (cx, cy, cz, spanLen, modH, modThick, side) => {
+      const rad = state.tilt * Math.PI / 180;
+      let x0 = -spanLen/2, x1 = spanLen/2, y0 = -modH/2, y1 = modH/2, z0 = -modThick/2, z1 = modThick/2;
+
+      const faces = [
+        { name: 'emitting', pts: [[x0,y1,z1], [x1,y1,z1], [x1,y0,z1], [x0,y0,z1]], isLed: !state.flipFace },
+        { name: 'back',     pts: [[x1,y1,z0], [x0,y1,z0], [x0,y0,z0], [x1,y0,z0]], isLed: state.flipFace },
+        { name: 'top',      pts: [[x0,y1,z0], [x1,y1,z0], [x1,y1,z1], [x0,y1,z1]], isLed: false },
+        { name: 'bottom',   pts: [[x0,y0,z1], [x1,y0,z1], [x1,y0,z0], [x0,y0,z0]], isLed: false },
+        { name: 'left',     pts: [[x0,y1,z0], [x0,y1,z1], [x0,y0,z1], [x0,y0,z0]], isLed: false },
+        { name: 'right',    pts: [[x1,y1,z1], [x1,y1,z0], [x1,y0,z0], [x1,y0,z1]], isLed: false }
+      ];
+
+      const transform = (pt) => {
+        let [px, py, pz] = pt;
+        let py_r = py * Math.cos(rad) - pz * Math.sin(rad);
+        let pz_r = py * Math.sin(rad) + pz * Math.cos(rad);
+        if (side === 'north') return [cx + px, cy + py_r, cz + pz_r];
+        else if (side === 'south') return [cx - px, cy + py_r, cz - pz_r];
+        else if (side === 'west') return [cx + pz_r, cy + py_r, cz + px];
+        else if (side === 'east') return [cx - pz_r, cy + py_r, cz - px];
+      };
+
+      faces.forEach(f => {
+        const tPts = f.pts.map(transform);
+        if (f.isLed) addPoly(tPts, 'rgba(0, 235, 255, 0.95)', '#fff', true, 2);
+        else addPoly(tPts, '#14161f', '#333745', false, 2);
+      });
+    };
+
+    const ledY = H - tThick/2 - state.modH/2;
+    const lModSpan = (state.skyLongMods / 2) * state.modW, sModSpan = (state.skyShortMods / 2) * state.modW, sb = state.setback;
+
+    addLedBlockRigged(-ix/2 + lModSpan/2, ledY, -iz/2, lModSpan, state.modH, 0.15, 'north');
+    addLedBlockRigged(ix/2 - lModSpan/2, ledY, -iz/2, lModSpan, state.modH, 0.15, 'north');
+    addLedBlockRigged(-ix/2 + lModSpan/2, ledY, iz/2, lModSpan, state.modH, 0.15, 'south');
+    addLedBlockRigged(ix/2 - lModSpan/2, ledY, iz/2, lModSpan, state.modH, 0.15, 'south');
+
+    addLedBlockRigged(-ix/2, ledY, -iz/2 + sb + sModSpan/2, sModSpan, state.modH, 0.15, 'west');
+    addLedBlockRigged(-ix/2, ledY, iz/2 - sb - sModSpan/2, sModSpan, state.modH, 0.15, 'west');
+    addLedBlockRigged(ix/2, ledY, -iz/2 + sb + sModSpan/2, sModSpan, state.modH, 0.15, 'east');
+    addLedBlockRigged(ix/2, ledY, iz/2 - sb - sModSpan/2, sModSpan, state.modH, 0.15, 'east');
+
+    const step = (ix - 2.0) / (state.lightCount - 1);
+    for (let i = 0; i < state.lightCount; i++) {
+      const bx = -((ix - 2.0)/2) + (i * step);
+      addBox(bx, state.lightY, -iz/2, 0.28, 0.45, 0.28, '#222', '#555', false, 2);
+      addBox(bx, state.lightY, iz/2, 0.28, 0.45, 0.28, '#222', '#555', false, 2);
+      addLine([bx, state.lightY - 0.2, -iz/2], [bx * 1.3, 0, -iz/2 * 0.6], 'rgba(0, 119, 255, 0.35)', 3, 1);
+      addLine([bx, state.lightY - 0.2, iz/2], [bx * 1.3, 0, iz/2 * 0.6], 'rgba(0, 119, 255, 0.35)', 3, 1);
+    }
+
+    queue.sort((a, b) => {
+      if (a.layer !== b.layer) return a.layer - b.layer;
+      return b.z - a.z;
+    });
+
+    queue.forEach(item => {
+      ctx.save();
+      if (item.line) {
+        ctx.strokeStyle = item.color; ctx.lineWidth = item.width || 1;
+        ctx.beginPath(); ctx.moveTo(item.a.x, item.a.y); ctx.lineTo(item.b.x, item.b.y); ctx.stroke();
+      } else {
+        if (item.shadow) { ctx.shadowColor = '#00f0ff'; ctx.shadowBlur = 12; }
+        ctx.fillStyle = item.fill; ctx.strokeStyle = item.stroke; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(item.proj[0].x, item.proj[0].y);
+        for (let i = 1; i < item.proj.length; i++) ctx.lineTo(item.proj[i].x, item.proj[i].y);
+        ctx.closePath(); ctx.fill(); if (item.stroke) ctx.stroke();
+      }
+      ctx.restore();
+    });
+  }
+
+  bindControls();
+  loadPreset(1);
+  resizeCanvas();
+</script>
+</body>
+</html>
