@@ -5,12 +5,10 @@ This is the personal VJ/artistic field surface. It is separate from
 
 The existing XIO listener on port `5000` serves this surface under:
 
-- `/api/plugins/foh_monitor/view` — reduced FLUJO-ISKVW hub (VJ + FOH only)
 - `/api/plugins/foh_monitor/panel` — passive FOH monitor
 - `/api/plugins/foh_monitor/context` — exact VJ event selector
 - `/api/plugins/foh_monitor/context/data` — read-only context API
 - `/api/plugins/foh_monitor/mapping` — existing self-contained Mapping LED tool
-- `/api/plugins/foh_monitor/resumen` — read-only summary by exact `fohEventKey`
 - `/api/plugins/foh_monitor/registro` and `/log` — FOH evidence
 - `/api/plugins/showcontrol/panel` — existing opt-in show-control tools
 
@@ -30,16 +28,8 @@ show into the catalog and do not infer a layout, rider or venue from an artist
 name. A layout/rider/show-kit relation is valid only after an explicit source
 reference is added to the context record.
 
-FOH is browser/PWA-compatible and needs no APK. The `/resumen` page consumes
-the same host JSONL that `/registro` displays, joined only through the exact
-`fohEventKey`; signal counts and timestamps are descriptive, not an
-interpretation. Mapping LED is copied from the existing FLUJO standalone asset
-without adding a backend dependency, so it can run from the private hotspot
-when the phone is the field host. The hotspot password is the normal access
-boundary. No additional login or token is introduced here.
-
-The host is movable: when Xiaomi/Termux runs XIO, it owns the offline RD
-snapshot and FOH logs; when a PC runs the same XIO runtime, that PC owns the
-database/logs and Xiaomi is only a browser/PWA client. Relative HTML routes do
-not change between these modes. The RD APK is a camera/field client and keeps
-its local capture workflow; it is not the FOH signal listener.
+FOH is browser/PWA-compatible and needs no APK. Mapping LED is copied from the
+existing FLUJO standalone asset without adding a backend dependency, so it can
+run from the private hotspot when the phone is the field host. The hotspot
+password is the normal access boundary. No additional login or token is
+introduced here.

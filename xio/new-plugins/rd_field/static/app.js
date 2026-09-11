@@ -147,11 +147,7 @@ function availableEvents() {
   // The synthetic fixture remains visible only when opening the static demo
   // directly from file:// during UI development.
   if (window.location.protocol === "file:") return state.events.filter((event) => event.synthetic);
-  // In host mode the catalogue is authoritative.  Keep the same gate as the
-  // native field client: a producer/event is selectable only after its logo
-  // has been loaded in the host database.  This avoids inventing an event or
-  // silently selecting an unverified producer from a partial projection.
-  return state.events.filter((event) => event.remote === true && event.logoLoaded === true);
+  return state.events.filter((event) => event.remote === true);
 }
 
 function remoteUrl(path) {
@@ -162,10 +158,7 @@ function mapRemoteEvent(raw) {
   const eventRef = String(raw?.event_id || "").trim();
   if (!eventRef) return null;
   const venue = raw.venues?.find((item) => item.venue_nombre)?.venue_nombre || "Sin lugar";
-  const producers = Array.isArray(raw.productoras) ? raw.productoras : [];
-  const linkedProducer = producers.find((item) => item.productora_slug);
-  const logoProducer = producers.find((item) => item.productora_slug && item.logo_loaded === true);
-  const producer = (logoProducer || linkedProducer)?.productora_slug || "";
+  const producer = raw.productoras?.find((item) => item.productora_slug)?.productora_slug || "";
   return {
     id: `rd-remote-${eventRef}`,
     eventRef,
@@ -176,22 +169,10 @@ function mapRemoteEvent(raw) {
     scheduledAt: raw.date_iso_candidate ? `${raw.date_iso_candidate}T12:00:00.000Z` : null,
     startedAt: null,
     status: raw.event_label_status || "planned",
-    logoLoaded: Boolean(logoProducer),
-    logoStatus: logoProducer?.logo_status || "no_disponible",
     synthetic: false,
     remote: true,
     createdAt: isoNow()
   };
-}
-
-function eventGroups(events) {
-  const groups = new Map();
-  events.forEach((event) => {
-    const producer = event.producer || "Productora sin nombre";
-    if (!groups.has(producer)) groups.set(producer, []);
-    groups.get(producer).push(event);
-  });
-  return [...groups.entries()];
 }
 
 function mergeRemoteEvents(rawEvents) {
@@ -285,20 +266,8 @@ function renderSidebar() {
   const corrections = samples.filter((sample) => sample.humanCorrection).length;
   document.getElementById("eventName").textContent = event?.name || "Sin evento";
   document.getElementById("eventMeta").textContent = event ? `${event.code} · ${event.venue || "Sin lugar"}` : "Conecta el host RD para cargar un evento preparado";
-  const eventSelect = document.getElementById("eventSelect");
-  const groups = eventGroups(events);
-  if (groups.length) {
-    eventSelect.innerHTML = groups.map(([producer, producerEvents]) => `<optgroup label="${escapeHTML(`(LOGO) ${producer} · ${producerEvents.length} evento${producerEvents.length === 1 ? "" : "s"}`)}">${producerEvents.map((item) => `<option value="${item.id}" ${item.id === state.selectedEventId ? "selected" : ""}>${escapeHTML(item.name)}${item.synthetic ? " · DEMO" : ""}</option>`).join("")}</optgroup>`).join("");
-  } else {
-    eventSelect.innerHTML = `<option value="" selected disabled>${ui.remote.connected ? "No hay productoras con logo cargado" : "Conecta el host RD para cargar eventos"}</option>`;
-  }
-  eventSelect.disabled = events.length === 0;
-  const catalogNote = document.getElementById("eventCatalogNote");
-  if (catalogNote) {
-    catalogNote.textContent = ui.remote.connected
-      ? (events.length ? "Agrupado por productora con logo cargado · orden del catálogo del host" : "El host aún no tiene una productora con logo cargado")
-      : "La selección depende del catálogo del host RD; no se crean eventos desde el teléfono";
-  }
+  document.getElementById("eventSelect").innerHTML = events.map((item) => `<option value="${item.id}" ${item.id === state.selectedEventId ? "selected" : ""}>${escapeHTML(item.name)}${item.synthetic ? " · DEMO" : ""}</option>`).join("");
+  document.getElementById("eventSelect").disabled = events.length === 0;
   const newEventButton = document.getElementById("newEventButton");
   newEventButton.disabled = true;
   newEventButton.title = "Los eventos RD se preparan en el host; aquí sólo se seleccionan";

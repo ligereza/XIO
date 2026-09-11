@@ -17,11 +17,6 @@ automatización, documentación, ideas y proyectos de instalación.
 - `cultura/`: mapa conceptual XIO, handoff técnico y puente MAK↔XIO.
 - `projects/cultura/MAPA_GENERATIVO.md`: contexto del XIO dentro del mapa de
   proyectos e ideas de Cauce.
-- `xio/radio_monitor.py`: monitor local de solo lectura que correlaciona
-  radio celular del Xiaomi, enlace Wi-Fi Windows↔XIO, latencia y consumo por
-  adaptador; ver `xio/RADIO_MONITOR.md`.
-- `xio/PLAN_CONECTIVIDAD_CLARO_2026.md`: investigación local de SUBTEL/Claro
-  y plan de arquitectura USB→Windows→Ethernet→MAK.
 - `tests/test_xio_superficie.py` y `tests/test_xio_puente_staged.py`:
   regresiones sobre la superficie de seguridad y el puente staged.
 
@@ -31,8 +26,8 @@ El runtime necesita Python, Flask y `adb` disponible en el equipo o el backend
 `rish` disponible en el teléfono. Desde la raíz:
 
 ```bash
-python -m pip install -r xio/new/requirements.txt
-python xio/new/server.py
+python3 -m pip install -r xio/new/requirements.txt
+python3 xio/new/server.py
 ```
 
 La resolución por defecto de plugins busca `xio/new-plugins/`. Para despliegue
@@ -41,12 +36,32 @@ en Termux, revisar primero `xio/RUNBOOK.md`, `xio/FACES.md` y
 
 ## Pruebas sin hardware
 
+Las pruebas necesitan `requirements-dev.txt`, no sólo el requirements del
+runtime: trae `pytest`, y `flask` es obligatorio para el puente staged —sin
+Flask ese módulo entero se salta en silencio y sus nueve pruebas no corren.
+
 ```bash
-python -m pytest xio/new-plugins/showcontrol
-python -m pytest tests/test_xio_superficie.py
-python -m pytest tests/test_xio_puente_staged.py
-python -m pytest tests/test_radio_monitor.py
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest tests
 ```
+
+Las diez suites de `showcontrol` se ejecutan con el intérprete, no con pytest:
+insertan su propio directorio en `sys.path` e importan sus vecinos de forma
+plana, y pytest las importa como parte del paquete `showcontrol`, cuyo
+`__init__` necesita `plugins.base` desde `xio/new/`.
+
+```bash
+for t in xio/new-plugins/showcontrol/test_*.py; do python3 "$t" || break; done
+```
+
+Medido sobre Linux con `requirements-dev.txt` instalado: 82 pruebas, 82 pasan
+—4 en `tests/test_xio_superficie.py`, 9 en `tests/test_xio_puente_staged.py` y
+69 en las diez suites de `showcontrol`—. Ninguna toca el teléfono, la red ni
+`adb`.
+
+Este repositorio fija su propio `pytest.ini`. Sin él, pytest sube por encima
+del checkout, adopta la configuración de un directorio padre y deselecciona
+todo: el comando responde `deselected` y sale con código 5 sin ejecutar nada.
 
 Las capacidades marcadas como implementadas no implican que estén instaladas
 o verificadas en el Xiaomi; consultar `xio/CAPACIDADES.md` antes de operar un

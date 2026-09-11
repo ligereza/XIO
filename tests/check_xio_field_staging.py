@@ -22,7 +22,6 @@ REQUIRED_ASSETS = (
     "foh_monitor/__init__.py",
     "foh_monitor/foh_vj_context.json",
     "foh_monitor/static/mapping.html",
-    "foh_monitor/static/resumen.html",
     "rd_field/__init__.py",
     "rd_field/bridge.py",
     "rd_field/static/index.html",
@@ -86,7 +85,6 @@ def main() -> int:
                 'context_actual.json',
                 '"domain": "vj_foh"',
                 'register_route("/mapping"',
-                'register_route("/resumen"',
             ):
                 if marker not in source:
                     errors.append(f"FOH context marker absent: {marker}")

@@ -17,29 +17,15 @@ old APK notes, and historical deployment notes elsewhere in the repository.
 
 | Surface | Host and listener | Client form | Persistence and identity |
 |---|---|---|---|
-| FLUJO engine | Windows portable `C:\IA\flujo` or MAK stationary copy `:8765` | Existing desktop FLUJO UI | Existing engine remains intact; XIO products are not copied into the whole hub |
+| FLUJO Hub | MAK `:8765` on the studio LAN | Browser / existing FLUJO UI | Existing FLUJO Hub state; no new tabs are added for XIO |
 | XIO field host | Xiaomi (currently Termux) `:5000` | One HTTP server with two namespaced web surfaces | State belongs to the device running XIO; the event key is supplied by the host catalog |
-| XIO-RD | `:5000` under `rd_field` | Native RD APK measures; `/view` is the RD hub for browsers | Exact `eventRef`; host-owned RD field data; no implicit event creation |
-| XIO-FOH | `:5000` under `foh_monitor` | XIO host listens to FOH signals; `/view` is the ISKVW/FOH hub for browsers | Exact `eventKey`; host-owned FOH/VJ context and evidence |
+| XIO-RD | `:5000` under `rd_field` | Browser/PWA from any hotspot client; the optional RD APK is only a client | Exact `eventRef`; host-owned RD field data; no implicit event creation |
+| XIO-FOH | `:5000` under `foh_monitor` | Browser/PWA from any hotspot client; no APK required | Exact `eventKey`; host-owned FOH/VJ context and evidence |
 
 There are therefore two separated XIO products, but not four APKs or four HTTP servers. RD and FOH
 share the XIO listener and host storage while remaining separate namespaces and workflows. FOH signal
 inputs such as Art-Net `:6454`, sACN `:5568`, OSC/timecode `:7000`, Chataigne/show-kit UDP, and the
 existing Mapping LED tool are tools or protocols, not extra XIO HTTP services.
-
-### Host modes: offline Xiaomi or PC server
-
-The database belongs to the machine that is running the XIO server; the browser is only a client.
-These are equivalent supported deployments:
-
-| Mode | Server and storage | Xiaomi/client URL |
-|---|---|---|
-| Field/offline | Xiaomi Termux `:5000`; RD/FOH data survives without mobile internet | `http://<IP-XIAOMI>:5000` or the configured host in the RD client |
-| Studio/PC | PC XIO `:5000`; the PC owns the active DB/logs | `http://<IP-PC>:5000`; the Xiaomi opens the same browser/PWA as any other client |
-
-Moving the host moves the active data authority; it does not copy or merge databases implicitly. The
-RD APK is a field client and may be pointed at either host. FOH remains browser/PWA: its active signal
-listener must run on the selected host, while every other phone/tablet only visualizes the host's data.
 
 `127.0.0.1:8765` is a local/FLUJO address only. It must never be used as the hotspot URL for RD or
 FOH. A hotspot client must use the Xiaomi's current `wlan1` address and port `5000`.
@@ -59,15 +45,13 @@ run the same XIO server and own the host data; clients still connect to the curr
 
 ### Product separation
 
-- **XIO-RD** is the Reduciendo Daño field/assistance surface: the native APK measures photos,
-  silhouettes, timestamps, samples and results. `FLUJO-RD` is its separate RD-only browser hub: it
-  visualizes the host database, producer/event ficha and descriptive result graphs.
-- **XIO-FOH** is the personal VJ/ISKVW field surface: its host listens to live-show event context,
-  artist/client, venue/layout, setlist, Mapping LED, Resolume/Chataigne/Showkit inputs, OSC/Art-Net,
-  timecode and timestamps. `FLUJO-ISKVW` is the separate browser hub for those tools and FOH data.
-  It does not collect RD samples or apply the RD flyer rule.
-- **FLUJO** remains the existing engine/backend; these two reduced surfaces are delivered beside it,
-  not as extra tabs in the main engine and not as a copy of the whole repository on Xiaomi.
+- **XIO-RD** is the Reduciendo Daño field/assistance surface: event flyer/catalog selection, photos,
+  timestamps, samples, and results. Its exact event gate prevents duplicate or client-created events.
+- **XIO-FOH** is the personal VJ/ISKVW surface: live-show event context, artist/client, venue/layout,
+  setlist, Mapping LED, Resolume/Chataigne/Showkit inputs, OSC/Art-Net, and timestamps. It may select
+  an existing VJ event independently of the RD flyer rule.
+- **FLUJO** remains the existing Hub and backend; these surfaces consume its existing catalogs/routes
+  where applicable. They do not become new FLUJO tabs.
 
 ---
 

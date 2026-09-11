@@ -35,7 +35,6 @@ class _Logger:
 
 class _Request:
     payload = {}
-    args = {}
 
     @classmethod
     def get_json(cls, silent=False):
@@ -68,23 +67,6 @@ def _plugin(module, root: Path):
     plugin._log_dir_real = str(root / "logs")
     Path(plugin._log_dir_real).mkdir()
     plugin._events = []
-    # The context view always exposes the setlist binding state.  Initialise
-    # the same empty state that a fresh FOH runtime owns before a setlist is
-    # loaded; otherwise this checker fails before exercising context logic.
-    plugin._setlist = {}
-    plugin._tc = {
-        "value": None,
-        "last_seen": 0.0,
-        "last_change": 0.0,
-        "total": 0,
-    }
-    plugin._tc_buckets = {}
-    plugin._auto_setlist_por_tc = lambda value: None
-    plugin._channels = {
-        "artnet": module._Channel("artnet"),
-        "sacn": module._Channel("sacn"),
-        "osc": module._Channel("osc"),
-    }
     plugin._log_lock = threading.Lock()
     plugin._tc_current = lambda: None
     plugin._foh_context_catalog = {}
@@ -108,12 +90,6 @@ def main():
     assert dref_show["showKit"]["setlist"] == "xio/show_kit/setlist_festival_sentir.txt"
     with tempfile.TemporaryDirectory(prefix="xio-foh-context-") as directory:
         plugin = _plugin(module, Path(directory))
-        summary_page = PLUGIN.parent / "static" / "resumen.html"
-        assert summary_page.is_file()
-        _Request.args = {}
-        summary_path = plugin._api_resumen()
-        assert isinstance(summary_path, Path)
-        assert summary_path.name == "resumen.html"
         mapping = plugin._api_mapping()
         assert isinstance(mapping, Path)
         assert mapping.name == "mapping.html"
@@ -126,14 +102,6 @@ def main():
         _Request.payload = {"eventKey": "producer_event:piknic:0"}
         selected = plugin._api_context_post()
         assert selected["current"]["eventKey"] == "producer_event:piknic:0"
-        _Request.payload = {
-            "protocol": "OSC / TC",
-            "detail": "timecode=/timecode",
-            "eventKey": "producer_event:piknic:0",
-        }
-        ingested = plugin._api_ingest()
-        assert ingested["ok"] is True
-        assert ingested["source"] == "xio_foh_apk"
         plugin._log_event("smoke", {"ok": True})
         log_files = list((Path(directory) / "logs").glob("show_*.jsonl"))
         assert log_files
@@ -141,10 +109,6 @@ def main():
         assert event["domain"] == "vj_foh"
         assert event["fohEventKey"] == "producer_event:piknic:0"
         assert "eventRef" not in event
-        _Request.args = {"eventKey": "producer_event:piknic:0"}
-        summary = plugin._api_resumen()
-        assert summary["summary"]["total"] >= 1
-        assert summary["eventKey"] == "producer_event:piknic:0"
 
         _Request.payload = {"eventKey": dref_show["eventKey"]}
         dref_selected = plugin._api_context_post()
