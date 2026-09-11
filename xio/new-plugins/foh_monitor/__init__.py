@@ -427,6 +427,7 @@ class FohMonitorPlugin(PluginBase):
                 self.set_config(k, v)
 
         self.register_route("/status", self._api_status, methods=["GET"])
+        self.register_route("/view", self._api_view, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
         self.register_route("/resumen", self._api_resumen, methods=["GET"])
@@ -1146,6 +1147,14 @@ class FohMonitorPlugin(PluginBase):
             "log_file": self._log_path(),
             "log_dir": self._log_dir_real,
         })
+
+    def _api_view(self):
+        """Serve the reduced FLUJO-ISKVW hub, without importing FLUJO-RD."""
+        from flask import Response, send_file
+        path = os.path.join(os.path.dirname(__file__), "static", "hub.html")
+        if not os.path.isfile(path):
+            return Response("hub ISKVW/FOH no desplegado", status=404, mimetype="text/plain")
+        return send_file(path, mimetype="text/html", conditional=True)
 
     def _api_panel(self):
         from flask import Response

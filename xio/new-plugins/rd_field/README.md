@@ -3,7 +3,8 @@
 This is the RD field surface, separate from `foh_monitor`, `showcontrol` and
 the FLUJO Hub. It is served by the existing XIO listener on port `5000`:
 
-- UI: `/api/plugins/rd_field/view`
+- FLUJO-RD hub (desktop/mobile): `/api/plugins/rd_field/view`
+- Active browser field surface (optional): `/api/plugins/rd_field/field`
 - read/bootstrap: `/api/plugins/rd_field/bootstrap`
 - read samples: `/api/plugins/rd_field/samples?eventRef=...`
 - write samples: `/api/plugins/rd_field/sync`
@@ -48,6 +49,9 @@ implementation; do not hand-edit the copy without updating its source hash.
 
 ## Deployment boundary
 
-This directory is a prepared artifact. It has not been copied to or executed
-on the Xiaomi in the current audit. The existing phone runtime remains
-unchanged until an explicit deployment/test action is authorized.
+The reviewed plugin and both hub bundles are staged under
+`/sdcard/xio_termux/new-plugins/rd_field/` on the current Xiaomi. The running
+Termux process is intentionally not force-restarted by ADB: `run_server.sh`
+copies the staged files into its private runtime on the next normal launch.
+Until that normal launch, the old in-memory/static process remains the live
+surface. The durable host DB and evidence are not replaced by this staging.

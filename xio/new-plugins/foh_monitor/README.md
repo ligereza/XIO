@@ -5,6 +5,7 @@ This is the personal VJ/artistic field surface. It is separate from
 
 The existing XIO listener on port `5000` serves this surface under:
 
+- `/api/plugins/foh_monitor/view` — reduced FLUJO-ISKVW hub (VJ + FOH only)
 - `/api/plugins/foh_monitor/panel` — passive FOH monitor
 - `/api/plugins/foh_monitor/context` — exact VJ event selector
 - `/api/plugins/foh_monitor/context/data` — read-only context API

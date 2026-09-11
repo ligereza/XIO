@@ -45,6 +45,7 @@ class RdFieldPlugin(PluginBase):
         # UI and API are deliberately namespaced below /rd_field.  FOH keeps
         # its own /foh_monitor and showcontrol routes on the same listener.
         self.register_route("/view", self._view, methods=["GET"])
+        self.register_route("/field", self._field_view, methods=["GET"])
         self.register_route("/info", self._info, methods=["GET"])
         self.register_route("/bootstrap", self._bootstrap, methods=["GET"])
         self.register_route("/samples", self._samples, methods=["GET"])
@@ -123,9 +124,20 @@ class RdFieldPlugin(PluginBase):
     # ------------------------------------------------------------------ UI/API
 
     def _view(self):
-        path = self._field_root / "index.html"
+        # The public view is the reduced FLUJO-RD hub. The native APK keeps
+        # the active camera/test workflow; `/field` remains available for the
+        # browser field surface without mixing the two roles.
+        path = self._field_root / "hub.html"
+        if not path.is_file():
+            path = self._field_root / "index.html"
         if not path.is_file():
             return self._json_error("superficie RD no desplegada", 404)
+        return send_file(path, mimetype="text/html")
+
+    def _field_view(self):
+        path = self._field_root / "index.html"
+        if not path.is_file():
+            return self._json_error("superficie de captura RD no desplegada", 404)
         return send_file(path, mimetype="text/html")
 
     def _info(self):
@@ -139,6 +151,7 @@ class RdFieldPlugin(PluginBase):
             "ready": self._ready(),
             "database_present": self._db_path().is_file(),
             "field_surface_present": (self._field_root / "index.html").is_file(),
+            "hub_surface_present": (self._field_root / "hub.html").is_file(),
             "canonical_storage": "host_rd_db_plus_external_evidence",
             "event_policy": "eventRef_must_exist_in_host_bootstrap",
             "auth_boundary": "private_hotspot",
