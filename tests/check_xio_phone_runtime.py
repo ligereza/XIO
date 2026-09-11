@@ -164,7 +164,11 @@ def main() -> int:
         url = f"http://{phone_ip}:{args.port}/api/plugins"
         try:
             with urllib.request.urlopen(url, timeout=4) as response:
-                body = response.read(8192).decode("utf-8", "replace")
+                # The plugin manifest is intentionally larger than 8 KiB on a
+                # full phone deployment.  Reading a prefix produces invalid
+                # truncated JSON and a false NO-GO even when the endpoint is
+                # healthy.
+                body = response.read().decode("utf-8", "replace")
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError:

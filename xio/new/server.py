@@ -271,6 +271,12 @@ def static_files(filename):
     return send_from_directory("static", filename)
 
 
+@app.route("/raider")
+def raider():
+    """Standalone RAIDER tool shared by the RD and FOH XIO surfaces."""
+    return send_from_directory("static", "raider.html")
+
+
 @app.route("/router")
 def router_console():
     """Short link to the connectivity-supervisor live active-router console."""

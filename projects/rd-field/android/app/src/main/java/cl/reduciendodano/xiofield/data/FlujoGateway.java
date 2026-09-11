@@ -24,16 +24,17 @@ import cl.reduciendodano.xiofield.core.SampleSession;
 import cl.reduciendodano.xiofield.core.VisualFeatures;
 
 /**
- * Small LAN client for FLUJO's RD bridge. The mobile app remains usable
+ * Small LAN client for the XIO RD host. The mobile app remains usable
  * offline; synchronization is an explicit projection of the local session.
  */
 public final class FlujoGateway {
-    public static final String DEFAULT_ENDPOINT = "http://192.168.50.2:8765";
-    private static final String USB_TUNNEL_ENDPOINT = "http://127.0.0.1:8765";
+    public static final String XIO_BASE_ENDPOINT = "http://127.0.0.1:5000";
+    public static final String DEFAULT_ENDPOINT = XIO_BASE_ENDPOINT + "/api/plugins/rd_field";
+    private static final String USB_TUNNEL_ENDPOINT = XIO_BASE_ENDPOINT;
     private static final int CONNECT_TIMEOUT_MS = 4500;
     private static final int READ_TIMEOUT_MS = 12000;
     private static final int MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-    // Base64 expands the bytes; keep the raw-photo budget below FLUJO's 8 MB
+    // Base64 expands the bytes; keep the raw-photo budget below XIO's 8 MB
     // request cap after JSON encoding and metadata are added.
     private static final int MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
     private final Context context;
@@ -47,7 +48,7 @@ public final class FlujoGateway {
         executor.execute(() -> {
             try {
                 JSONObject payload = buildPayload(sample);
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/api/rd/muestras/sync", payload, token);
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/sync", payload, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -58,7 +59,7 @@ public final class FlujoGateway {
     public void syncEvent(JSONObject event, String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/api/rd/eventos/sync", event, token);
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/sync", event, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -69,7 +70,7 @@ public final class FlujoGateway {
     public void loadBootstrap(String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("GET", endpoint + "/api/rd/muestras/bootstrap", null, token);
+                JSONObject response = requestWithUsbFallback("GET", endpoint + "/bootstrap", null, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -165,7 +166,7 @@ public final class FlujoGateway {
         java.io.InputStream input = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
         String responseText = input == null ? "{}" : new String(readAll(input), StandardCharsets.UTF_8);
         connection.disconnect();
-        if (status < 200 || status >= 300) throw new IOException("FLUJO HTTP " + status + ": " + responseText);
+        if (status < 200 || status >= 300) throw new IOException("XIO-RD HTTP " + status + ": " + responseText);
         return new JSONObject(responseText);
     }
 

@@ -98,7 +98,7 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
  <div class=bar id=barwrap><i id=barfill></i><span class=pct id=barpct></span></div>
  <div class=nxt id=nx></div>
 </div>
-<div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a></span><span id=sub>...</span></div>
+<div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a><a href=/raider?domain=foh style="color:#fbbf24;font-weight:800;text-decoration:none;padding:6px 8px">RAIDER</a></span><span id=sub>...</span></div>
 <div class=feed id=feed></div>
 <script>
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}

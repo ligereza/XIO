@@ -145,18 +145,21 @@ public final class MainActivity extends AppCompatActivity {
         title.setTypeface(null, Typeface.BOLD);
         content.addView(title);
         TextView event = text("● " + eventContextText(sample) + "  ·  " + (sample.paused ? "Ⅱ" : "●"), 10, sample.paused ? AMBER : TEAL);
-        event.setContentDescription("Cambiar evento FLUJO");
+        event.setContentDescription("Cambiar evento XIO-RD");
         event.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
         event.setPadding(0, dp(5), 0, 0); content.addView(event);
         TextView sampleCode = text(sample.code, 28, TEXT);
         sampleCode.setTypeface(null, Typeface.BOLD); content.addView(sampleCode);
         LinearLayout topActions = new LinearLayout(this); topActions.setGravity(Gravity.END);
-        Button sync = iconButton("⇧", "Sincronizar con FLUJO", SURFACE, TEAL);
+        Button sync = iconButton("⇧", "Sincronizar con XIO-RD", SURFACE, TEAL);
         topActions.addView(sync, new LinearLayout.LayoutParams(dp(44), dp(38)));
+        Button raider = iconButton("▦", "Abrir RAIDER", SURFACE, AMBER);
+        LinearLayout.LayoutParams raiderParams = new LinearLayout.LayoutParams(dp(44), dp(38)); raiderParams.setMargins(dp(5), 0, 0, 0); topActions.addView(raider, raiderParams);
         Button nextSample = iconButton("⊕", "Nueva muestra del mismo evento", SURFACE, TEAL);
         LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(dp(44), dp(38)); nextParams.setMargins(dp(5), 0, 0, 0); topActions.addView(nextSample, nextParams);
         content.addView(topActions, new LinearLayout.LayoutParams(-1, dp(38)));
         sync.setOnClickListener(view -> syncCurrentSample());
+        raider.setOnClickListener(view -> openRaider());
         nextSample.setOnClickListener(view -> startNextSample());
         status = text(statusLine(sample), 11, MUTED);
         status.setPadding(0, dp(2), 0, dp(9)); content.addView(status);
@@ -851,15 +854,25 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void openRaider() {
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse(FlujoGateway.XIO_BASE_ENDPOINT + "/raider?domain=rd"));
+            startActivity(intent);
+        } catch (Exception error) {
+            Toast.makeText(this, "No se pudo abrir RAIDER en XIO", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void syncCurrentSample() {
         loadBootstrapAndMaybeChoose(false, true);
     }
 
     private void loadBootstrapAndMaybeChoose(boolean forcePicker, boolean syncAfter) {
-        Toast.makeText(this, "⇧  consultando FLUJO…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "⇧  consultando XIO-RD…", Toast.LENGTH_SHORT).show();
         flujo.loadBootstrap(FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
             if (!result.isSuccess()) {
-                Toast.makeText(this, "FLUJO · sin conexión", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
                 if (forcePicker) showCreateEventDialog(syncAfter);
                 return;
             }
@@ -870,7 +883,7 @@ public final class MainActivity extends AppCompatActivity {
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
                 else syncCurrentEventThenSample();
             } catch (Exception error) {
-                Toast.makeText(this, "FLUJO · catálogo inválido", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "XIO-RD · catálogo inválido", Toast.LENGTH_LONG).show();
             }
         });
     }
@@ -903,24 +916,6 @@ public final class MainActivity extends AppCompatActivity {
                 } catch (Exception ignored) { }
             }
         }
-        for (RdFieldDb.EventRow row : database.recentEvents()) {
-            if (indexOfEvent(merged, row.id) >= 0) continue;
-            try {
-                JSONObject item = new JSONObject();
-                item.put("event_id", row.id);
-                item.put("event_label_candidate", row.name == null ? row.id : row.name);
-                item.put("link_review_status", row.reviewStatus);
-                item.put("event_origin", "xio_app");
-                item.put("productoras", new JSONArray());
-                if (row.producer != null && !row.producer.trim().isEmpty()) {
-                    JSONObject producer = new JSONObject();
-                    producer.put("productora_slug", row.producer);
-                    producer.put("estado_revision", row.reviewStatus);
-                    item.put("productoras", new JSONArray().put(producer));
-                }
-                merged.put(item);
-            } catch (Exception ignored) { }
-        }
         return merged;
     }
 
@@ -936,36 +931,11 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void showCreateEventDialog(boolean syncAfter) {
-        LinearLayout fields = new LinearLayout(this);
-        fields.setOrientation(LinearLayout.VERTICAL);
-        fields.setPadding(dp(18), 0, dp(18), 0);
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
-        EditText name = eventInput("Nombre del evento · obligatorio", "");
-        EditText venue = eventInput("Venue", "");
-        EditText producer = eventInput("Productora declarada", "");
-        EditText startDate = eventInput("Fecha inicio · YYYY-MM-DD", today);
-        EditText endDate = eventInput("Fecha fin · opcional", "");
-        EditText djs = eventInput("DJs · separados por coma", "");
-        EditText sources = eventInput("Fuentes de triangulación · separadas por coma", "");
-        EditText flyerRef = eventInput("Referencia del flyer · opcional", "");
-        EditText flyerSha256 = eventInput("SHA-256 del flyer · opcional", "");
-        EditText[] inputs = {name, venue, producer, startDate, endDate, djs, sources, flyerRef, flyerSha256};
-        for (EditText input : inputs) {
-            fields.addView(input, new LinearLayout.LayoutParams(-1, dp(48)));
-        }
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(fields);
         new AlertDialog.Builder(this)
-                .setTitle("Nuevo evento XIO")
-                .setMessage("Se guarda primero en el teléfono y queda pendiente si FLUJO no responde.")
-                .setView(scroll)
-                .setNegativeButton("CANCELAR", null)
-                .setPositiveButton("GUARDAR Y SINCRONIZAR", (dialog, which) ->
-                        saveNewEvent(name.getText().toString(), venue.getText().toString(),
-                                producer.getText().toString(), startDate.getText().toString(),
-                                endDate.getText().toString(), djs.getText().toString(),
-                                sources.getText().toString(), flyerRef.getText().toString(),
-                                flyerSha256.getText().toString(), syncAfter))
+                .setTitle("Evento no disponible")
+                .setMessage("XIO-RD no crea eventos desde la mesa. El evento debe existir en la base RD del host y aparecer en el catálogo antes de registrar o sincronizar muestras.")
+                .setPositiveButton("REINTENTAR", (dialog, which) -> loadBootstrapAndMaybeChoose(true, syncAfter))
+                .setNegativeButton("CERRAR", null)
                 .show();
     }
 
@@ -1032,7 +1002,7 @@ public final class MainActivity extends AppCompatActivity {
                         eventContextPending = !"confirmado".equalsIgnoreCase(review);
                         render();
                     }
-                    Toast.makeText(this, "FLUJO ✓ evento guardado", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, "XIO-RD ✓ evento guardado", Toast.LENGTH_LONG).show();
                     if (syncAfter) sendCurrentSample();
                 } else {
                     Toast.makeText(this, "Evento local ✓ · sincronización pendiente", Toast.LENGTH_LONG).show();
@@ -1125,7 +1095,7 @@ public final class MainActivity extends AppCompatActivity {
                 pendingProducer.put(producer, pendingProducer.containsKey(producer) ? pendingProducer.get(producer) || pending : pending);
             }
         } catch (Exception error) {
-            Toast.makeText(this, "FLUJO · catálogo inválido", Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "XIO-RD · catálogo inválido", Toast.LENGTH_LONG).show();
             return;
         }
         LinearLayout grouped = new LinearLayout(this);
@@ -1138,14 +1108,9 @@ public final class MainActivity extends AppCompatActivity {
                 .setView(scroll)
                 .setNegativeButton("CERRAR", null)
                 .create();
-        Button createEvent = actionButton("＋  NUEVO EVENTO LOCAL", SURFACE_RAISED, AMBER);
-        createEvent.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        createEvent.setContentDescription("Crear un evento local sin conexión");
-        grouped.addView(createEvent, new LinearLayout.LayoutParams(-1, dp(48)));
-        createEvent.setOnClickListener(view -> {
-            dialog.dismiss();
-            showCreateEventDialog(syncAfter);
-        });
+        TextView hostOnly = text("Los eventos se preparan en el host RD; esta mesa sólo permite seleccionar uno existente.", 11, MUTED);
+        hostOnly.setPadding(0, dp(8), 0, dp(4));
+        grouped.addView(hostOnly, new LinearLayout.LayoutParams(-1, dp(48)));
         for (Map.Entry<String, List<Integer>> group : byProducer.entrySet()) {
             String pendingLabel = Boolean.TRUE.equals(pendingProducer.get(group.getKey())) ? "  ·  candidato" : "";
             TextView producer = text(capitalize(group.getKey()) + "  ·  " + group.getValue().size() + pendingLabel, 12, AMBER);
@@ -1214,13 +1179,13 @@ public final class MainActivity extends AppCompatActivity {
 
     private void sendCurrentSample() {
         SampleSession sample = engine.snapshot();
-        Toast.makeText(this, "⇧  enviando a FLUJO…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
         flujo.syncSample(sample, FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
-                Toast.makeText(this, "FLUJO ✓  " + sample.code + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "XIO-RD ✓  " + sample.code + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
             } else {
-                Toast.makeText(this, "FLUJO · sin conexión", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
             }
         });
     }

@@ -823,6 +823,17 @@ function navigateTo(page) {
   onNavigate(page);
 }
 
+function openPlugin(id) {
+  const plugin = state.plugins.find(p => p.id === id);
+  const route = plugin?.routes?.find(r => /\/(view|panel)$/.test(r));
+  if (route) {
+    window.location.assign(route);
+    return;
+  }
+  navigateTo('plugins');
+  toast(`Plugin ${id} no expone una vista web`, 'warning');
+}
+
 function onNavigate(page) {
   if (page === 'dashboard') refreshDashboard();
   if (page === 'apps') loadApps();
@@ -1377,7 +1388,7 @@ function renderPlugins() {
         <div class="btn-group">
           ${p.enabled
             ? `<button class="btn btn-sm btn-secondary" onclick="togglePlugin('${p.id}', false)">Disable</button>
-               <button class="btn btn-sm btn-primary" onclick="navigateTo('${p.id}')">Open</button>`
+               <button class="btn btn-sm btn-primary" onclick="openPlugin('${p.id}')">Open</button>`
             : `<button class="btn btn-sm btn-success" onclick="togglePlugin('${p.id}', true)">Enable</button>`
           }
           <button class="btn btn-sm btn-secondary" onclick="reloadPlugin('${p.id}')">🔄</button>
@@ -1395,7 +1406,7 @@ function renderPluginNav() {
   `).join('');
   // Re-attach listeners
   nav.querySelectorAll('.nav-item').forEach(item => {
-    item.addEventListener('click', () => navigateTo(item.dataset.page));
+    item.addEventListener('click', () => openPlugin(item.dataset.page));
   });
 }
 async function togglePlugin(id, enable) {
