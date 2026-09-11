@@ -35,6 +35,7 @@ class _Logger:
 
 class _Request:
     payload = {}
+    args = {}
 
     @classmethod
     def get_json(cls, silent=False):
@@ -92,6 +93,10 @@ def main():
         plugin = _plugin(module, Path(directory))
         summary_page = PLUGIN.parent / "static" / "resumen.html"
         assert summary_page.is_file()
+        _Request.args = {}
+        summary_path = plugin._api_resumen()
+        assert isinstance(summary_path, Path)
+        assert summary_path.name == "resumen.html"
         mapping = plugin._api_mapping()
         assert isinstance(mapping, Path)
         assert mapping.name == "mapping.html"
@@ -111,6 +116,10 @@ def main():
         assert event["domain"] == "vj_foh"
         assert event["fohEventKey"] == "producer_event:piknic:0"
         assert "eventRef" not in event
+        _Request.args = {"eventKey": "producer_event:piknic:0"}
+        summary = plugin._api_resumen()
+        assert summary["summary"]["total"] >= 1
+        assert summary["eventKey"] == "producer_event:piknic:0"
 
         _Request.payload = {"eventKey": dref_show["eventKey"]}
         dref_selected = plugin._api_context_post()
