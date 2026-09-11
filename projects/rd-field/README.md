@@ -26,3 +26,12 @@ Abrir `http://127.0.0.1:4173`. El servidor local permite probar el service worke
 ## Estado de la demo
 
 La primera carga trae registros sintéticos para hacer visible el flujo. Se conservan en el navegador bajo la clave `xio-rd-field-state-v0.1`; no hay llamadas de red ni sincronización automática.
+
+## Host de campo
+
+La APK RD usa por defecto `http://127.0.0.1:5000` cuando el Xiaomi ejecuta XIO
+y conserva sus datos offline. Si un PC reemplaza al Xiaomi como host, el botón
+`⌂` de la APK permite escribir la dirección del PC; los navegadores pueden
+abrir directamente la misma superficie HTML desde ese host. FOH permanece como
+HTML/PWA: sus listeners OSC/Art-Net/sACN/timecode viven en el servidor XIO, no
+en una APK.
