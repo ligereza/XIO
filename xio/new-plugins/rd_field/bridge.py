@@ -39,6 +39,69 @@ IDENTITY_KEYS = {
     "direccion", "address", "fecha_nacimiento", "birthdate",
 }
 
+# Tablas operativas mínimas que el puente XIO consulta. Son aditivas: el
+# catálogo regenerable y la evidencia histórica siguen siendo independientes.
+# Si una instalación antigua ya las tiene, IF NOT EXISTS conserva sus filas.
+XIO_OPERATIONAL_SCHEMA = """
+CREATE TABLE IF NOT EXISTS evento_productoras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evento_ref TEXT NOT NULL,
+    productora_slug TEXT NOT NULL,
+    rol TEXT,
+    metodo TEXT,
+    evidencia TEXT,
+    confianza REAL,
+    estado_revision TEXT
+);
+CREATE TABLE IF NOT EXISTS evento_venues (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evento_ref TEXT NOT NULL,
+    venue_id TEXT,
+    venue_nombre TEXT,
+    metodo TEXT,
+    origen TEXT,
+    confianza REAL,
+    estado_revision TEXT
+);
+CREATE TABLE IF NOT EXISTS mesas_testeo (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    evento_ref TEXT NOT NULL,
+    evento_origen TEXT NOT NULL,
+    numero INTEGER,
+    etiqueta TEXT,
+    origen TEXT NOT NULL,
+    UNIQUE(evento_ref, evento_origen, etiqueta)
+);
+CREATE TABLE IF NOT EXISTS muestras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha TEXT NOT NULL,
+    mesa_id INTEGER,
+    evento_ref TEXT,
+    evento_origen TEXT,
+    codigo_muestra TEXT,
+    sustancia_declarada TEXT NOT NULL,
+    tipo_muestra TEXT,
+    color TEXT,
+    textura TEXT,
+    logo_o_marca TEXT,
+    peso_mg REAL,
+    foto_ref TEXT,
+    notas TEXT,
+    descartada INTEGER DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS muestra_resultados (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    muestra_id INTEGER NOT NULL,
+    reactivo TEXT NOT NULL,
+    resultado_color TEXT,
+    familia_detectada TEXT,
+    coincide_con_declarada INTEGER,
+    adulterante_sospechado TEXT,
+    limitacion TEXT NOT NULL DEFAULT 'presuntivo: senal de presencia, no identidad ni pureza ni dosis',
+    orden INTEGER
+);
+"""
+
 # App-created event drafts live in the same logical RD database, but stay
 # separate from historical source evidence and from quotation templates.
 # `database.build_rd_db()` also preserves this table across rebuilds.
@@ -123,6 +186,7 @@ CREATE INDEX IF NOT EXISTS idx_muestra_capturas_muestra
 
 def ensure_event_schema(conn: sqlite3.Connection) -> None:
     """Create XIO context and canonical signal tables safely."""
+    conn.executescript(XIO_OPERATIONAL_SCHEMA)
     conn.executescript(XIO_EVENT_SCHEMA)
     conn.executescript(XIO_SIGNAL_SCHEMA)
 
