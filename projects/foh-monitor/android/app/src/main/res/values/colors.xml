@@ -1,0 +1,9 @@
+<resources>
+    <color name="foh_background">#0B1012</color>
+    <color name="foh_surface">#172125</color>
+    <color name="foh_teal">#55D6BE</color>
+    <color name="foh_violet">#A78BFA</color>
+    <color name="foh_amber">#F2C96D</color>
+    <color name="foh_text">#EFF7F3</color>
+    <color name="foh_muted">#95A9A1</color>
+</resources>

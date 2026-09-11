@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">XIO FOH · Monitor activo</string>
+    <string name="notification_channel">XIO FOH</string>
+</resources>

@@ -68,6 +68,11 @@ def _plugin(module, root: Path):
     plugin._log_dir_real = str(root / "logs")
     Path(plugin._log_dir_real).mkdir()
     plugin._events = []
+    plugin._channels = {
+        "artnet": module._Channel("artnet"),
+        "sacn": module._Channel("sacn"),
+        "osc": module._Channel("osc"),
+    }
     plugin._log_lock = threading.Lock()
     plugin._tc_current = lambda: None
     plugin._foh_context_catalog = {}
@@ -109,6 +114,14 @@ def main():
         _Request.payload = {"eventKey": "producer_event:piknic:0"}
         selected = plugin._api_context_post()
         assert selected["current"]["eventKey"] == "producer_event:piknic:0"
+        _Request.payload = {
+            "protocol": "OSC / TC",
+            "detail": "timecode=/timecode",
+            "eventKey": "producer_event:piknic:0",
+        }
+        ingested = plugin._api_ingest()
+        assert ingested["ok"] is True
+        assert ingested["source"] == "xio_foh_apk"
         plugin._log_event("smoke", {"ok": True})
         log_files = list((Path(directory) / "logs").glob("show_*.jsonl"))
         assert log_files

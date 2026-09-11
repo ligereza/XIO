@@ -379,6 +379,9 @@ class FohMonitorPlugin(PluginBase):
         "tc_freeze_seconds": 2,     # mismo valor este tiempo con paquetes => congelado
         "log_dir": "/sdcard/xio_termux/foh_logs",
         "battery_delta": 5,        # loguea bateria al cambiar >= esto (%)
+        # auto = server listener en PC, app_proxy en Android/XIO. La APK FOH
+        # recibe los puertos en el dispositivo y entrega eventos por /ingest.
+        "listener_mode": "auto",
         # Read model VJ generado desde FLUJO. No se comparte con RD.
         "foh_context_file": "",
     }
@@ -419,6 +422,7 @@ class FohMonitorPlugin(PluginBase):
         self._foh_context_current = None
         self._foh_context_file = None
         self._foh_context_current_file = None
+        self._listener_mode = "auto"
 
     # ── lifecycle ────────────────────────────────────────────────────
     def on_load(self):
@@ -443,15 +447,22 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/prev", self._api_prev, methods=["POST"])
         self.register_route("/log", self._api_log, methods=["GET"])
         self.register_route("/logs", self._api_logs, methods=["GET"])
+        self.register_route("/ingest", self._api_ingest, methods=["POST"])
         self.register_route("/config", self._api_get_config, methods=["GET"])
         self.register_route("/config", self._api_set_config, methods=["POST"])
 
         self._resolve_log_dir()
         self._load_foh_context()
         self._load_setlist()  # sobrevivir restarts del server en pleno show
-        self._start_listener("artnet", int(self._cfg("artnet_port")), self._parse_artnet)
-        self._start_sacn()
-        self._start_listener("osc", int(self._cfg("osc_port")), self._parse_osc_pkt)
+        self._listener_mode = self._resolve_listener_mode()
+        if self._listener_mode == "server":
+            self._start_listener("artnet", int(self._cfg("artnet_port")), self._parse_artnet)
+            self._start_sacn()
+            self._start_listener("osc", int(self._cfg("osc_port")), self._parse_osc_pkt)
+        else:
+            self._sacn_mode = "delegado a XIO-FOH APK"
+            for channel in self._channels.values():
+                channel.error = "listener delegado a XIO-FOH APK"
         self._probe_audio()
         if self._audio["available"] and self._cfg("audio_enabled"):
             t = threading.Thread(target=self._audio_loop, daemon=True, name="foh-audio")
@@ -460,7 +471,8 @@ class FohMonitorPlugin(PluginBase):
         self._log_event("heartbeat", {"msg": "foh_monitor cargado",
                                       "sacn_mode": self._sacn_mode,
                                       "audio": self._audio["reason"] if not self._audio["available"] else "ok"})
-        self.logger.info("FOH Monitor loaded (artnet=%s sacn=%s[%s] osc=%s audio=%s)" % (
+        self.logger.info("FOH Monitor loaded (mode=%s artnet=%s sacn=%s[%s] osc=%s audio=%s)" % (
+            self._listener_mode,
             self._cfg("artnet_port"), self._cfg("sacn_port"), self._sacn_mode,
             self._cfg("osc_port"),
             "ok" if self._audio["available"] else self._audio["reason"]))
@@ -476,6 +488,16 @@ class FohMonitorPlugin(PluginBase):
 
     def _cfg(self, key):
         return self.get_config(key, self.DEFAULTS.get(key))
+
+    def _resolve_listener_mode(self):
+        configured = (os.environ.get("XIO_FOH_LISTENER_MODE", "").strip()
+                      or str(self._cfg("listener_mode") or "auto").strip()).lower()
+        if configured in ("app", "apk", "app_proxy", "proxy"):
+            return "app_proxy"
+        if configured == "server":
+            return "server"
+        # Termux/Android exposes /sdcard; Windows/Linux PC does not.
+        return "app_proxy" if os.path.isdir("/sdcard") else "server"
 
     # ── registro JSONL ───────────────────────────────────────────────
     def _resolve_log_dir(self):
@@ -620,10 +642,10 @@ class FohMonitorPlugin(PluginBase):
         date_str = date_str or datetime.now().strftime("%Y%m%d")
         return os.path.join(self._log_dir_real, f"show_{date_str}.jsonl")
 
-    def _log_event(self, tipo, detalle):
+    def _log_event(self, tipo, detalle, event_key=None):
         """Una linea JSON al archivo del dia (rotacion implicita por nombre)."""
         # cada evento lleva el ultimo timecode vigente pa correlacion post-show
-        current_key = (self._foh_context_current or {}).get("eventKey")
+        current_key = event_key if event_key is not None else (self._foh_context_current or {}).get("eventKey")
         ev = {"ts": datetime.now().isoformat(timespec="seconds"), "tipo": tipo,
               "detalle": detalle, "tc": self._tc_current(), "domain": "vj_foh",
               "fohEventKey": current_key}
@@ -1137,6 +1159,7 @@ class FohMonitorPlugin(PluginBase):
         return jsonify({
             "domain": "vj_foh",
             "channels": {k: c.snapshot(window) for k, c in self._channels.items()},
+            "listener_mode": self._listener_mode,
             "timecode": self._tc_state(),
             "sacn_mode": self._sacn_mode,
             "audio": audio,
@@ -1147,6 +1170,27 @@ class FohMonitorPlugin(PluginBase):
             "log_file": self._log_path(),
             "log_dir": self._log_dir_real,
         })
+
+    def _api_ingest(self):
+        """Accept one throttled signal record from the native XIO-FOH APK.
+
+        The APK owns the UDP ports on Android; this endpoint lets the existing
+        XIO host append the same evidence to the ISKVW JSONL view. An explicit
+        eventKey must already exist in the VJ catalog when supplied.
+        """
+        from flask import jsonify, request
+        data = request.get_json(silent=True) or {}
+        protocol = str(data.get("protocol") or "").strip()
+        detail = str(data.get("detail") or "").strip()
+        event_key = str(data.get("eventKey") or "").strip()
+        if protocol not in ("Art-Net", "sACN", "OSC / TC") or not detail:
+            return jsonify({"ok": False, "error": "protocol y detail son obligatorios"}), 400
+        if event_key and not any(e.get("eventKey") == event_key for e in self._foh_context_catalog.get("events", [])):
+            return jsonify({"ok": False, "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
+        channel_name = {"Art-Net": "artnet", "sACN": "sacn", "OSC / TC": "osc"}[protocol]
+        self._channels[channel_name].hit(f"APK {detail}")
+        self._log_event("app_signal", {"source": "xio_foh_apk", "protocol": protocol, "detail": detail}, event_key or None)
+        return jsonify({"ok": True, "domain": "vj_foh", "source": "xio_foh_apk", "eventKey": event_key or (self._foh_context_current or {}).get("eventKey")})
 
     def _api_view(self):
         """Serve the reduced FLUJO-ISKVW hub, without importing FLUJO-RD."""

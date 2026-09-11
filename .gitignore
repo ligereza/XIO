@@ -38,6 +38,9 @@ xio/**/*_autosave/
 projects/rd-field/android/.gradle/
 projects/rd-field/android/**/build/
 projects/rd-field/android/local.properties
+projects/foh-monitor/android/.gradle/
+projects/foh-monitor/android/**/build/
+projects/foh-monitor/android/local.properties
 projects/rd-field/bridge/*.log
 projects/rd-field/bridge/*.err
 projects/rd-field/bridge/xiaomi_sync.png

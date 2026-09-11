@@ -32,6 +32,12 @@ La primera carga trae registros sintéticos para hacer visible el flujo. Se cons
 La APK RD usa por defecto `http://127.0.0.1:5000` cuando el Xiaomi ejecuta XIO
 y conserva sus datos offline. Si un PC reemplaza al Xiaomi como host, el botón
 `⌂` de la APK permite escribir la dirección del PC; los navegadores pueden
-abrir directamente la misma superficie HTML desde ese host. FOH permanece como
-HTML/PWA: sus listeners OSC/Art-Net/sACN/timecode viven en el servidor XIO, no
-en una APK.
+abrir directamente la misma superficie HTML desde ese host.
+
+XIO-FOH es un producto Android separado (`cl.xio.foh`) con menú propio. Su
+servicio en primer plano escucha Art-Net `6454`, sACN `5568` y OSC/timecode
+`7000`, guarda `xio_foh.db` offline y entrega eventos al host mediante
+`/api/plugins/foh_monitor/ingest` cuando vuelve la conectividad. El HTML/PWA de
+`foh_monitor/view` es el hub visualizador ISKVW, no la APK activa. En Termux,
+`foh_monitor` entra en modo `app_proxy` automáticamente para no competir por
+los mismos puertos; en PC conserva el modo servidor.
