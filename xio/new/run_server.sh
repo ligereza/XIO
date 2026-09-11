@@ -7,21 +7,61 @@
 pkill -f 'python server.py' 2>/dev/null
 sleep 1
 
-rm -rf "$HOME/xioserver" "$HOME/xioplugins"
+rm -rf "$HOME/xioserver"
 cp -r /sdcard/xio_termux/new "$HOME/xioserver"
-cp -r /sdcard/xio_termux/new-plugins "$HOME/xioplugins"
-rm -rf "$HOME/xioserver/__pycache__" "$HOME/xioserver/plugins/__pycache__" "$HOME/xioserver/data"
+mkdir -p "$HOME/xioplugins"
+# `new-plugins` is an overlay: the field package contains RD/FOH plus existing
+# support plugins when their runtime fixes are part of the same field release.
+# Preserve the existing plugin library and replace only delivered folders.
+cp -r /sdcard/xio_termux/new-plugins/. "$HOME/xioplugins/" || exit 1
+rm -rf "$HOME/xioserver/__pycache__" "$HOME/xioserver/plugins/__pycache__"
 
 cd "$HOME/xioserver" || exit 1
 export XIO_BACKEND=rish
 export RISH_PATH="$HOME/rish"
 export PLUGINS_DIR="$HOME/xioplugins"
-# Untrusted hosts that must never drive xio (e.g. the local-LLM box that could pull a
-# poisoned model). Comma-separated source IPs. MAK/dell-11m = 192.168.198.85 (hotspot).
-export XIO_DENY_IPS="192.168.198.85"
+# Durable host state.  The runtime copies above are disposable; these paths
+# survive code redeploys and are the canonical owners of RD/FOH evidence.
+export XIO_DATA_DIR="${XIO_DATA_DIR:-/sdcard/xio_termux/data}"
+export XIO_RD_PERSIST="${XIO_RD_PERSIST:-/sdcard/xio_termux/rd_field}"
+export XIO_FOH_LOG_DIR="${XIO_FOH_LOG_DIR:-/sdcard/xio_termux/foh_logs}"
+mkdir -p "$XIO_DATA_DIR" "$XIO_RD_PERSIST" "$XIO_FOH_LOG_DIR" || exit 1
+if [ -f "$XIO_RD_PERSIST/rd.db" ]; then
+  echo "RD host snapshot: present ($XIO_RD_PERSIST/rd.db)"
+else
+  echo "RD host snapshot: ABSENT; rd_field will remain read-only/unavailable until a reviewed rd.db snapshot is staged"
+fi
+
+# RD NODO show mode: keep the existing XIO control plane off the public
+# hotspot. The public service runs separately on port 8088 and is read-only.
+RD_NODO_ENABLED="${RD_NODO_ENABLED:-0}"
+[ -f /sdcard/xio_termux/rd_nodo/enabled ] && RD_NODO_ENABLED=1
+if [ "$RD_NODO_ENABLED" = "1" ]; then
+  export XIO_BIND_HOST="${XIO_BIND_HOST:-127.0.0.1}"
+else
+  export XIO_BIND_HOST="${XIO_BIND_HOST:-0.0.0.0}"
+fi
+
+# The private hotspot password is the normal access boundary for the RD/FOH
+# field surfaces. Keep the optional denylist unset by default; an operator may
+# provide a comma-separated list explicitly when a public/shared network
+# requires it. Do not hardcode MAK or a historical hotspot subnet here.
+export XIO_DENY_IPS="${XIO_DENY_IPS:-}"
 
 nohup python server.py > /sdcard/xio_termux/server.log 2>&1 &
 echo "launched pid $! (log: /sdcard/xio_termux/server.log)"
+
+if [ "$RD_NODO_ENABLED" = "1" ]; then
+  sh "$HOME/xioserver/rd_nodo_start.sh" >> /sdcard/xio_termux/server.log 2>&1 || \
+    echo "RD NODO public service not started; public_pack.json is missing or invalid"
+  if ! pgrep -f 'rd_nodo_public_supervisor.sh' >/dev/null 2>&1; then
+    nohup sh "$HOME/xioserver/rd_nodo_public_supervisor.sh" \
+      >> /sdcard/xio_termux/rd_nodo_public.log 2>&1 &
+  fi
+else
+  pkill -f 'rd_nodo_public_server.py' 2>/dev/null
+  pkill -f 'rd_nodo_public_supervisor.sh' 2>/dev/null
+fi
 
 # --- auto-heal + persistencia (Shizuku SPOF) ---
 # Mantiene la CPU de Termux despierta (evita que el doze congele el loop del watchdog).

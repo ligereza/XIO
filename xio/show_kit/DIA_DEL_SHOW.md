@@ -5,8 +5,9 @@ Señales de HOY: **TC** (LTC por M-Audio → Chataigne → OSC) + **VISUAL** (Re
 El tile **LUCES quedará N/D (gris) toda la noche y eso es lo esperado, no una falla**
 (solo cambia si el técnico acepta el apéndice del final).
 
-IP del teléfono en modo hotspot: **192.168.127.125** (verifícala en el paso 3;
-si difiere, usa la real en todos lados).
+La IP del teléfono en modo hotspot **cambia entre sesiones**. El canal UDP de
+OSC/Art-Net/sACN no dependerá de ella: usa broadcast IPv4. La IP actual sólo se
+necesita para abrir el panel HTTP o ejecutar un diagnóstico.
 
 ---
 
@@ -24,16 +25,20 @@ Comprobar que quedó arriba (desde la laptop, con la IP real del teléfono):
 http://<IP_TELEFONO>:5000/api/plugins/foh_monitor/panel
 ```
 
-**El server NO arranca solo después de un reboot.** Es un hueco conocido
-(ver `xio/HOTSPOT_SHOW_RUNBOOK.md`): si el teléfono se apaga —por batería a 0,
-por ejemplo— al volver hay que lanzarlo **a mano** con ese comando.
+**Tras un reboot no se debe dar por garantizado el server.** Termux:Boot y los
+supervisores intentan recuperarlo, pero sin un host ADB o una prueba de salud
+exitosa hay que abrir Termux y lanzarlo **a mano** con ese comando. Si el teléfono
+se apagó —por batería a 0, por ejemplo— la comprobación manual es obligatoria.
 Pasó de verdad el 2026-07-24: el teléfono se quedó sin batería a las 14:30,
 rebooteó, y hubo que arrancarlo a mano antes del show.
 
-**La IP cambia sola.** En un venue con DHCP el teléfono agarra IP nueva. Si el
-panel no responde, buscar la IP real antes que nada: en el teléfono
-`Ajustes > WiFi > (red) > IP`, o escanear desde la laptop. Después hay que
-ponerla en Chataigne (`Modules > OSC > OSC Output > remoteHost`), puerto 7000.
+**La IP cambia sola.** En un venue con DHCP el teléfono agarra IP nueva. Para
+HTTP, `check_show.bat` descubre y valida el gateway actual del hotspot. No se debe
+editar Chataigne por este motivo: sus salidas OSC del kit usan
+ `255.255.255.255:7000` y sólo hay que seleccionar la interfaz WiFi del hotspot.
+ Si el soundcheck demuestra que ese broadcast global no cruza el hotspot, usar el
+ broadcast dirigido `.255` de la subred que Android asignó en esa sesión; no
+ guardar ese valor en Chataigne ni en el repositorio.
 Pasó el 2026-07-24: `10.195.40.198` → `10.134.166.149`.
 
 ---
@@ -62,8 +67,8 @@ token, prueba de ruta y autorizacion del show.
 
 ### Único punto de contacto
 Chataigne emite el MISMO mensaje `/timecode` a **dos destinos**: la propia
-laptop (127.0.0.1:7001, pal cue_engine) y el teléfono (192.168.127.125:7000,
-pal tile TC y el registro). Es un envío en paralelo, no una cadena: el
+laptop (127.0.0.1:7001, pal cue_engine) y el broadcast del hotspot
+(`255.255.255.255:7000`, pal tile TC y el registro). Es un envío en paralelo, no una cadena: el
 teléfono no reenvía nada al engine ni el engine le pide nada al teléfono.
 **Cero dependencia mutua.**
 
@@ -72,11 +77,13 @@ teléfono no reenvía nada al engine ni el engine le pide nada al teléfono.
 1. **Teléfono**: enciende el hotspot del Xiaomi. Conéctalo a corriente/powerbank.
    Si el server no estuviera corriendo: abrir Termux y `sh /sdcard/xio_termux/run_server.sh`.
 2. **Laptop**: conéctala al WiFi del hotspot.
-3. **Chequeo GO/NO-GO**: doble click a `check_show.bat` (esta carpeta).
+3. **Chequeo GO/NO-GO**: ejecutar `check_show.bat` (esta carpeta). Descubre el
+   gateway actual del hotspot y valida el server. Si Windows no publica esa
+   ruta, pasar la IP actual como override: `check_show.bat <IP_ACTUAL>`.
    Todo verde (los AVISOS amarillos de audio/setlist no bloquean) → seguir.
    Anota la IP que imprime: es la que se dicta a todo el mundo.
 4. **Chataigne**: abrir `festival_sentir.noisette` (esta carpeta). Ya trae el
-   módulo OSC apuntando a 192.168.127.125:7000 y el módulo Sound Card con LTC
+   módulo OSC apuntando a 255.255.255.255:7000 y el módulo Sound Card con LTC
    habilitado. Quedan **2 pasos manuales** (el generador validado del repo no
    cubre mappings, no se improvisa):
    - Módulo **Sound Card** → Inspector → seleccionar la **M-Audio** como
@@ -87,8 +94,8 @@ teléfono no reenvía nada al engine ni el engine le pide nada al teléfono.
        con el valor del input (string o float, el monitor acepta ambos).
    Dale play al LTC de la sesión: el tile TC del panel debe correr en verde.
 5. **Resolume** (laptop de visuales): Preferences → OSC → **OSC Output**:
-   IP `192.168.127.125`, puerto `7000`. Con eso el tile VISUAL se enciende
-   cuando Resolume manda actividad.
+   destino `255.255.255.255`, puerto `7000`, usando la interfaz WiFi del
+   hotspot. Con eso el tile VISUAL se enciende cuando Resolume manda actividad.
 6. **Setlist**: editar `setlist_festival_sentir.txt` (un tema por línea) y
    doble click a `cargar_setlist.bat`.
 7. **Panel en el teléfono**: abrir en el navegador del Xiaomi
@@ -99,7 +106,8 @@ teléfono no reenvía nada al engine ni el engine le pide nada al teléfono.
 
 ## Líneas exactas para dictar
 
-- Al de visuales (Resolume): «OSC Output a **192.168.127.125 puerto 7000**».
+- Al de visuales (Resolume): «OSC Output a **255.255.255.255 puerto 7000** y
+  selecciona la WiFi del hotspot».
 - El TC ya sale de nuestra Chataigne, nadie más configura nada.
 - (Luces: solo si acepta el técnico — ver apéndice.)
 
@@ -110,10 +118,10 @@ teléfono no reenvía nada al engine ni el engine le pide nada al teléfono.
 | Panel congelado / no refresca | Refrescar la página del navegador. |
 | Tile TC rojo CONGELADO | El LTC se detuvo o Chataigne dejó de mapear: revisar play de la sesión y el mapping. |
 | Tile TC rojo CAÍDO | No llegan paquetes: ¿laptop sigue en el WiFi del hotspot? ¿Chataigne abierto? |
-| Nada llega de un equipo | Verificar que ESE equipo está EN la red del hotspot (no en el WiFi del venue) y que apunta a la IP del paso 3. |
+| Nada llega de un equipo | Verificar que ESE equipo está EN la red del hotspot (no en el WiFi del venue), que usa la interfaz WiFi correcta y que el destino UDP es el broadcast. |
 | Server caído (check_show en rojo) | En el teléfono: abrir Termux → `sh /sdcard/xio_termux/run_server.sh` (vuelve en ~15 s; el supervisor también lo revive solo en ~90 s). |
 | Hotspot caído | `hotspot_watch` lo revive solo en 30–90 s. Si no: Ajustes → Hotspot, un toque al toggle. |
-| Post-show | Bajar el registro: `curl -O http://192.168.127.125:5000/api/plugins/foh_monitor/log` (cada evento lleva el timecode vigente para correlacionar con la sesión). |
+| Post-show | Bajar el registro usando la IP HTTP actual: `curl -O http://<IP_ACTUAL>:5000/api/plugins/foh_monitor/log` (cada evento lleva el timecode vigente para correlacionar con la sesión). |
 
 ## Batería para el show
 
@@ -157,8 +165,8 @@ laptop; la laptop reenvía por WiFi al teléfono (`relay_luces.bat`).
 Si en vez de Art-Net ofrecen sACN, es el mismo relay (reenvía ambos puertos);
 en la MA3 sería Network Protocols → sACN → output unicast a la laptop.
 
-Nota técnica: el relay reenvía los paquetes tal cual por unicast a
-`192.168.127.125:6454/5568`; el monitor solo escucha, jamás emite hacia el rig.
+Nota técnica: el relay reenvía los paquetes tal cual por broadcast IPv4 a
+`255.255.255.255:6454/5568`; el monitor solo escucha, jamás emite hacia el rig.
 
 ---
 
@@ -171,7 +179,7 @@ Cadena: LTC (M-Audio) → Chataigne → OSC `/timecode` a DOS destinos → el
 
 | Puerto | Quién escucha | Quién le manda |
 |---|---|---|
-| 192.168.127.125:**7000** | xio / foh_monitor (teléfono) | Chataigne (`/timecode`) y Resolume (OSC output, actividad VISUAL) |
+| 255.255.255.255:**7000** | xio / foh_monitor (teléfono) | Chataigne (`/timecode`) y Resolume (OSC output, actividad VISUAL) |
 | 127.0.0.1:**7001** | cue_engine (esta laptop) | Chataigne (`/timecode`, segundo target) |
 | 127.0.0.1:**7000** | Resolume Arena (OSC **Input**, default) | cue_engine (connects de clips) |
 
@@ -187,7 +195,7 @@ distintas; en la laptop el engine escucha en 7001.
    - En el módulo OSC → **OSC Outputs → añadir un segundo output**:
      `127.0.0.1` puerto `7001` (mismo mensaje llega al engine y al teléfono).
 2. Resolume Arena: Preferences → OSC → **OSC Input ON, puerto 7000** (default)
-   y OSC Output → `192.168.127.125:7000` (pal tile VISUAL del teléfono).
+   y OSC Output → `255.255.255.255:7000` (pal tile VISUAL del teléfono).
 3. Revisar el mapeo: abrir `cue_map_dref.json` — la tabla la genera
    `py map_dref.py` (re-correr si cambió la composición). Hoy: 21 cues,
    19 con clip; **"Último Día" y "Pegó fuerte" NO tienen clip en la

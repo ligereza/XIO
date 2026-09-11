@@ -8,6 +8,10 @@
      nunca hot-reload de un plugin con rutas nuevas).
   3. Verificar: GET http://TELEFONO:5000/mak_link/ping -> {"ok": true}
 
+Antes de activar `iniciar_push()`, definir `MAK_HUB` con la direccion actual
+del Hub (por ejemplo `http://<IP-MAK>:8900/api/xio_push`). No se conserva una
+IP historica del hotspot o de la red de casa.
+
 Que hace: invierte la direccion del puente. En vez de que MAK pregunte,
 el TELEFONO reporta su estado a MAK cada 5 minutos (POST al hub de MAK).
 Ventaja: sobrevive cambios de subred del hotspot y NAT; MAK nunca necesita
@@ -20,6 +24,7 @@ escriba /home/mak/xio_puente/estado.json con el mismo formato del monitor
 plugin solo loguea el fallo y no molesta.
 """
 import json
+import os
 import threading
 import time
 import urllib.request
@@ -28,7 +33,10 @@ from flask import Blueprint, jsonify
 
 bp = Blueprint("mak_link", __name__, url_prefix="/mak_link")
 
-MAK_HUB = "http://192.168.95.85:8900/api/xio_push"  # IP wifi de MAK
+# MAK is not on a stable hotspot address either. This staged bridge is opt-in;
+# require the current destination from the session environment instead of
+# silently posting to an old home-network IP.
+MAK_HUB = os.environ.get("MAK_HUB", "").strip().rstrip("/")
 INTERVALO = 300
 
 
@@ -38,6 +46,9 @@ def ping():
 
 
 def _reportar():
+    if not MAK_HUB:
+        print("[mak_link] falta MAK_HUB; push desactivado para esta sesion")
+        return
     while True:
         try:
             propio = urllib.request.urlopen(

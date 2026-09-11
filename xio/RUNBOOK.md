@@ -29,18 +29,19 @@ the status matrix before a show.
 
 ## 1. Variables
 
-Fill in / verify before each show -- the hotspot subnet's 3rd octet is NOT stable
-across sessions (seen as `.127.x` in the main watcher, `.198.x` for the MAK box in
-a different session). Do not assume a value cold: run `ip addr show wlan1` (on
-device) or check `dumpsys wifi` for the live subnet, then update these.
+Fill in / verify before each show -- the hotspot address and subnet are session
+state, not configuration. Android can change the prefix and the subnet mask
+between sessions (historical observations include `192.168.*` and the current
+session is `10.248.64.39/24`). Do not assume a value cold: run `ip addr show
+wlan1` (on device) or check `dumpsys wifi` for the live address.
 
 ```bash
 PHONE_SERIAL=8299e66f                              # USB serial, stable across reboots
-PHONE_WIFI_ADB=192.168.127.125:5555                # wifi-adb target -- VERIFY subnet each show
+PHONE_WIFI_ADB=<IP_ACTUAL>:5555                   # wifi-adb target -- VERIFY subnet each show
 LOOPBACK_ADB=127.0.0.1:5555                        # on-device loopback target (watchdogs use this)
 XIO_PORT=5000                                       # Flask server port
 ADB=/c/IA/flujo/xio/actual/platform-tools/adb.exe   # PC-side adb.exe
-XIO_DENY_IPS=192.168.198.85                         # MAK/dell-11m LLM box -- denied source (see 5)
+XIO_DENY_IPS=                                      # opcional; unset en hotspot privado (see 5)
 ```
 Source: `xio/new/pc_reboot_watch.sh` (SERIAL, WIFI, ADB), `xio/new/server.py`
 (port 5000, `app.run(host="0.0.0.0", port=5000)`), `xio/new/run_server.sh`
@@ -53,7 +54,7 @@ down; flag to the user rather than guess.
 
 Architecture (3 layers, only layer 1 has to survive):
 ```
-Capa 1  LAN offline (hotspot AP 192.168.127.x)  <- carga el show. Sin senal 5G funciona.
+Capa 1  LAN offline (subred asignada al hotspot en esta sesion)  <- carga el show. Sin senal 5G funciona.
 Capa 2  server xio (Flask, Termux+Shizuku)       <- control/management. Nice-to-have.
 Capa 3  internet 5G + LLM operador (futuro)       <- solo cuando hay senal (venue-dependiente).
 ```
@@ -188,14 +189,14 @@ Source: `xio/HOTSPOT_SHOW_RUNBOOK.md`, `xio/new/hotspot_watch.sh`,
 Two independent layers on the phone (server.py), plus a separate plugin-level
 sandbox.
 
-**Layer A -- source denylist (isolate the MAK/dell-11m LLM box):** untrusted
-hosts on the hotspot (e.g. a local-LLM box that could pull a poisoned
-model/script and scan the LAN) must never drive xio, not even for reads.
-Enforced ON THE PHONE (a compromise of the denied host cannot lift it, unlike a
-firewall rule living on that host itself); DNS/internet stay separate services
-so a denied host keeps its own connectivity, it just cannot reach xio:
+**Layer A -- optional source denylist:** the private hotspot password is the
+normal access boundary for the RD/FOH field surfaces. `XIO_DENY_IPS` is an
+explicit per-show option only when the network is shared with an untrusted
+host; it is unset by default and must not contain MAK or a historical hotspot
+address. When deliberately configured, it is enforced on the phone before any
+handler runs:
 ```bash
-export XIO_DENY_IPS="192.168.198.85"     # set in run_server.sh before launch
+export XIO_DENY_IPS="<IP_AISLAR>[,<OTRA_IP>]"
 ```
 A request from a denied source gets `403 {"error":"forbidden","reason":"This
 source is denied by the xio controller."}` before any handler runs.
@@ -314,13 +315,32 @@ feed de eventos, bateria. Auto-refresh 2s; wake-lock best-effort (tocar la
 pantalla una vez lo arma; igual sube el timeout de pantalla en Ajustes pa show).
 
 **Apuntar las consolas al telefono:**
-- Art-Net: output del nodo/consola -> IP del telefono (o broadcast de la subred
-  del hotspot, p.ej. `192.168.x.255`), puerto 6454.
-- sACN: UNICAST a la IP del telefono es lo garantizado. El plugin hace join
+- Art-Net: output del nodo/consola -> broadcast IPv4 del hotspot, puerto 6454;
+  si el equipo no admite broadcast, usa la IP actual del telefono obtenida en
+  el paso de diagnostico, nunca una IP historica.
+- sACN: UNICAST a la IP actual del telefono es lo garantizado. El plugin hace join
   multicast 239.255.u.u (universos config `sacn_universes`, default 1-16)
   best-effort; Android sin MulticastLock puede no entregar multicast -- el modo
   real queda anotado en `/status` (`sacn_mode`).
-- OSC: Resolume -> Preferences -> OSC -> OSC Output: IP del telefono, puerto 7000.
+- OSC: Chataigne/Resolume -> OSC Output: `255.255.255.255`, puerto 7000,
+  seleccionando la interfaz WiFi del hotspot. Si el software bloquea el
+  broadcast global, usa el broadcast `.255` de la subred actual.
+
+**Consultar la red de la sesion:**
+
+`connectivity_supervisor` calcula estos valores desde la direccion actual de
+`wlan1`; no depende de una IP historica. Su status expone
+`hotspot_address`, `hotspot_network` y `hotspot_broadcast`:
+
+```bash
+curl http://<IP-XIO-ACTUAL>:5000/api/plugins/connectivity_supervisor/status
+```
+
+La URL HTTP anterior siempre necesita la IP actual (o un nombre resoluble en
+esa red). Los protocolos UDP del show deben preferir broadcast para que un
+cambio de IP no rompa Chataigne/Resolume; si se usa unicast como fallback, se
+obtiene de `wlan1` durante esa misma sesion y no se guarda en un preset
+permanente.
 
 **Setlist:**
 ```bash
@@ -354,7 +374,7 @@ canal nunca visto = gris N/D (esperado si no se cablea); visto y perdido =
 rojo OFF (alerta real).
 
 Config Chataigne (5 min): abrir `xio/show_kit/festival_sentir.noisette`
-(generado con el builder validado del repo: modulo OSC -> 192.168.127.125:7000
+(generado con el builder validado del repo: modulo OSC -> 255.255.255.255:7000
 + Sound Card con LTC on). Manual restante: elegir la M-Audio como input del
 Sound Card y agregar un Mapping `Sound Card > LTC > Time` -> `OSC Custom
 Message /timecode`. Paso a paso + kit completo del dia (check GO/NO-GO,
@@ -379,24 +399,43 @@ sh setup_boot.sh          # installs Termux:Boot launcher -> ~/.termux/boot/00-x
 sh setup_runcommand.sh    # allow-external-apps=true (headless RUN_COMMAND post-reboot)
 ```
 
-**Deploy / redeploy the server (idempotent, re-run any time):**
+**Deploy / redeploy the server (replaces the runtime copy; do not run during a show):**
 ```bash
 sh /sdcard/xio_termux/run_server.sh
 ```
-This kills any running `python server.py`, wipes and re-copies
-`/sdcard/xio_termux/new` -> `$HOME/xioserver` and
-`/sdcard/xio_termux/new-plugins` -> `$HOME/xioplugins`, exports
+This intentionally kills any running `python server.py`, rebuilds the
+generated server runtime (not the durable host data), and copies
+`/sdcard/xio_termux/new` -> `$HOME/xioserver`. The plugin directory is an
+overlay: `/sdcard/xio_termux/new-plugins/.` is copied into the existing
+`$HOME/xioplugins/`, so a focused package containing RD/FOH and existing
+support fixes cannot delete the other existing plugins. It then exports
 `XIO_BACKEND=rish`, `RISH_PATH=$HOME/rish`, `PLUGINS_DIR=$HOME/xioplugins`,
-`XIO_DENY_IPS` (section 5), launches `server.py` (log:
+`XIO_DATA_DIR=/sdcard/xio_termux/data`, `XIO_RD_PERSIST=/sdcard/xio_termux/rd_field`,
+and `XIO_FOH_LOG_DIR=/sdcard/xio_termux/foh_logs`,
+the optional `XIO_DENY_IPS` (section 5), launches `server.py` (log:
 `/sdcard/xio_termux/server.log`), then starts the 3 watchdogs from section 4.
+
+For XIO-RD, stage a reviewed copy of the existing canonical FLUJO database at
+`/sdcard/xio_termux/rd_field/rd.db` before the field session. The current MAK
+source is `/home/mak/flujo/data/rd.db`; the small `rd_datos.db` is not a valid
+bootstrap for this plugin. If the snapshot is absent, `/rd_field/info` reports
+not-ready and `/rd_field/bootstrap`/`sync` fail closed; no event is invented.
+The field database is the host-owned offline session copy and is reconciled
+through the existing RD workflow after the event. The launcher only reports
+this precondition; it never creates or overwrites the database.
+Before any phone write, run the read-only gate from the repository root:
+`python tests/check_xio_field_staging.py --rd-db /home/mak/flujo/data/rd.db`.
+It must report `FIELD_STAGING=PASS`; a merely existing but stale/incomplete
+`rd.db` is a NO-GO.
 
 CONTRADICTION FLAGGED: `xio/new/README.md` documents a SINGLE `plugins/`
 directory (dashboard architecture diagram + "Estructura del Proyecto"), and
 `xio/new/plugins/` on disk only holds `_template`, `battery_care`,
 `example_tool` (3 dirs). The ACTUAL deploy path is split: server code from
-`xio/new/` and the full 25+ plugin set from the SEPARATE `xio/new-plugins/`
-directory, wired via `PLUGINS_DIR=$HOME/xioplugins` in `run_server.sh`. Treat
-`xio/new/plugins/` as stale/legacy, not what ships; `xio/new-plugins/` is live.
+`xio/new/` and the live plugin library from the SEPARATE `xio/new-plugins/`
+directory, wired via `PLUGINS_DIR=$HOME/xioplugins` in `run_server.sh`. The
+runtime copy is updated by overlay, so a focused field package does not remove
+unrelated plugins. Treat `xio/new/plugins/` as stale/legacy, not what ships.
 
 **Quick local dev run (off-device, PC only, not the show path):**
 ```bash
@@ -425,11 +464,8 @@ Disparo:
 bash airdrop_push.sh /sdcard/Download/entrega.zip "mensaje corto"
 ```
 Verde = PR `airdrop/<tag>` lista para mergear desde el navegador del telefono.
-Source: xio/new/airdrop_push.sh, presente en este repositorio.
-El detalle del canal (AGENT_AIRDROP_PROTOCOL.md, seccion "Canal sin PC") y el
-workflow airdrop_gate.yml que recibe el push viven en el repositorio de origen
-vibecodeine, no aqui: el token de arriba esta acotado a ese repositorio. El
-unico workflow de este repositorio es .github/workflows/build-xio-apk.yml.
+Detalle del canal: docs/AGENT_AIRDROP_PROTOCOL.md, seccion "Canal sin PC".
+Source: xio/new/airdrop_push.sh + .github/workflows/airdrop_gate.yml
 
 ## 8. Source docs
 

@@ -3,11 +3,13 @@
 
 Escenario: la grandMA3 (o cualquier consola) manda Art-Net/sACN por cable al
 puerto ethernet de la laptop; este relay reenvia los paquetes TAL CUAL (sin
-tocar un byte) por la WiFi del hotspot al telefono xio, unicast.
+tocar un byte) por la WiFi del hotspot al telefono xio. Por defecto usa
+broadcast IPv4 para no depender de la IP cambiante del Xiaomi; se puede pasar
+un destino unicast si el venue lo exige.
 
 Uso:
-    py xio/show_kit/artnet_relay.py                    # destino hotspot default
-    py xio/show_kit/artnet_relay.py 10.195.40.198      # otro destino
+    py xio/show_kit/artnet_relay.py                    # broadcast del hotspot
+    py xio/show_kit/artnet_relay.py <IP_ACTUAL>        # unicast explicito
 o doble click en relay_luces.bat. Ctrl+C pa salir limpio.
 
 Solo stdlib (socket + threads). Muestra contador de paquetes en vivo pa ver
@@ -20,7 +22,8 @@ import sys
 import threading
 import time
 
-DEST = sys.argv[1] if len(sys.argv) > 1 else "192.168.127.125"
+BROADCAST = "255.255.255.255"
+DEST = sys.argv[1] if len(sys.argv) > 1 else BROADCAST
 PORTS = {"Art-Net": 6454, "sACN": 5568}
 counters = {name: 0 for name in PORTS}
 errors = {}
@@ -37,6 +40,8 @@ def relay(name, port):
         errors[name] = f"no pude bindear :{port} ({e}) -- cierra el programa que lo usa"
         return
     tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Mismo modo one-to-many que el OSC broadcast usado por Chataigne.
+    tx.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     while not stop.is_set():
         try:
             data, addr = rx.recvfrom(2048)
@@ -44,7 +49,7 @@ def relay(name, port):
             continue
         except OSError:
             break
-        if addr[0] == DEST:
+        if DEST != BROADCAST and addr[0] == DEST:
             continue  # jamas re-reenviar lo que viene del propio telefono
         try:
             tx.sendto(data, (DEST, port))
@@ -64,10 +69,10 @@ def local_ips():
 
 
 def main():
-    print(f"\n== RELAY LUCES: consola (cable) -> {DEST} (WiFi) ==")
+    print(f"\n== RELAY LUCES: consola (cable) -> {DEST} (WiFi/broadcast) ==")
     print(f" IPs locales de esta laptop: {', '.join(local_ips()) or '?'}")
     print("   (la consola debe apuntar su salida Art-Net a la IP del CABLE de esta laptop)")
-    print(" Reenviando Art-Net :6454 y sACN :5568 tal cual, unicast. Ctrl+C pa salir.\n")
+    print(" Reenviando Art-Net :6454 y sACN :5568 tal cual. Ctrl+C pa salir.\n")
     threads = [threading.Thread(target=relay, args=(n, p), daemon=True) for n, p in PORTS.items()]
     for t in threads:
         t.start()

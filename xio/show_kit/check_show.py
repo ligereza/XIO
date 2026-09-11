@@ -2,19 +2,31 @@
 """Chequeo pre-show de un comando: GO/NO-GO contra el xio (foh_monitor).
 
 Uso (Windows):
-    py xio/show_kit/check_show.py                 # IP hotspot por defecto
-    py xio/show_kit/check_show.py 10.195.40.198   # otra IP (LAN de casa)
+    py xio/show_kit/check_show.py                 # descubre el gateway actual
+    py xio/show_kit/check_show.py <IP-XIO>        # override explicito
+    set XIO_HOST=<IP-XIO> && py xio/show_kit/check_show.py
 o doble click en check_show.bat.
 
 Solo stdlib. Cada item imprime [GO] verde o [NO-GO] rojo con el detalle real.
 """
 import json
+import os
 import sys
 import urllib.request
 
-HOST = sys.argv[1] if len(sys.argv) > 1 else "192.168.127.125"
+sys.path.insert(0, os.path.dirname(__file__))
+from discover_xio import DiscoveryError, resolve_host
+
+requested_host = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+try:
+    HOST, DISCOVERY = resolve_host(requested_host)
+except DiscoveryError as exc:
+    print(f"XIO_DISCOVERY_ERROR: {exc}")
+    print("Conecta este equipo al hotspot del Xiaomi o pasa la IP actual una sola vez.")
+    sys.exit(2)
 BASE = f"http://{HOST}:5000"
 FOH = f"{BASE}/api/plugins/foh_monitor"
+LOCAL_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 G, R, Y, N = "\033[92m", "\033[91m", "\033[93m", "\033[0m"
 try:
@@ -33,7 +45,7 @@ def item(name, ok, detail="", warn=False):
 
 
 def get(url, timeout=6):
-    with urllib.request.urlopen(url, timeout=timeout) as r:
+    with LOCAL_OPENER.open(url, timeout=timeout) as r:
         return r.status, r.read()
 
 
@@ -42,7 +54,8 @@ def get_json(url):
     return status, json.loads(body)
 
 
-print(f"\n== CHEQUEO PRE-SHOW xio @ {HOST} ==\n")
+print(f"\n== CHEQUEO PRE-SHOW xio @ {HOST} ==")
+print(f"   host resuelto por: {DISCOVERY.get('source')}\n")
 
 # 1. server responde
 try:
@@ -110,10 +123,9 @@ else:
 item("Registro JSONL", bool(st.get("log_file")), st.get("log_file", ""))
 
 # IP pa las consolas
-hotspot = HOST.startswith("192.168.")
-print(f"\n IP pa consolas/Chataigne/Resolume: {G}{HOST}{N}"
-      + ("" if hotspot else f" {Y}(OJO: no parece IP de hotspot; en show debe ser 192.168.x.x){N}"))
-print(f"   Art-Net -> {HOST}:6454 | sACN unicast -> {HOST}:5568 | OSC/TC -> {HOST}:7000")
+print(f"\n IP HTTP actual pa el panel XIO: {G}{HOST}{N}")
+print("   Art-Net/sACN -> broadcast IPv4 del hotspot (o destino explicito del relay)")
+print("   OSC/TC -> 255.255.255.255:7000 (selecciona la interfaz WiFi del hotspot en Chataigne)")
 print(f"   Panel FOH: http://{HOST}:5000/api/plugins/foh_monitor/panel")
 
 ok = all(results)

@@ -8,6 +8,53 @@ isolation) NEVER coexist on the same network. Code-execution services are archit
 
 ---
 
+## CURRENT FIELD SURFACE CONTRACT — 2026-09-11
+
+This is the current contract for the two field surfaces. It takes precedence over old IP examples,
+old APK notes, and historical deployment notes elsewhere in the repository.
+
+### Hosts, listeners, and boundaries
+
+| Surface | Host and listener | Client form | Persistence and identity |
+|---|---|---|---|
+| FLUJO Hub | MAK `:8765` on the studio LAN | Browser / existing FLUJO UI | Existing FLUJO Hub state; no new tabs are added for XIO |
+| XIO field host | Xiaomi (currently Termux) `:5000` | One HTTP server with two namespaced web surfaces | State belongs to the device running XIO; the event key is supplied by the host catalog |
+| XIO-RD | `:5000` under `rd_field` | Browser/PWA from any hotspot client; the optional RD APK is only a client | Exact `eventRef`; host-owned RD field data; no implicit event creation |
+| XIO-FOH | `:5000` under `foh_monitor` | Browser/PWA from any hotspot client; no APK required | Exact `eventKey`; host-owned FOH/VJ context and evidence |
+
+There are therefore two separated XIO products, but not four APKs or four HTTP servers. RD and FOH
+share the XIO listener and host storage while remaining separate namespaces and workflows. FOH signal
+inputs such as Art-Net `:6454`, sACN `:5568`, OSC/timecode `:7000`, Chataigne/show-kit UDP, and the
+existing Mapping LED tool are tools or protocols, not extra XIO HTTP services.
+
+`127.0.0.1:8765` is a local/FLUJO address only. It must never be used as the hotspot URL for RD or
+FOH. A hotspot client must use the Xiaomi's current `wlan1` address and port `5000`.
+
+### Dynamic hotspot rule
+
+The Xiaomi currently shares mobile data through its hotspot. Its address is session state and may
+change every time the hotspot is restarted or Android reallocates the subnet. The observed address
+must be discovered live (`ip addr show wlan1` on the phone, or the existing ADB/gateway discovery
+tools); no operational file may promote an observed address to a permanent XIO URL. Broadcast and
+show-kit discovery must likewise derive the current interface/network rather than reuse an old
+`192.168.*` address.
+
+The hotspot password is the field access boundary. RD and FOH do not add a login, token, or extra
+security layer. A future memoryless router can replace the Xiaomi, but one connected device must then
+run the same XIO server and own the host data; clients still connect to the current router-host address.
+
+### Product separation
+
+- **XIO-RD** is the Reduciendo Daño field/assistance surface: event flyer/catalog selection, photos,
+  timestamps, samples, and results. Its exact event gate prevents duplicate or client-created events.
+- **XIO-FOH** is the personal VJ/ISKVW surface: live-show event context, artist/client, venue/layout,
+  setlist, Mapping LED, Resolume/Chataigne/Showkit inputs, OSC/Art-Net, and timestamps. It may select
+  an existing VJ event independently of the RD flyer rule.
+- **FLUJO** remains the existing Hub and backend; these surfaces consume its existing catalogs/routes
+  where applicable. They do not become new FLUJO tabs.
+
+---
+
 ## FACE A — Home / Studio (dev)
 
 **Setting:** A fully private LAN. Owner's machines only. Geographically: the studio.
@@ -42,8 +89,8 @@ network interface is the Xiaomi phone's hotspot.
 ### Membership
 | Device | Role | Network | Notes |
 |---|---|---|---|
-| Xiaomi phone | Standalone Termux server (xio:5000), on-device route/hub | 192.168.127.x (hotspot AP) | Everything runs ON the phone. NO external codex dependency. |
-| Team clients (~32 devices) | FOH phones, tablets, laptops, mixing board controllers, lights | 192.168.127.x | Zero AP isolation; any client can sniff other clients' traffic. NO code execution on these. |
+| Xiaomi phone | Standalone Termux server (xio:5000), on-device route/hub | Subred dinámica del hotspot | Everything runs ON the phone. NO external codex dependency. |
+| Team clients (~32 devices) | FOH phones, tablets, laptops, mixing board controllers, lights | Misma subred dinámica | Zero AP isolation; any client can sniff other clients' traffic. NO code execution on these. |
 | Windows PC | NOT present | (disconnected) | Remains at studio; cannot reach or control the show hotspot |
 | MAK Linux box | NOT present | (disconnected) | Stays home; codex/research unreachable from the venue |
 
@@ -85,7 +132,7 @@ At startup (`run_server.sh`), the phone's current IP (or the hotspot subnet, if 
     ports are not part of the LAN contract.
   - Watchdogs + Shizuku run to support the studio dev loop.
   
-- **Face B indicators:** Hotspot is ON (checked with `dumpsys wifi` or `ip addr show wlan1`), IP in range `192.168.127.x` OR `192.168.198.x`.
+- **Face B indicators:** Hotspot is ON (checked with `dumpsys wifi` or `ip addr show wlan1`); the actual interface address is session state and must be read live.
   - xio server disables MAK-facing endpoints (codex is unreachable).
   - Showcontrol plugin wires XIO_SHOWCONTROL_TOKEN if set (public show security).
   - Watchdogs focus on keeping the show alive (hotspot, battery, server restart).
@@ -124,7 +171,4 @@ This lets us design each face independently:
 - `xio/RUNBOOK.md` section 5 (Security -- aislar MAK) for on-phone source denylist + guarded endpoints
 - `xio/HOTSPOT_SHOW_RUNBOOK.md` for full Face B show-day architecture and self-heal loops
 - `xio/CAPACIDADES.md` for the distinction between repository capability and Xiaomi runtime verification
-- "Las reglas de vida" rule 2 (El teléfono es sagrado) describes Face A's
-  relationship to MAK. That document is not in this repository: it stayed in
-  the origin monorepo, and `cultura/mak_plataforma/` here holds only
-  `mak-xio.service`, `WAKE_ON_LAN.md` and `xio_evidence.py`.
+- `cultura/mak_plataforma/GENESIS.md` "Las reglas de vida" rule 2 (El teléfono es sagrado) — describes Face A's relationship to MAK

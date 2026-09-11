@@ -27,7 +27,7 @@ set -u
 
 ADB="/c/IA/flujo/xio/actual/platform-tools/adb.exe"
 SERIAL="8299e66f"                       # USB serial (stable across reboots)
-WIFI="192.168.127.125:5555"
+WIFI="${PHONE_WIFI_ADB:-}"             # optional override; hotspot IP is dynamic
 LIB="/data/app/~~yX8VZY_1lHCIcZ-fg1no1w==/moe.shizuku.privileged.api-OrtcmTP5ZTXHLD7tYjZJBA==/lib/arm64/libshizuku.so"
 LOG="/c/IA/flujo/xio/new/pc_reboot_watch.log"
 INTERVAL=15
@@ -62,6 +62,13 @@ uptime_s(){ sh_usb 'cut -d. -f1 /proc/uptime' | tr -d ' \r\n'; }
 server_up(){ [ "$(sh_usb 'curl -s -m 5 http://127.0.0.1:5000/api/plugins >/dev/null 2>&1 && echo up')" = "up" ]; }
 shizuku_up(){ [ "$(sh_usb 'ps -A 2>/dev/null | grep shizuku_server | grep -v grep | wc -l' | tr -d ' \r\n')" != "0" ]; }
 hotspot_up(){ [ "$(sh_usb 'ip -o addr show wlan1 2>/dev/null | grep -c "inet "' | tr -d ' \r\n')" != "0" ]; }
+
+current_wifi_target(){
+  [ -n "$WIFI" ] && { printf '%s\n' "$WIFI"; return 0; }
+  local ip
+  ip="$(sh_usb 'ip -o -4 addr show wlan1 2>/dev/null | awk "{print \\$4}" | cut -d/ -f1 | head -1' | tr -d ' \r\n')"
+  [ -n "$ip" ] && printf '%s:5555\n' "$ip"
+}
 
 reenable_hotspot(){  # HyperOS does NOT restore the hotspot on boot and no non-root
   # command re-enables the user's tether (cmd wifi start-softap does NOT tether).
@@ -101,7 +108,7 @@ start_server_dance(){  # drive Termux (no PIN); Termux:Boot is the headless back
 }
 
 recover(){
-  local up ok=0 i hs; up="$(uptime_s)"
+  local up ok=0 i hs wifi_target; up="$(uptime_s)"
   log "RECOVERY start (uptime=${up}s)"
   notify "Reboot detectado (uptime ${up}s). Recuperando por USB..."
   # 1) Shizuku
@@ -110,10 +117,15 @@ recover(){
     log "Shizuku re-armed"; sleep 4
   fi
   # 2) restore wifi-adb (on-device watchdogs + LAN reachability)
+  wifi_target="$(current_wifi_target)"
   MSYS_NO_PATHCONV=1 "$ADB" -s "$SERIAL" tcpip 5555 >/dev/null 2>&1
   sleep 3
-  "$ADB" connect "$WIFI" >/dev/null 2>&1
-  log "tcpip 5555 restored"
+  if [ -n "$wifi_target" ]; then
+    "$ADB" connect "$wifi_target" >/dev/null 2>&1
+    log "tcpip 5555 restored at $wifi_target"
+  else
+    log "tcpip 5555 restored but no current wlan1 address was available"
+  fi
   # 3) HOTSPOT FIRST -- it is the user's ONLY internet, and an ntfy only reaches their
   #    iPhone AFTER the hotspot is back (the iPhone needs it). So re-enabling the
   #    hotspot IS the fix; notifying to "go tap it" can never arrive. HyperOS doesn't

@@ -26,6 +26,7 @@ leaves, and keep the phone's own hotspot from silently dying.
 
 from plugins.base import PluginBase
 import json
+import ipaddress
 import os
 import re
 import subprocess
@@ -113,7 +114,10 @@ class ConnectivitySupervisorPlugin(PluginBase):
         "poll_interval": 20,      # seconds between read-only sweeps
         "stale_after": 60,        # no sighting for this long => "dropped"
         "ap_iface": "wlan1",      # hotspot LAN interface (see `ip addr`)
-        "ap_prefix": "192.168.",  # only count clients on the hotspot subnet
+        # Empty means derive the network from the current IPv4 on ap_iface.
+        # Android may allocate a different hotspot subnet on every session;
+        # keep an explicit value only as a diagnostic override.
+        "ap_prefix": "",
         "bt_watch": False,        # poll BT too (slow dumpsys); /bt endpoint works on-demand regardless
         "notify": True,           # best-effort on-device notification on events
         "triggers_enabled": False,  # gate for shell-command triggers (OFF by default)
@@ -242,14 +246,22 @@ class ConnectivitySupervisorPlugin(PluginBase):
         `cmd wifi list-tethered-clients` throws SecurityException (denied) and the
         dnsmasq lease file is SELinux-walled, so neither is used."""
         iface = self._cfg("ap_iface")
-        prefix = self._cfg("ap_prefix")
+        hotspot = self._hotspot_details()
+        network = hotspot["network"]
+        # If wlan1 has no current IPv4, its neighbor cache may still contain
+        # stale entries. Treat it as no active hotspot clients.
+        if network is None:
+            return {}
         clients = {}
         for line in self._sh(f"ip neigh show dev {iface}").splitlines():
             parts = line.split()
             if not parts:
                 continue
             ip = parts[0]
-            if prefix and not ip.startswith(prefix):
+            try:
+                if ipaddress.ip_address(ip) not in network:
+                    continue
+            except ValueError:
                 continue
             mac = None
             if "lladdr" in parts:
@@ -260,6 +272,41 @@ class ConnectivitySupervisorPlugin(PluginBase):
             if mac and state not in ("FAILED", "INCOMPLETE"):
                 clients[mac] = {"ip": ip, "state": state, "mac_type": self._mac_kind(mac)}
         return clients
+
+    def _hotspot_details(self):
+        """Return the live hotspot IPv4/network/broadcast, never a stale default.
+
+        The interface address is session state on Android.  An old persisted
+        ``ap_prefix`` is ignored when it does not contain the current address,
+        so a previous show's subnet cannot hide clients on today's hotspot.
+        """
+        iface = self._cfg("ap_iface")
+        raw = self._ipv4_map().get(iface, "")
+        if not raw:
+            return {"address": "", "network": None, "network_text": "", "broadcast": ""}
+        try:
+            interface = ipaddress.ip_interface(raw)
+        except ValueError:
+            return {"address": "", "network": None, "network_text": "", "broadcast": ""}
+
+        network = interface.network
+        configured = str(self._cfg("ap_prefix") or "").strip()
+        if configured:
+            try:
+                candidate = ipaddress.ip_network(configured, strict=False)
+                if interface.ip in candidate:
+                    network = candidate
+            except ValueError:
+                # Backward-compatible prefix form, but only while it matches
+                # this session's address. A stale 192.168.* value is ignored.
+                if str(interface.ip).startswith(configured):
+                    network = interface.network
+        return {
+            "address": str(interface.ip),
+            "network": network,
+            "network_text": str(network),
+            "broadcast": str(network.broadcast_address),
+        }
 
     def _scan_bt(self):
         """Informational: MACs/names seen in the BT manager dump (bonded/known).
@@ -495,6 +542,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
     # ── API handlers ─────────────────────────────────────────────────
     def _api_status(self):
         from flask import jsonify
+        hotspot = self._hotspot_details()
         with self._lock:
             devs = list(self._devices.values())
             tracked = len(self._devices)
@@ -502,6 +550,9 @@ class ConnectivitySupervisorPlugin(PluginBase):
         return jsonify({
             "hotspot_iface": self._cfg("ap_iface"),
             "hotspot_up": self._infra["hotspot_up"],       # cached from last poll -- no rish, no lock
+            "hotspot_address": hotspot["address"],
+            "hotspot_network": hotspot["network_text"],
+            "hotspot_broadcast": hotspot["broadcast"],
             "internet": self._infra["internet"],
             "health": {k: self._health.get(k) for k in ("level", "temp_c", "status", "charging")},
             "watchdogs": self._watchdogs,

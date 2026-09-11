@@ -36,8 +36,12 @@ app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500MB upload limit
 
 # ── Controller ───────────────────────────────────────────────────────
 ctrl: XiaomiController = None
-data_dir = Path(__file__).parent / "data"
-data_dir.mkdir(exist_ok=True)
+_configured_data_dir = os.environ.get("XIO_DATA_DIR", "").strip()
+data_dir = (Path(_configured_data_dir).expanduser()
+            if _configured_data_dir else Path(__file__).parent / "data")
+# Runtime code is replaceable; host state is not.  The phone launcher points
+# this at /sdcard/xio_termux/data so a code redeploy cannot erase the state.
+data_dir.mkdir(parents=True, exist_ok=True)
 
 # ── Plugin System ────────────────────────────────────────────────────
 plugin_context = None
@@ -236,7 +240,7 @@ atexit.register(shutdown_plugins)
 
 
 # ── Macro storage (core feature, not a plugin) ───────────────────────
-macros_file = Path(__file__).parent / "data" / "macros.json"
+macros_file = data_dir / "macros.json"
 
 
 def load_macros() -> list:
@@ -265,6 +269,12 @@ def index():
 @app.route("/static/<path:filename>")
 def static_files(filename):
     return send_from_directory("static", filename)
+
+
+@app.route("/raider")
+def raider():
+    """Standalone RAIDER tool shared by the RD and FOH XIO surfaces."""
+    return send_from_directory("static", "raider.html")
 
 
 @app.route("/router")
@@ -820,4 +830,9 @@ if __name__ == "__main__":
     # Initialize plugins before starting server
     init_plugins()
 
-    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+    app.run(
+        host=os.environ.get("XIO_BIND_HOST", "0.0.0.0"),
+        port=5000,
+        debug=False,
+        threaded=True,
+    )
