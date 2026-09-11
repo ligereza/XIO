@@ -30,7 +30,7 @@ def main() -> None:
     assert 'android:name=".FohCaptureService"' in manifest
     assert "FOREGROUND_SERVICE" in manifest
     assert 'Foh Monitor' not in activity  # own menu, not a copied web label
-    for marker in ("MENÚ FOH", "INICIAR ESCUCHA", "ABRIR HUB ISKVW", "MAPPING LED", "SHOWKIT"):
+    for marker in ("FOH / ISKVW", "INICIAR ESCUCHA", "HUB ISKVW", "MAPPING", "SHOWKIT"):
         assert marker in activity, marker
     for marker in ("ACTION_START", "startForeground", "FohListener", "xio_foh.db"):
         assert marker in (service + store), marker

@@ -598,6 +598,7 @@ class FohMonitorPlugin(PluginBase):
             "source": self._foh_context_catalog.get("source", {}),
             "current": self._foh_context_current,
             "events": self._foh_context_catalog.get("events", []),
+            "setlistBinding": self._setlist_binding_view(),
             "event_policy": "fohEventKey_must_exist_in_vj_catalog",
             "rd_is_separate": True,
         }
@@ -637,6 +638,47 @@ class FohMonitorPlugin(PluginBase):
             pass
         except Exception as e:
             self.logger.error(f"foh setlist load failed: {e}")
+
+    def _setlist_binding_view(self):
+        """Describe the exact relationship between setlist and FOH context."""
+        owner = str(self._setlist.get("fohEventKey") or "").strip()
+        current = str((self._foh_context_current or {}).get("eventKey") or "").strip()
+        if not self._setlist.get("songs"):
+            status = "not_loaded"
+        elif owner and owner == current:
+            status = "bound"
+        elif owner:
+            status = "conflict"
+        else:
+            status = "unbound"
+        return {"status": status, "fohEventKey": owner or None,
+                "contextMatch": bool(owner and current and owner == current),
+                "songs": len(self._setlist.get("songs") or [])}
+
+    def _bind_unowned_setlist_to_context(self, selected):
+        """Bind a legacy unowned setlist after explicit exact-event selection.
+
+        Existing songs, index, durations and timestamps are preserved. A
+        different existing owner is never silently overwritten.
+        """
+        key = str((selected or {}).get("eventKey") or "").strip()
+        owner = str(self._setlist.get("fohEventKey") or "").strip()
+        if not self._setlist.get("songs"):
+            return {"status": "not_loaded", "fohEventKey": owner or None}
+        if owner:
+            return {"status": "already" if owner == key else "conflict",
+                    "fohEventKey": owner}
+        kit = (selected or {}).get("showKit") or {}
+        setlist_ref = str(kit.get("setlist") or "").strip() if isinstance(kit, dict) else ""
+        if not setlist_ref:
+            return {"status": "no_kit", "fohEventKey": None}
+        self._setlist["fohEventKey"] = key
+        self._save_setlist()
+        self._log_event("setlist_context_bound", {
+            "fohEventKey": key, "setlist": setlist_ref,
+            "reason": "exact_context_selected_for_unowned_setlist",
+        }, key)
+        return {"status": "bound", "fohEventKey": key, "setlist": setlist_ref}
 
     def _log_path(self, date_str=None):
         date_str = date_str or datetime.now().strftime("%Y%m%d")
@@ -783,7 +825,17 @@ class FohMonitorPlugin(PluginBase):
 
     def _tc_hit(self, data):
         """Registra un paquete de timecode: primer arg string o float."""
-        val = self._osc_first_arg(data)
+        self._record_tc_value(self._osc_first_arg(data))
+
+    def _record_tc_value(self, val):
+        """Registra un valor TC recibido por OSC o por el puente APK.
+
+        El timecode de alta frecuencia no se vuelca frame por frame: se
+        conserva en memoria para estado/pps y las transiciones se escriben en
+        el JSONL con `ts` y `tc`, igual que el resto de la evidencia FOH.
+        """
+        if val is None:
+            return
         now = time.time()
         tc = self._tc
         tc["total"] += 1
@@ -1187,8 +1239,11 @@ class FohMonitorPlugin(PluginBase):
             return jsonify({"ok": False, "error": "protocol y detail son obligatorios"}), 400
         if event_key and not any(e.get("eventKey") == event_key for e in self._foh_context_catalog.get("events", [])):
             return jsonify({"ok": False, "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
-        channel_name = {"Art-Net": "artnet", "sACN": "sacn", "OSC / TC": "osc"}[protocol]
-        self._channels[channel_name].hit(f"APK {detail}")
+        if protocol == "OSC / TC" and detail.startswith("timecode="):
+            self._record_tc_value(detail.split("=", 1)[1])
+        else:
+            channel_name = {"Art-Net": "artnet", "sACN": "sacn", "OSC / TC": "osc"}[protocol]
+            self._channels[channel_name].hit(f"APK {detail}")
         self._log_event("app_signal", {"source": "xio_foh_apk", "protocol": protocol, "detail": detail}, event_key or None)
         return jsonify({"ok": True, "domain": "vj_foh", "source": "xio_foh_apk", "eventKey": event_key or (self._foh_context_current or {}).get("eventKey")})
 
@@ -1314,7 +1369,8 @@ class FohMonitorPlugin(PluginBase):
             "dateIso": selected.get("dateIso"),
             "venueName": selected.get("venueName"),
         })
-        return jsonify(self._foh_context_view())
+        binding = self._bind_unowned_setlist_to_context(selected)
+        return jsonify({**self._foh_context_view(), "setlistBinding": binding})
 
     def _api_manifest(self):
         """PWA manifest: 'Agregar a pantalla de inicio' abre el panel fullscreen

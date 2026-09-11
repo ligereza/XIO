@@ -47,6 +47,43 @@ def test_timecode_only_bundle_updates_timecode_without_visual_activity():
     assert plugin._tc["total"] == 1
 
 
+def test_apk_timecode_bridge_updates_tc_without_marking_visual_channel():
+    plugin = _plugin()
+    plugin._record_tc_value("00:00:12:00")
+
+    assert plugin._tc["value"] == "00:00:12:00"
+    assert plugin._tc["total"] == 1
+    assert plugin._tc_buckets
+
+
+def test_exact_context_binds_unowned_setlist_without_resetting_show_state():
+    plugin = _plugin()
+    saved = []
+    logged = []
+    plugin._setlist = {
+        "songs": ["00:00:00:00 intro", "00:01:00:00 tema"],
+        "durations": [60.0, 90.0],
+        "index": 1,
+        "loaded_at": "2026-09-11T10:00:00",
+        "advanced_at": "2026-09-11T10:05:00",
+        "fohEventKey": None,
+    }
+    plugin._foh_context_current = {"eventKey": "vj_show:test-2026-09-11"}
+    plugin._save_setlist = lambda: saved.append(dict(plugin._setlist))
+    plugin._log_event = lambda *args: logged.append(args)
+
+    result = plugin._bind_unowned_setlist_to_context({
+        "eventKey": "vj_show:test-2026-09-11",
+        "showKit": {"setlist": "xio/show_kit/test.txt"},
+    })
+
+    assert result["status"] == "bound"
+    assert plugin._setlist["fohEventKey"] == "vj_show:test-2026-09-11"
+    assert plugin._setlist["index"] == 1
+    assert plugin._setlist["loaded_at"] == "2026-09-11T10:00:00"
+    assert saved and logged
+
+
 def test_mixed_bundle_updates_timecode_and_counts_visual_address():
     plugin = _plugin()
     packet = _osc_bundle(

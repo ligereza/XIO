@@ -16,7 +16,9 @@ public final class FohCaptureService extends Service {
     public static final String ACTION_STATUS = "cl.xio.foh.STATUS";
     private FohListener listener;
     private FohLogStore store;
+    private FohNativeServer nativeServer;
     private WifiManager.MulticastLock multicastLock;
+    private long lastStatusAt;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -39,7 +41,15 @@ public final class FohCaptureService extends Service {
             @Override public void onChanged() { sendStatus(null); }
             @Override public void onError(String message) { sendStatus(message); }
             @Override public void onPacket(String protocol, String detail) { sendPacketToHost(protocol, detail); }
+            @Override public void onSetlistIndexChanged(int index) {
+                getSharedPreferences("xio_foh", MODE_PRIVATE).edit().putInt("setlistIndex", index).apply();
+            }
         });
+        // XIO-FOH is self-hosting on the private hotspot. The APK UI is native;
+        // this HTTP surface is only for colleagues' browsers and the existing
+        // FLUJO-ISKVW visualizer, so no PC or Termux process is required.
+        nativeServer = new FohNativeServer(this, store, listener);
+        nativeServer.start();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -50,10 +60,15 @@ public final class FohCaptureService extends Service {
     }
 
     private void sendStatus(String error) {
+        long now = System.currentTimeMillis();
+        if (error == null && now - lastStatusAt < 1000) return;
+        lastStatusAt = now;
         Intent status = new Intent(ACTION_STATUS);
         status.setPackage(getPackageName());
         status.putExtra("running", listener != null && listener.isRunning());
+        status.putExtra("server", nativeServer != null && nativeServer.isRunning());
         status.putExtra("logCount", store == null ? 0 : store.count());
+        if (nativeServer != null) status.putExtra("localStatus", nativeServer.localStatusJson().toString());
         if (error != null) status.putExtra("error", error);
         sendBroadcast(status);
     }
@@ -74,6 +89,7 @@ public final class FohCaptureService extends Service {
 
     @Override public void onDestroy() {
         if (listener != null) listener.stop();
+        if (nativeServer != null) nativeServer.stop();
         if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
         if (store != null) store.close();
         super.onDestroy();

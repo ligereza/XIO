@@ -68,6 +68,18 @@ def _plugin(module, root: Path):
     plugin._log_dir_real = str(root / "logs")
     Path(plugin._log_dir_real).mkdir()
     plugin._events = []
+    # The context view always exposes the setlist binding state.  Initialise
+    # the same empty state that a fresh FOH runtime owns before a setlist is
+    # loaded; otherwise this checker fails before exercising context logic.
+    plugin._setlist = {}
+    plugin._tc = {
+        "value": None,
+        "last_seen": 0.0,
+        "last_change": 0.0,
+        "total": 0,
+    }
+    plugin._tc_buckets = {}
+    plugin._auto_setlist_por_tc = lambda value: None
     plugin._channels = {
         "artnet": module._Channel("artnet"),
         "sacn": module._Channel("sacn"),

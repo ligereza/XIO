@@ -2,16 +2,50 @@ plugins {
     id "com.android.application"
 }
 
+def fohSource = rootProject.file("../../../xio/new-plugins/foh_monitor")
+def fohAssets = file("$buildDir/generated/foh-assets")
+
+tasks.register("syncFohAssets", Sync) {
+    from(new File(fohSource, "static/hub.html")) { rename { "hub.html" } }
+    from(new File(fohSource, "static/mapping.html")) { rename { "mapping.html" } }
+    from(new File(fohSource, "static/resumen.html")) { rename { "resumen.html" } }
+    from(new File(fohSource, "foh_vj_context.json"))
+    from(new File(rootProject.projectDir, "../../../xio/show_kit/setlist_festival_sentir.txt")) { rename { "setlist_festival_sentir.txt" } }
+    from(new File(rootProject.projectDir, "../../../xio/show_kit/setlist_durations_dref.json")) { rename { "setlist_durations_dref.json" } }
+    from(new File(rootProject.projectDir, "../../../xio/new/static/raider.html")) { rename { "raider.html" } }
+    into(fohAssets)
+
+    doLast {
+        // Keep browser surfaces byte-derived from the actual FOH plugin. This
+        // avoids inventing a second panel while the native Activity ports the
+        // same data contract.
+        def sourceText = new File(fohSource, "__init__.py").getText("UTF-8")
+        ["_PANEL_HTML": "panel.html", "_REGISTRO_HTML": "registro.html", "_CONTEXT_HTML": "context.html"].each { marker, outputName ->
+            def startMarker = marker + ' = """'
+            def start = sourceText.indexOf(startMarker)
+            if (start < 0) throw new GradleException("No se encontro ${marker} en foh_monitor")
+            start += startMarker.length()
+            def end = sourceText.indexOf('"""', start)
+            if (end < 0) throw new GradleException("No se cerro ${marker} en foh_monitor")
+            new File(fohAssets, outputName).setText(sourceText.substring(start, end), "UTF-8")
+        }
+    }
+}
+
 android {
     namespace "cl.xio.foh"
     compileSdk 34
+
+    sourceSets {
+        main { assets.srcDirs = [fohAssets] }
+    }
 
     defaultConfig {
         applicationId "cl.xio.foh"
         minSdk 29
         targetSdk 34
-        versionCode 1
-        versionName "0.1.0"
+        versionCode 3
+        versionName "0.3.0-functional-parity"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -24,6 +58,8 @@ android {
         resources.excludes += ["/META-INF/{AL2.0,LGPL2.1}"]
     }
 }
+
+tasks.named("preBuild").configure { dependsOn("syncFohAssets") }
 
 dependencies {
     implementation "androidx.activity:activity:1.9.2"
