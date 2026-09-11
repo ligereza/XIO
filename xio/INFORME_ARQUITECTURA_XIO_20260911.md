@@ -323,6 +323,24 @@ en loop: “¿esto ya existe?, ¿hay un consumidor?, ¿hay un script?, ¿hay una
 es canónica?, ¿estoy mezclando una copia, un producto o un runtime?”. No borrar, duplicar,
 instalar ni agregar una capa sólo porque una prueba local resulte más fácil.
 
-**Estado del informe:** escrito desde la fuente Windows XIO y destinado a sincronización
-byte a byte con XIO MAK y sus espejos FLUJO. Los estados de Git y los hashes de publicación
-se registran después de crear este documento.
+## 14. Publicación Git
+
+El informe quedó sincronizado byte a byte en:
+
+- Windows XIO: `C:\IA\XIO\xio\INFORME_ARQUITECTURA_XIO_20260911.md`.
+- Windows FLUJO: `C:\IA\flujo\xio\INFORME_ARQUITECTURA_XIO_20260911.md`.
+- MAK XIO: `/home/mak/XIO/xio/INFORME_ARQUITECTURA_XIO_20260911.md`.
+- MAK FLUJO: `/home/mak/flujo/xio/INFORME_ARQUITECTURA_XIO_20260911.md`.
+
+Publicaciones realizadas:
+
+- XIO Windows: commit `ddbc20580fc037b8ceefb214124207669f6f6e08`, rama
+  `codex/obras-experimental-rehearsal-xio-root`, enviado a `ligereza/XIO`.
+- FLUJO MAK: commit `48074d524116f3809428c1e449172237c90e3246`, rama `FLUJO`,
+  enviado a `ligereza/vibecodeine` mediante el remoto real `vibecodeine-legacy`.
+- El commit de FLUJO contiene la integración XIO/FOH/RD y VJ necesaria; cambios locales
+  ajenos a esa integración quedaron sin stage y sin publicar.
+
+El estado del teléfono no forma parte de estos commits: sigue sin recibir archivos ni
+reinicios. La publicación Git acredita el código y la documentación, no una ejecución
+física de XIO `:5000`.
