@@ -1037,26 +1037,10 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void syncCurrentEventThenSample() {
-        RdFieldDb.EventRow row = localEvent(engine.snapshot().eventId);
-        if (row == null || "synced".equalsIgnoreCase(row.syncStatus)) {
-            sendCurrentSample();
-            return;
-        }
-        try {
-            flujo.syncEvent(eventPayload(row), FlujoGateway.DEFAULT_ENDPOINT, "", result -> {
-                if (!result.isSuccess()) {
-                    Toast.makeText(this, "Evento local · sincronización pendiente", Toast.LENGTH_LONG).show();
-                    return;
-                }
-                String review = result.response.optString("reviewStatus", "pendiente_revision_humana");
-                database.markEventSynced(row.id, review);
-                eventContextPending = !"confirmado".equalsIgnoreCase(review);
-                render();
-                sendCurrentSample();
-            });
-        } catch (Exception error) {
-            Toast.makeText(this, "Evento local · datos pendientes inválidos", Toast.LENGTH_LONG).show();
-        }
+        // The host catalog is authoritative. A local row may be a legacy draft
+        // from an older build, but it must never be re-sent as an implicit event
+        // after the RD endpoint has accepted only exact host eventRefs.
+        sendCurrentSample();
     }
 
     private void showEventPicker(JSONArray events, int selected, boolean syncAfter) {

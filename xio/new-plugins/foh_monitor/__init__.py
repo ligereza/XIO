@@ -98,7 +98,7 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
  <div class=bar id=barwrap><i id=barfill></i><span class=pct id=barpct></span></div>
  <div class=nxt id=nx></div>
 </div>
-<div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a><a href=/raider?domain=foh style="color:#fbbf24;font-weight:800;text-decoration:none;padding:6px 8px">RAIDER</a></span><span id=sub>...</span></div>
+<div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=resumen style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">RESUMEN</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a><a href=/raider?domain=foh style="color:#fbbf24;font-weight:800;text-decoration:none;padding:6px 8px">RAIDER</a></span><span id=sub>...</span></div>
 <div class=feed id=feed></div>
 <script>
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -429,6 +429,7 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/status", self._api_status, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
+        self.register_route("/resumen", self._api_resumen, methods=["GET"])
         self.register_route("/context", self._api_context_page, methods=["GET"])
         self.register_route("/context/data", self._api_context_get, methods=["GET"])
         self.register_route("/context", self._api_context_post, methods=["POST"])
@@ -1154,6 +1155,65 @@ class FohMonitorPlugin(PluginBase):
         """GET /registro[?date=YYYYMMDD] -- registro del dia legible, mobile-first."""
         from flask import Response
         return Response(_REGISTRO_HTML, mimetype="text/html")
+
+    def _api_resumen(self):
+        """GET /resumen: summary of persisted FOH evidence for one exact event."""
+        from flask import jsonify, request, send_file
+        event_key = str(request.args.get("eventKey") or "").strip()
+        if not event_key:
+            path = os.path.join(os.path.dirname(__file__), "static", "resumen.html")
+            if not os.path.isfile(path):
+                return jsonify({"ok": False, "domain": "vj_foh", "error": "resumen FOH no disponible"}), 404
+            return send_file(path, mimetype="text/html", conditional=True)
+        selected = next((dict(e) for e in self._foh_context_catalog.get("events", [])
+                         if e.get("eventKey") == event_key), None)
+        if selected is None:
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
+        rows = []
+        try:
+            files = sorted(f for f in os.listdir(self._log_dir_real)
+                           if f.startswith("show_") and f.endswith(".jsonl"))
+        except Exception:
+            files = []
+        for filename in files:
+            path = os.path.join(self._log_dir_real, filename)
+            try:
+                with open(path, "r", encoding="utf-8") as handle:
+                    for line in handle:
+                        try:
+                            row = json.loads(line)
+                        except (TypeError, ValueError):
+                            continue
+                        if isinstance(row, dict) and row.get("fohEventKey") == event_key:
+                            rows.append(row)
+            except OSError:
+                continue
+        rows.sort(key=lambda row: str(row.get("ts") or ""))
+        by_type = {}
+        dates = set()
+        for row in rows:
+            kind = str(row.get("tipo") or "sin_tipo")
+            by_type[kind] = by_type.get(kind, 0) + 1
+            timestamp = str(row.get("ts") or "")
+            if len(timestamp) >= 10:
+                dates.add(timestamp[:10])
+        return jsonify({
+            "ok": True,
+            "domain": "vj_foh",
+            "eventKey": event_key,
+            "context": selected,
+            "summary": {
+                "total": len(rows),
+                "signalTypes": len(by_type),
+                "byType": by_type,
+                "dates": sorted(dates),
+                "firstTs": rows[0].get("ts") if rows else None,
+                "lastTs": rows[-1].get("ts") if rows else None,
+            },
+            "readOnly": True,
+            "interpretation": "descriptive_signal_counts_only",
+        })
 
     def _api_context_get(self):
         from flask import jsonify

@@ -90,6 +90,8 @@ def main():
     assert dref_show["showKit"]["setlist"] == "xio/show_kit/setlist_festival_sentir.txt"
     with tempfile.TemporaryDirectory(prefix="xio-foh-context-") as directory:
         plugin = _plugin(module, Path(directory))
+        summary_page = PLUGIN.parent / "static" / "resumen.html"
+        assert summary_page.is_file()
         mapping = plugin._api_mapping()
         assert isinstance(mapping, Path)
         assert mapping.name == "mapping.html"

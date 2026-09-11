@@ -18,7 +18,7 @@ old APK notes, and historical deployment notes elsewhere in the repository.
 | Surface | Host and listener | Client form | Persistence and identity |
 |---|---|---|---|
 | FLUJO Hub | MAK `:8765` on the studio LAN | Browser / existing FLUJO UI | Existing FLUJO Hub state; no new tabs are added for XIO |
-| XIO field host | Xiaomi (currently Termux) `:5000` | One HTTP server with two namespaced web surfaces | State belongs to the device running XIO; the event key is supplied by the host catalog |
+| XIO field host | Xiaomi (currently Termux) or a PC `:5000` | One HTTP server with two namespaced web surfaces | State belongs to the device running XIO; the event key is supplied by the host catalog |
 | XIO-RD | `:5000` under `rd_field` | Browser/PWA from any hotspot client; the optional RD APK is only a client | Exact `eventRef`; host-owned RD field data; no implicit event creation |
 | XIO-FOH | `:5000` under `foh_monitor` | Browser/PWA from any hotspot client; no APK required | Exact `eventKey`; host-owned FOH/VJ context and evidence |
 
@@ -26,6 +26,10 @@ There are therefore two separated XIO products, but not four APKs or four HTTP s
 share the XIO listener and host storage while remaining separate namespaces and workflows. FOH signal
 inputs such as Art-Net `:6454`, sACN `:5568`, OSC/timecode `:7000`, Chataigne/show-kit UDP, and the
 existing Mapping LED tool are tools or protocols, not extra XIO HTTP services.
+
+When the Xiaomi is the host, its offline snapshot/logs are authoritative for that field session. When
+a PC runs XIO instead, the PC owns those files and the Xiaomi uses the same relative HTML surfaces as
+a client; the browser location changes to the current host address, not the application contract.
 
 `127.0.0.1:8765` is a local/FLUJO address only. It must never be used as the hotspot URL for RD or
 FOH. A hotspot client must use the Xiaomi's current `wlan1` address and port `5000`.

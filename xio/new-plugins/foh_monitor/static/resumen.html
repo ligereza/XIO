@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07090d">
+  <title>FOH / ISKVW · Resumen</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 12px; max-width: 920px; margin-inline: auto; background: #07090d; color: #e8eaed; font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+    a { color: #60a5fa; font-weight: 800; text-decoration: none; }
+    .top, .nav, .facts, .metrics { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .top { justify-content: space-between; margin-bottom: 14px; }
+    h1 { font-size: 19px; margin: 0; }
+    .nav a { border: 1px solid #263047; border-radius: 10px; padding: 7px 10px; font-size: 12px; }
+    .card { background: #12151d; border: 1px solid #293247; border-radius: 14px; padding: 14px; margin: 10px 0; }
+    .eyebrow { color: #8a92a6; font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .muted { color: #9aa0b0; font-size: 12px; }
+    .key { color: #93c5fd; font: 12px ui-monospace, monospace; overflow-wrap: anywhere; }
+    select { width: 100%; margin-top: 8px; padding: 11px; border: 1px solid #334155; border-radius: 10px; background: #0d1016; color: #e8eaed; font: inherit; }
+    .facts { align-items: stretch; }
+    .fact, .metric { min-width: 0; flex: 1 1 190px; padding: 10px; border: 1px solid #232838; border-radius: 10px; background: #0d1016; }
+    .fact b, .metric b { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+    .metric b { font-size: 22px; }
+    .signal { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1d2432; }
+    .signal:last-child { border-bottom: 0; }
+    .ok { color: #4ade80; }
+    .empty { padding: 18px; color: #6b7280; text-align: center; }
+    @media (max-width: 560px) { body { padding: 10px; } .top { align-items: flex-start; } h1 { flex-basis: 100%; } }
+  </style>
+</head>
+<body>
+  <div class="top"><h1>FOH / ISKVW · resumen</h1><nav class="nav"><a href="panel">PANEL</a><a href="context">EVENTO</a><a href="registro">REGISTRO</a><a href="mapping">MAPPING</a><a href="/raider?domain=foh">RAIDER</a></nav></div>
+  <section class="card"><div class="eyebrow">Evento exacto del catálogo VJ</div><select id="event"><option>Cargando...</option></select><div id="state" class="muted">Selecciona un evento.</div></section>
+  <main id="output"><div class="card empty">El resumen se construye desde los registros del host FOH.</div></main>
+  <script>
+    const esc = value => String(value ?? '').replace(/[&<>\"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[char]));
+    let catalog = [];
+    let selected = new URLSearchParams(location.search).get('eventKey') || '';
+    const eventSelect = document.getElementById('event');
+    function eventOption(item) { return `<option value="${esc(item.eventKey)}">${esc(item.producerName || 'Sin productora')} · ${esc(item.name || item.eventKey)}${item.dateIso ? ` · ${esc(item.dateIso)}` : ''}</option>`; }
+    function render(data) {
+      const context = data.context || {};
+      const summary = data.summary || {};
+      const kit = context.showKit || {};
+      const signals = Object.entries(summary.byType || {}).sort().map(([name, count]) => `<div class="signal"><span>${esc(name)}</span><b>${count}</b></div>`).join('') || '<div class="empty">sin señales vinculadas todavía</div>';
+      document.getElementById('output').innerHTML = `<section class="card"><div class="eyebrow">Contexto guardado</div><div class="facts"><div class="fact"><span class="muted">Productora / artista</span><b>${esc(context.producerName || context.producerSlug)}</b></div><div class="fact"><span class="muted">Evento</span><b>${esc(context.name)}</b></div><div class="fact"><span class="muted">Fecha</span><b>${esc(context.dateIso || context.dateRaw || 'fecha por confirmar')}</b></div><div class="fact"><span class="muted">Venue</span><b>${esc(context.venueName || 'venue por confirmar')}</b></div><div class="fact"><span class="muted">Layout / rider</span><b>${esc(kit.mappingHelper || kit.cueMap || 'placeholder · sin referencia explícita')}</b></div><div class="fact"><span class="muted">Setlist / show kit</span><b>${esc(kit.setlist || 'placeholder · sin referencia explícita')}</b></div></div><p class="muted">eventKey: <span class="key">${esc(context.eventKey)}</span></p></section><section class="card"><div class="eyebrow">Registro FOH del host · lectura descriptiva</div><div class="metrics"><div class="metric"><b>${summary.total || 0}</b><span class="muted">entradas vinculadas</span></div><div class="metric"><b>${summary.signalTypes || 0}</b><span class="muted">tipos observados</span></div><div class="metric"><b>${esc(summary.firstTs || '—')}</b><span class="muted">primera marca</span></div><div class="metric"><b>${esc(summary.lastTs || '—')}</b><span class="muted">última marca</span></div></div>${signals}<p class="muted">Días con registros: ${esc((summary.dates || []).join(' · ') || 'ninguno')}</p><p class="muted">No interpreta la señal ni afirma una relación técnica ausente.</p></section>`;
+    }
+    function loadSummary() {
+      if (!selected) { document.getElementById('output').innerHTML = '<div class="card empty">Elige un evento del catálogo VJ/FOH.</div>'; return; }
+      fetch(`resumen?eventKey=${encodeURIComponent(selected)}`, {cache: 'no-store'}).then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`); return data; }).then(data => { document.getElementById('state').innerHTML = '<span class="ok">Contexto seleccionado</span>'; render(data); }).catch(error => { document.getElementById('state').textContent = error.message; document.getElementById('output').innerHTML = `<div class="card empty">${esc(error.message)}</div>`; });
+    }
+    fetch('context/data', {cache: 'no-store'}).then(response => response.json()).then(data => { catalog = data.events || []; eventSelect.innerHTML = '<option value="">Seleccionar...</option>' + catalog.map(eventOption).join(''); if (!selected && data.current) selected = data.current.eventKey; eventSelect.value = selected; eventSelect.onchange = () => { selected = eventSelect.value; loadSummary(); }; loadSummary(); }).catch(error => { document.getElementById('state').textContent = `Catálogo FOH no disponible: ${error.message}`; });
+  </script>
+</body>
+</html>
