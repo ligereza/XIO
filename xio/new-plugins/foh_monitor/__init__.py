@@ -427,8 +427,10 @@ class FohMonitorPlugin(PluginBase):
                 self.set_config(k, v)
 
         self.register_route("/status", self._api_status, methods=["GET"])
+        self.register_route("/view", self._api_view, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
+        self.register_route("/resumen", self._api_resumen, methods=["GET"])
         self.register_route("/context", self._api_context_page, methods=["GET"])
         self.register_route("/context/data", self._api_context_get, methods=["GET"])
         self.register_route("/context", self._api_context_post, methods=["POST"])
@@ -441,6 +443,7 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/prev", self._api_prev, methods=["POST"])
         self.register_route("/log", self._api_log, methods=["GET"])
         self.register_route("/logs", self._api_logs, methods=["GET"])
+        self.register_route("/ingest", self._api_ingest, methods=["POST"])
         self.register_route("/config", self._api_get_config, methods=["GET"])
         self.register_route("/config", self._api_set_config, methods=["POST"])
 
@@ -574,6 +577,7 @@ class FohMonitorPlugin(PluginBase):
             "source": self._foh_context_catalog.get("source", {}),
             "current": self._foh_context_current,
             "events": self._foh_context_catalog.get("events", []),
+            "setlistBinding": self._setlist_binding_view(),
             "event_policy": "fohEventKey_must_exist_in_vj_catalog",
             "rd_is_separate": True,
         }
@@ -614,14 +618,58 @@ class FohMonitorPlugin(PluginBase):
         except Exception as e:
             self.logger.error(f"foh setlist load failed: {e}")
 
+    def _setlist_binding_view(self):
+        """Describe the exact relationship between setlist and FOH context."""
+        setlist = getattr(self, "_setlist", {}) or {}
+        owner = str(setlist.get("fohEventKey") or "").strip()
+        current = str((self._foh_context_current or {}).get("eventKey") or "").strip()
+        if not setlist.get("songs"):
+            status = "not_loaded"
+        elif owner and owner == current:
+            status = "bound"
+        elif owner:
+            status = "conflict"
+        else:
+            status = "unbound"
+        return {"status": status, "fohEventKey": owner or None,
+                "contextMatch": bool(owner and current and owner == current),
+                "songs": len(setlist.get("songs") or [])}
+
+    def _bind_unowned_setlist_to_context(self, selected):
+        """Bind an unowned setlist after explicit exact-event selection.
+
+        Existing songs, index, durations and timestamps are preserved. A
+        different existing owner is never silently overwritten.
+        """
+        setlist = getattr(self, "_setlist", {}) or {}
+        key = str((selected or {}).get("eventKey") or "").strip()
+        owner = str(setlist.get("fohEventKey") or "").strip()
+        if not setlist.get("songs"):
+            return {"status": "not_loaded", "fohEventKey": owner or None}
+        if owner:
+            return {"status": "already" if owner == key else "conflict",
+                    "fohEventKey": owner}
+        kit = (selected or {}).get("showKit") or {}
+        setlist_ref = str(kit.get("setlist") or "").strip() if isinstance(kit, dict) else ""
+        if not setlist_ref:
+            return {"status": "no_kit", "fohEventKey": None}
+        setlist["fohEventKey"] = key
+        self._setlist = setlist
+        self._save_setlist()
+        self._log_event("setlist_context_bound", {
+            "fohEventKey": key, "setlist": setlist_ref,
+            "reason": "exact_context_selected_for_unowned_setlist",
+        }, key)
+        return {"status": "bound", "fohEventKey": key, "setlist": setlist_ref}
+
     def _log_path(self, date_str=None):
         date_str = date_str or datetime.now().strftime("%Y%m%d")
         return os.path.join(self._log_dir_real, f"show_{date_str}.jsonl")
 
-    def _log_event(self, tipo, detalle):
+    def _log_event(self, tipo, detalle, event_key=None):
         """Una linea JSON al archivo del dia (rotacion implicita por nombre)."""
         # cada evento lleva el ultimo timecode vigente pa correlacion post-show
-        current_key = (self._foh_context_current or {}).get("eventKey")
+        current_key = event_key if event_key is not None else (self._foh_context_current or {}).get("eventKey")
         ev = {"ts": datetime.now().isoformat(timespec="seconds"), "tipo": tipo,
               "detalle": detalle, "tc": self._tc_current(), "domain": "vj_foh",
               "fohEventKey": current_key}
@@ -759,7 +807,12 @@ class FohMonitorPlugin(PluginBase):
 
     def _tc_hit(self, data):
         """Registra un paquete de timecode: primer arg string o float."""
-        val = self._osc_first_arg(data)
+        self._record_tc_value(self._osc_first_arg(data))
+
+    def _record_tc_value(self, val):
+        """Registra TC recibido por OSC o por el puente APK sin contar visuales."""
+        if val is None:
+            return
         now = time.time()
         tc = self._tc
         tc["total"] += 1
@@ -1155,6 +1208,87 @@ class FohMonitorPlugin(PluginBase):
         from flask import Response
         return Response(_REGISTRO_HTML, mimetype="text/html")
 
+    def _api_view(self):
+        """Serve the self-contained FOH/ISKVW hub used by the native client."""
+        from flask import Response, send_file
+        path = os.path.join(os.path.dirname(__file__), "static", "hub.html")
+        if not os.path.isfile(path):
+            return Response("hub FOH no desplegado", status=404, mimetype="text/plain")
+        return send_file(path, mimetype="text/html", conditional=True)
+
+    def _api_ingest(self):
+        """Accept throttled signal records forwarded by the native FOH client."""
+        from flask import jsonify, request
+        data = request.get_json(silent=True) or {}
+        protocol = str(data.get("protocol") or "").strip()
+        detail = str(data.get("detail") or "").strip()
+        event_key = str(data.get("eventKey") or "").strip()
+        if protocol not in ("Art-Net", "sACN", "OSC / TC") or not detail:
+            return jsonify({"ok": False, "error": "protocol y detail son obligatorios"}), 400
+        if event_key and not any(e.get("eventKey") == event_key
+                                 for e in self._foh_context_catalog.get("events", [])):
+            return jsonify({"ok": False, "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
+        if protocol == "OSC / TC" and detail.startswith("timecode="):
+            self._record_tc_value(detail.split("=", 1)[1])
+        else:
+            channel_name = {"Art-Net": "artnet", "sACN": "sacn", "OSC / TC": "osc"}[protocol]
+            self._channels[channel_name].hit(f"APK {detail}")
+        self._log_event("app_signal", {
+            "source": "xio_foh_apk", "protocol": protocol, "detail": detail,
+        }, event_key or None)
+        return jsonify({"ok": True, "domain": "vj_foh", "source": "xio_foh_apk",
+                        "eventKey": event_key or (self._foh_context_current or {}).get("eventKey")})
+
+    def _api_resumen(self):
+        """Return a read-only summary of persisted FOH evidence for one event."""
+        from flask import jsonify, request, send_file
+        event_key = str(request.args.get("eventKey") or "").strip()
+        if not event_key:
+            path = os.path.join(os.path.dirname(__file__), "static", "resumen.html")
+            if not os.path.isfile(path):
+                return jsonify({"ok": False, "domain": "vj_foh",
+                                "error": "resumen FOH no disponible"}), 404
+            return send_file(path, mimetype="text/html", conditional=True)
+        selected = next((dict(e) for e in self._foh_context_catalog.get("events", [])
+                         if e.get("eventKey") == event_key), None)
+        if selected is None:
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "eventKey no existe en el catalogo VJ/FOH"}), 409
+        rows = []
+        try:
+            files = sorted(f for f in os.listdir(self._log_dir_real)
+                           if f.startswith("show_") and f.endswith(".jsonl"))
+        except Exception:
+            files = []
+        for filename in files:
+            try:
+                with open(os.path.join(self._log_dir_real, filename), encoding="utf-8") as handle:
+                    for line in handle:
+                        try:
+                            row = json.loads(line)
+                        except (TypeError, ValueError):
+                            continue
+                        if isinstance(row, dict) and row.get("fohEventKey") == event_key:
+                            rows.append(row)
+            except OSError:
+                continue
+        rows.sort(key=lambda row: str(row.get("ts") or ""))
+        by_type = {}
+        dates = set()
+        for row in rows:
+            by_type[str(row.get("tipo") or "sin_tipo")] = by_type.get(str(row.get("tipo") or "sin_tipo"), 0) + 1
+            timestamp = str(row.get("ts") or "")
+            if len(timestamp) >= 10:
+                dates.add(timestamp[:10])
+        return jsonify({"ok": True, "domain": "vj_foh", "eventKey": event_key,
+                        "context": selected, "summary": {
+                            "total": len(rows), "signalTypes": len(by_type),
+                            "byType": by_type, "dates": sorted(dates),
+                            "firstTs": rows[0].get("ts") if rows else None,
+                            "lastTs": rows[-1].get("ts") if rows else None,
+                        }, "readOnly": True,
+                        "interpretation": "descriptive_signal_counts_only"})
+
     def _api_context_get(self):
         from flask import jsonify
         return jsonify(self._foh_context_view())
@@ -1201,7 +1335,8 @@ class FohMonitorPlugin(PluginBase):
             "dateIso": selected.get("dateIso"),
             "venueName": selected.get("venueName"),
         })
-        return jsonify(self._foh_context_view())
+        binding = self._bind_unowned_setlist_to_context(selected)
+        return jsonify({**self._foh_context_view(), "setlistBinding": binding})
 
     def _api_manifest(self):
         """PWA manifest: 'Agregar a pantalla de inicio' abre el panel fullscreen
