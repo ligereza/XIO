@@ -1068,6 +1068,18 @@ public final class MainActivity extends AppCompatActivity {
                     if (first != null && !first.optString("productora_slug", "").trim().isEmpty()) producer = first.optString("productora_slug");
                 }
                 if (producers != null && producers.length() > 1) producer += " +" + (producers.length() - 1);
+                boolean logoLoaded = false;
+                if (producers != null) {
+                    for (int producerIndex = 0; producerIndex < producers.length(); producerIndex++) {
+                        JSONObject producerItem = producers.optJSONObject(producerIndex);
+                        if (producerItem != null && producerItem.optBoolean("logo_loaded", false)) {
+                            logoLoaded = true;
+                            break;
+                        }
+                    }
+                }
+                if (!logoLoaded) continue;
+                producer = "(LOGO) " + producer;
                 List<Integer> members = byProducer.get(producer);
                 if (members == null) { members = new ArrayList<>(); byProducer.put(producer, members); }
                 members.add(i);
@@ -1095,6 +1107,11 @@ public final class MainActivity extends AppCompatActivity {
         TextView hostOnly = text("Los eventos se preparan en el host RD; esta mesa sólo permite seleccionar uno existente.", 11, MUTED);
         hostOnly.setPadding(0, dp(8), 0, dp(4));
         grouped.addView(hostOnly, new LinearLayout.LayoutParams(-1, dp(48)));
+        if (byProducer.isEmpty()) {
+            TextView placeholder = text("No hay productoras con logo cargado en este snapshot RD. Revisa el catálogo en el host; no se inventan eventos ni logos desde la mesa.", 12, AMBER);
+            placeholder.setPadding(0, dp(12), 0, dp(12));
+            grouped.addView(placeholder, new LinearLayout.LayoutParams(-1, dp(72)));
+        }
         for (Map.Entry<String, List<Integer>> group : byProducer.entrySet()) {
             String pendingLabel = Boolean.TRUE.equals(pendingProducer.get(group.getKey())) ? "  ·  candidato" : "";
             TextView producer = text(capitalize(group.getKey()) + "  ·  " + group.getValue().size() + pendingLabel, 12, AMBER);

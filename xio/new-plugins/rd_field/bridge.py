@@ -180,6 +180,29 @@ def bootstrap(db_path: str | Path) -> dict[str, Any]:
         ):
             if row["evento_ref"] in events:
                 events[row["evento_ref"]]["mesas"].append(dict(row))
+        logo_by_slug: dict[str, dict[str, Any]] = {}
+        if _table_exists(conn, "productora_logos"):
+            for row in conn.execute(
+                "SELECT productora_slug, logo_id, knowledge, estado "
+                "FROM productora_logos ORDER BY productora_slug, logo_id"
+            ):
+                slug = str(row["productora_slug"] or "").strip()
+                if not slug or slug in logo_by_slug:
+                    continue
+                state = str(row["estado"] or "").strip().lower()
+                knowledge = str(row["knowledge"] or "").strip()
+                logo_by_slug[slug] = {
+                    "logo_id": row["logo_id"],
+                    "logo_status": row["estado"],
+                    "logo_loaded": state in {"encontrado", "confirmado"}
+                    and knowledge.upper() != "PENDIENTE",
+                }
+        for event in events.values():
+            for producer in event["productoras"]:
+                producer.update(logo_by_slug.get(
+                    str(producer.get("productora_slug") or "").strip(),
+                    {"logo_id": None, "logo_status": "no_disponible", "logo_loaded": False},
+                ))
         xio_events = [
             dict(row) for row in conn.execute(
                 "SELECT client_event_id, event_name, venue_name, producer_name, "
@@ -203,6 +226,13 @@ def bootstrap(db_path: str | Path) -> dict[str, Any]:
             "events": list(events.values()),
             "xioEvents": xio_events,
         }
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone()
+    return row is not None
 
 def load_samples(
     db_path: str | Path, event_ref: str, sample_code: str | None = None
