@@ -14,17 +14,34 @@ def main() -> None:
     vision = VISION.read_text(encoding="utf-8")
     memory = MEMORY.read_text(encoding="utf-8")
     assert 'addColorRampControl(content, "COLOR", sample.observedColor' in source
-    assert 'value -> engine.setObservedColor(value)' in source
+    assert 'engine.setObservedColor(value)' in source
     assert 'ramp.setOnCommit(commit);' in source
     assert 'String observedColorLabel = row.observedColor' in source
     assert 'info.addView(body(observedColorLabel));' in source
     assert 'new PorterDuffColorFilter(fallbackColor, PorterDuff.Mode.SRC_IN)' in source
     assert 'Color.parseColor(value.trim())' in source
     assert 'database.insertCapture(sample.id, capture);' in source
-    assert 'database.insertCapture(engine.snapshot().id, pendingCapture);' in source
+    assert 'database.insertCapture(engine.snapshot().id, pendingCapture);' not in source
+    assert 'AVANZAR A COLORIMETRÍA' in source
+    assert 'entryReadyForTests' in source
+    assert 'pendingCaptures' in source
+    assert 'this::render' in source
+    assert 'saveSession(sample, includeTests)' in source
+    assert 'CONFIRMAR Y NUEVA MUESTRA' in source
+    assert 'selectLocalSample(row)' in source
+    assert 'GUARDAR TESTS' in source
+    assert 'confirmed.status = "confirmed"' in source
+    assert 'sendSample(confirmed, false)' in source
+    assert 'Toca un ingreso para revisarlo' in source
+    assert 'MUESTRA ACTIVA' in source
+    assert 'TESTS Y REACCIONES' in source
+    assert 'reacción  ·  ' in source
+    assert 'silueta no disponible' in source
+    assert 'Confirma la muestra antes de sincronizar' in source
+    assert 'Termina o confirma la muestra antes de cambiar de evento' in source
     assert 'RdFieldExporter.exportLocalBackup(this)' in source
     assert 'RESPALDAR RD ANTES DE ACTUALIZAR' in source
-    assert 'database.deleteCapture(engine.snapshot().id, pendingCapture.id);' in source
+    assert 'database.deleteCapture(engine.snapshot().id, pendingCapture.id);' not in source
     assert 'reconcileOrphanCaptureFiles();' in source
     assert 'for (RdFieldDb.SampleRow local : database.recentSamples())' in source
     assert 'reconcileOrphanCaptureFiles(local.id, local.id.equals(currentSampleId));' in source
@@ -42,7 +59,7 @@ def main() -> None:
     assert 'moldDesign' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'moldFingerprint' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'suggestedMoldDesigns' in source
-    assert 'OTRA VISTA DEL MOLDE' in source
+    assert 'OTRA VISTA' in source
     assert 'moldDesigns' in (ROOT / "xio" / "new-plugins" / "rd_field" / "bridge.py").read_text(encoding="utf-8")
     assert 'loadSamples' in source
     assert 'HISTORIA HOST RD' in source

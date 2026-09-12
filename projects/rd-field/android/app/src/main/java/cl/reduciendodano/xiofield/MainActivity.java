@@ -93,7 +93,9 @@ public final class MainActivity extends AppCompatActivity {
     private boolean eventContextPending;
     private int activeTab;
     private int activeTestIndex;
-    private SampleSession.Capture pendingCapture;
+    private boolean currentWasConfirmed;
+    /** Photos reviewed in tab 1 but not committed until AVANZAR. */
+    private final List<SampleSession.Capture> pendingCaptures = new ArrayList<>();
     private final Map<String, String> testColors = new HashMap<>();
     private final List<String> suggestedMoldDesigns = new ArrayList<>();
     private final List<JSONObject> remoteSamples = new ArrayList<>();
@@ -116,25 +118,8 @@ public final class MainActivity extends AppCompatActivity {
         flujo = new FlujoGateway(this);
         memory = new VisualMemory();
         RdFieldDb.SampleRow row = database.latestSample();
-        engine = SampleSessionEngine.createExisting(row.id, row.eventId, row.code, row.createdAt, row.phase, row.paused);
-        engine.snapshot().status = row.status == null ? "draft" : row.status;
-        engine.snapshot().declaredSubstance = row.declaredSubstance == null ? "" : row.declaredSubstance;
-        engine.snapshot().presentation = row.presentation == null ? "" : row.presentation;
-        engine.snapshot().observedColor = row.observedColor == null ? "" : row.observedColor;
-        android.content.SharedPreferences contextStore = getSharedPreferences("xio_event_context", MODE_PRIVATE);
-        if (row.eventId.equals(contextStore.getString("event_id", ""))) {
-            eventLabel = contextStore.getString("event_label", "");
-            eventProducer = contextStore.getString("event_producer", "");
-            eventContextPending = contextStore.getBoolean("pending", true);
-        }
-        for (SampleSession.Capture capture : database.loadCaptures(row.id)) {
-            engine.restoreCapture(capture);
-            engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
-        }
+        loadSampleIntoEngine(row);
         reconcileOrphanCaptureFiles();
-        for (SampleSession.TestSession test : database.loadTests(row.id)) engine.restoreTest(test);
-        for (SampleSession.Correction correction : database.loadCorrections(row.id)) engine.restoreCorrection(correction);
-        for (SampleSession.ActionRecord action : database.loadActions(row.id)) engine.restoreAction(action);
         for (VisualMemory.Entry entry : database.reviewedMemory()) memory.addReviewed(entry);
         buildShell();
         render();
@@ -142,6 +127,56 @@ public final class MainActivity extends AppCompatActivity {
         // on startup so the field screen does not look like an empty/demo DB.
         loadBootstrapAndMaybeChoose(false, false);
         loadApprovedVisualCatalog();
+    }
+
+    private void loadSampleIntoEngine(RdFieldDb.SampleRow row) {
+        engine = SampleSessionEngine.createExisting(row.id, row.eventId, row.code, row.createdAt, row.phase, row.paused);
+        engine.snapshot().status = row.status == null ? "draft" : row.status;
+        currentWasConfirmed = "confirmed".equalsIgnoreCase(row.status);
+        engine.snapshot().declaredSubstance = row.declaredSubstance == null ? "" : row.declaredSubstance;
+        engine.snapshot().presentation = row.presentation == null ? "" : row.presentation;
+        engine.snapshot().observedColor = row.observedColor == null ? "" : row.observedColor;
+        testColors.clear();
+        activeTestIndex = 0;
+        android.content.SharedPreferences contextStore = getSharedPreferences("xio_event_context", MODE_PRIVATE);
+        if (row.eventId.equals(contextStore.getString("event_id", ""))) {
+            eventLabel = contextStore.getString("event_label", "");
+            eventProducer = contextStore.getString("event_producer", "");
+            eventContextPending = contextStore.getBoolean("pending", true);
+        } else {
+            eventLabel = "";
+            eventProducer = "";
+            eventContextPending = true;
+        }
+        for (SampleSession.Capture capture : database.loadCaptures(row.id)) {
+            engine.restoreCapture(capture);
+            engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
+        }
+        for (SampleSession.TestSession test : database.loadTests(row.id)) {
+            engine.restoreTest(test);
+            if (!test.observations.isEmpty()) testColors.put(test.id, test.observations.get(test.observations.size() - 1).color);
+        }
+        for (SampleSession.Correction correction : database.loadCorrections(row.id)) engine.restoreCorrection(correction);
+        for (SampleSession.ActionRecord action : database.loadActions(row.id)) engine.restoreAction(action);
+    }
+
+    private void selectLocalSample(RdFieldDb.SampleRow row) {
+        SampleSession current = engine.snapshot();
+        if (row.id.equals(current.id)) {
+            activeTab = 0;
+            render();
+            return;
+        }
+        if (sampleHasWork(current) && !"confirmed".equalsIgnoreCase(current.status)) {
+            Toast.makeText(this, "Termina o descarta la muestra actual antes de abrir otra", Toast.LENGTH_LONG).show();
+            return;
+        }
+        discardAllPendingCaptures();
+        loadSampleIntoEngine(row);
+        activeTab = 0;
+        manualReagent = "";
+        engine.snapshot().status = "draft";
+        render();
     }
 
     private void buildShell() {
@@ -164,7 +199,10 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(title);
         TextView event = text("● " + eventContextText(sample) + "  ·  " + (sample.paused ? "Ⅱ" : "●"), 10, sample.paused ? AMBER : TEAL);
         event.setContentDescription("Cambiar evento XIO-RD");
-        event.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
+        event.setOnClickListener(view -> {
+            if (!canChangeEvent()) return;
+            loadBootstrapAndMaybeChoose(true, false);
+        });
         event.setPadding(0, dp(5), 0, 0); content.addView(event);
         TextView sampleCode = text(sample.code, 28, TEXT);
         sampleCode.setTypeface(null, Typeface.BOLD); content.addView(sampleCode);
@@ -172,6 +210,7 @@ public final class MainActivity extends AppCompatActivity {
         Button host = iconButton("⌂", "Configurar host XIO-RD", SURFACE, AMBER);
         topActions.addView(host, new LinearLayout.LayoutParams(dp(44), dp(38)));
         Button sync = iconButton("⇧", "Sincronizar con XIO-RD", SURFACE, TEAL);
+        sync.setEnabled(sampleCanSync(sample));
         LinearLayout.LayoutParams syncParams = new LinearLayout.LayoutParams(dp(44), dp(38)); syncParams.setMargins(dp(5), 0, 0, 0); topActions.addView(sync, syncParams);
         Button raider = iconButton("▦", "Abrir RAIDER", SURFACE, AMBER);
         LinearLayout.LayoutParams raiderParams = new LinearLayout.LayoutParams(dp(44), dp(38)); raiderParams.setMargins(dp(5), 0, 0, 0); topActions.addView(raider, raiderParams);
@@ -205,7 +244,18 @@ public final class MainActivity extends AppCompatActivity {
             Button button = actionButton(labels[i], phases[i] == active ? TEAL : SURFACE, phases[i] == active ? BG : MUTED);
             button.setContentDescription(descriptions[i]); button.setTextSize(17);
             SampleSession.Phase phase = phases[i];
-            button.setOnClickListener(view -> { engine.transitionTo(phase); persist(); render(); });
+            button.setOnClickListener(view -> {
+                if (phase == SampleSession.Phase.TEST && !entryReadyForTests(engine.snapshot())) {
+                    Toast.makeText(this, entryRequirements(engine.snapshot()), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (phase == SampleSession.Phase.REVIEW && !sampleTestsComplete(engine.snapshot())) {
+                    Toast.makeText(this, "completa todos los tests antes de revisar", Toast.LENGTH_LONG).show();
+                    return;
+                }
+                engine.transitionTo(phase);
+                render();
+            });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(38), 1f); params.setMargins(i == 0 ? 0 : dp(4), 0, 0, 0); bar.addView(button, params);
         }
         return bar;
@@ -222,7 +272,17 @@ public final class MainActivity extends AppCompatActivity {
             Button button = actionButton(icons[i], tab == activeTab ? TEAL : SURFACE, tab == activeTab ? BG : MUTED);
             button.setTextSize(18);
             button.setContentDescription(descriptions[i]);
-            button.setOnClickListener(view -> { activeTab = tab; if (tab == 0) engine.transitionTo(SampleSession.Phase.OBSERVE); else if (tab == 1) engine.transitionTo(SampleSession.Phase.TEST); else engine.transitionTo(SampleSession.Phase.MEMORY); persist(); render(); });
+            button.setOnClickListener(view -> {
+                if (tab == 1 && !entryReadyForTests(engine.snapshot())) {
+                    Toast.makeText(this, entryRequirements(engine.snapshot()), Toast.LENGTH_LONG).show();
+                    return;
+                }
+                activeTab = tab;
+                if (tab == 0) engine.transitionTo(SampleSession.Phase.OBSERVE);
+                else if (tab == 1) engine.transitionTo(SampleSession.Phase.TEST);
+                else engine.transitionTo(SampleSession.Phase.MEMORY);
+                render();
+            });
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(42), 1f);
             params.setMargins(i == 0 ? 0 : dp(5), 0, 0, 0);
             bar.addView(button, params);
@@ -230,12 +290,52 @@ public final class MainActivity extends AppCompatActivity {
         return bar;
     }
 
+    private boolean entryReadyForTests(SampleSession sample) {
+        if (sample == null) return false;
+        boolean hasEvent = sample.eventId != null && !sample.eventId.trim().isEmpty() && !"pending-event".equals(sample.eventId);
+        boolean hasPhoto = !sample.captures.isEmpty() || !pendingCaptures.isEmpty();
+        return hasEvent
+                && !sample.declaredSubstance.trim().isEmpty()
+                && !sample.presentation.trim().isEmpty()
+                && !sample.observedColor.trim().isEmpty()
+                && hasPhoto;
+    }
+
+    private boolean sampleHasWork(SampleSession sample) {
+        if (sample == null) return false;
+        return !sample.captures.isEmpty()
+                || !sample.tests.isEmpty()
+                || !sample.declaredSubstance.trim().isEmpty()
+                || !sample.presentation.trim().isEmpty()
+                || !sample.observedColor.trim().isEmpty()
+                || !pendingCaptures.isEmpty();
+    }
+
+    private boolean canChangeEvent() {
+        SampleSession sample = engine.snapshot();
+        if (!sampleHasWork(sample)) return true;
+        Toast.makeText(this, "Termina o confirma la muestra antes de cambiar de evento", Toast.LENGTH_LONG).show();
+        return false;
+    }
+
+    private String entryRequirements(SampleSession sample) {
+        if (sample == null) return "Completa el ingreso para avanzar";
+        List<String> missing = new ArrayList<>();
+        if (sample.eventId == null || sample.eventId.trim().isEmpty() || "pending-event".equals(sample.eventId)) missing.add("evento");
+        if (sample.declaredSubstance == null || sample.declaredSubstance.trim().isEmpty()) missing.add("sustancia");
+        if (sample.presentation == null || sample.presentation.trim().isEmpty()) missing.add("formato");
+        if (sample.observedColor == null || sample.observedColor.trim().isEmpty()) missing.add("color observado");
+        if (sample.captures.isEmpty() && pendingCaptures.isEmpty()) missing.add("foto");
+        return missing.isEmpty() ? "Ingreso completo · puedes avanzar a colorimetría" : "Para avanzar completa: " + String.join(", ", missing);
+    }
+
     private void renderCaptureTab(SampleSession sample) {
         content.addView(sectionLabel("1  ·  INGRESO"));
-        content.addView(heading(pendingCapture == null ? "Nueva muestra" : "Revisar captura"));
-        if (pendingCapture != null) {
-            addEvidencePair(pendingCapture.path, pendingCapture.silhouettePreviewPath, sample.presentation, sample.observedColor, pendingCapture.features);
-            content.addView(body("foto  +  visión"));
+        content.addView(heading(pendingCaptures.isEmpty() ? "Nueva muestra" : "Revisar captura"));
+        if (!pendingCaptures.isEmpty()) {
+            SampleSession.Capture latest = pendingCaptures.get(pendingCaptures.size() - 1);
+            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
+            content.addView(body("foto + visión  ·  " + pendingCaptures.size() + " vista(s) pendiente(s)"));
         } else if (!sample.captures.isEmpty()) {
             SampleSession.Capture latest = sample.captures.get(sample.captures.size() - 1);
             addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
@@ -247,47 +347,55 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         addMoldRecognitionCard(sample);
-        if (pendingCapture == null && !sample.captures.isEmpty()) {
-            Button another = actionButton("⊕  OTRA VISTA DEL MOLDE", SURFACE, TEAL);
+        if ((!pendingCaptures.isEmpty() || !sample.captures.isEmpty())) {
+            Button another = actionButton("⊕  OTRA VISTA", SURFACE, TEAL);
             content.addView(another, new LinearLayout.LayoutParams(-1, dp(42)));
             another.setOnClickListener(view -> openCamera());
         }
 
         content.addView(sectionLabel("DECLARACIÓN"));
         addOptionStrip("sustancia", SUBSTANCE_OPTIONS, sample.declaredSubstance, value -> {
+            currentWasConfirmed = false;
             engine.setDeclaredSubstance(value);
             if (!containsIgnoreCase(formatsFor(value), sample.presentation)) engine.setPresentation("");
             render();
         });
         if (!sample.declaredSubstance.isEmpty()) {
-            addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { engine.setPresentation(value); render(); });
+            addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { currentWasConfirmed = false; engine.setPresentation(value); render(); });
         }
         // The observed colour belongs to the capture context, not only to a
         // completed declaration. Keep the ramp visible while a photo is
-        // reviewed/repeated and persist each choice so camera Activity
-        // recreation cannot erase it.
+        // reviewed/repeated; the sample is committed only at AVANZAR.
         addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
-                value -> engine.setObservedColor(value), this::persist);
+                value -> { currentWasConfirmed = false; engine.setObservedColor(value); }, this::render);
 
-        if (pendingCapture != null) {
+        boolean entryReady = entryReadyForTests(sample);
+        boolean ready = entryReady && !currentWasConfirmed;
+        content.addView(body(currentWasConfirmed
+                ? "Muestra confirmada · edita un dato para reabrir el pipeline"
+                : entryReady ? "Ingreso completo · puedes avanzar a colorimetría" : entryRequirements(sample)));
+
+        if (!pendingCaptures.isEmpty()) {
             LinearLayout actions = new LinearLayout(this);
             actions.setOrientation(LinearLayout.HORIZONTAL);
             Button discard = actionButton("🗑", SURFACE, CORAL);
             discard.setContentDescription("Descartar foto");
-            Button save = actionButton("✓  GUARDAR", TEAL, BG);
-            save.setContentDescription("Guardar ingreso");
+            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", TEAL, BG);
+            save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
+            save.setEnabled(ready);
             actions.addView(discard, new LinearLayout.LayoutParams(0, dp(50), .28f));
             LinearLayout.LayoutParams saveParams = new LinearLayout.LayoutParams(0, dp(50), .72f); saveParams.setMargins(dp(6), 0, 0, 0); actions.addView(save, saveParams);
             content.addView(actions, new LinearLayout.LayoutParams(-1, dp(50)));
             discard.setOnClickListener(view -> discardPendingCapture(true));
             save.setOnClickListener(view -> saveCurrentEntry());
         } else {
-            Button save = actionButton("✓  GUARDAR", TEAL, BG);
-            save.setContentDescription("Guardar ingreso sin foto");
+            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", TEAL, BG);
+            save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
+            save.setEnabled(ready);
             content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
             save.setOnClickListener(view -> saveCurrentEntry());
         }
-        if (pendingCapture != null) {
+        if (!pendingCaptures.isEmpty()) {
             Button retry = actionButton("⊙  REPETIR FOTO", SURFACE, TEAL);
             content.addView(retry, new LinearLayout.LayoutParams(-1, dp(40)));
             retry.setOnClickListener(view -> { discardPendingCapture(false); openCamera(); });
@@ -296,6 +404,14 @@ public final class MainActivity extends AppCompatActivity {
 
     private void renderColorimetryTab(SampleSession sample) {
         content.addView(sectionLabel("2  ·  COLORIMETRÍA"));
+        if (!entryReadyForTests(sample)) {
+            content.addView(heading("Ingreso incompleto"));
+            content.addView(body(entryRequirements(sample)));
+            Button back = actionButton("←  VOLVER A INGRESO", TEAL, BG);
+            content.addView(back, new LinearLayout.LayoutParams(-1, dp(50)));
+            back.setOnClickListener(view -> { activeTab = 0; render(); });
+            return;
+        }
         List<SampleSession.TestSession> tests = ensureColorimetryTests(sample);
         if (tests.isEmpty()) {
             if ("OTRA".equalsIgnoreCase(sample.declaredSubstance)) {
@@ -306,9 +422,9 @@ public final class MainActivity extends AppCompatActivity {
                 content.addView(add, new LinearLayout.LayoutParams(-1, dp(50)));
                 add.setOnClickListener(view -> {
                     if (manualReagent.isEmpty()) { Toast.makeText(this, "elige un reactivo", Toast.LENGTH_SHORT).show(); return; }
+                    currentWasConfirmed = false;
                     engine.addTest("Colorimetría", manualReagent);
                     activeTestIndex = 0;
-                    persist();
                     render();
                 });
                 return;
@@ -325,7 +441,10 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession.TestSession current = tests.get(activeTestIndex);
         content.addView(body("reactivo correspondiente  ·  " + current.reagent));
         addColorimetryInput(current, activeTestIndex);
-        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "✓  GUARDAR Y SEGUIR" : "✓  GUARDAR TEST", TEAL, BG);
+        boolean currentReady = !currentWasConfirmed && testColorReady(tests.get(activeTestIndex));
+        boolean allReady = allTestsReady(tests);
+        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "→  SIGUIENTE TEST" : "✓  GUARDAR TESTS", TEAL, BG);
+        save.setEnabled(currentReady && (activeTestIndex + 1 < tests.size() || allReady));
         content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
         save.setOnClickListener(view -> saveCurrentColorimetryTest(tests));
     }
@@ -342,7 +461,10 @@ public final class MainActivity extends AppCompatActivity {
         }
         Button changeEvent = actionButton("＋  CREAR / CAMBIAR EVENTO", SURFACE_RAISED, AMBER);
         content.addView(changeEvent, new LinearLayout.LayoutParams(-1, dp(46)));
-        changeEvent.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
+        changeEvent.setOnClickListener(view -> {
+            if (!canChangeEvent()) return;
+            loadBootstrapAndMaybeChoose(true, false);
+        });
         String remoteHistoryLabel = remoteSamplesEventRef.isEmpty()
                 ? "HISTORIA HOST RD · NO CARGADA"
                 : remoteSamplesLoading
@@ -367,12 +489,67 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(sectionLabel("PROYECCIÓN LOCAL DEL TELÉFONO"));
         content.addView(heading("Ingresos"));
         List<RdFieldDb.SampleRow> rows = database.recentSamples();
+        addCurrentRecordSummary(engine.snapshot(), rows);
         if (rows.isEmpty()) { content.addView(body("sin ingresos")); return; }
+        content.addView(body("Toca un ingreso para revisarlo o editarlo en las pestañas 1 y 2."));
         for (RdFieldDb.SampleRow row : rows) {
             List<SampleSession.Capture> captures = database.loadCaptures(row.id);
             SampleSession.Capture latest = captures.isEmpty() ? null : captures.get(captures.size() - 1);
             addEntryRow(row, latest);
         }
+        Button confirm = actionButton(sampleCanConfirm(engine.snapshot()) ? "✓  CONFIRMAR Y NUEVA MUESTRA" : "CONFIRMAR BLOQUEADO · COMPLETA EL PIPELINE", TEAL, BG);
+        confirm.setEnabled(sampleCanConfirm(engine.snapshot()));
+        content.addView(confirm, new LinearLayout.LayoutParams(-1, dp(50)));
+        confirm.setOnClickListener(view -> confirmCurrentSample());
+    }
+
+    private void addCurrentRecordSummary(SampleSession sample, List<RdFieldDb.SampleRow> rows) {
+        LinearLayout card = card();
+        card.addView(sectionLabel("MUESTRA ACTIVA"));
+        card.addView(text(sample.code, 18, TEXT));
+        String event = eventContextText(sample);
+        card.addView(body("evento  ·  " + event));
+        card.addView(body("sustancia  ·  " + (sample.declaredSubstance.isEmpty() ? "sin declarar" : sample.declaredSubstance)
+                + "   ·   formato  ·  " + (sample.presentation.isEmpty() ? "sin formato" : sample.presentation)));
+        card.addView(body("color observado  ·  " + (sample.observedColor.isEmpty() ? "sin color" : sample.observedColor)));
+
+        SampleSession.Capture latest = null;
+        if (!pendingCaptures.isEmpty()) latest = pendingCaptures.get(pendingCaptures.size() - 1);
+        else if (!sample.captures.isEmpty()) latest = sample.captures.get(sample.captures.size() - 1);
+        if (latest != null) {
+            LinearLayout evidence = new LinearLayout(this);
+            evidence.setOrientation(LinearLayout.HORIZONTAL);
+            evidence.addView(thumbnail(latest.path, "⊘", MUTED), new LinearLayout.LayoutParams(0, dp(112), 1f));
+            LinearLayout.LayoutParams silhouette = new LinearLayout.LayoutParams(0, dp(112), 1f);
+            silhouette.setMargins(dp(6), 0, 0, 0);
+            evidence.addView(thumbnail(latest.silhouettePreviewPath, latest.silhouettePreviewPath.isEmpty() ? "∅" : visualGlyph(sample.presentation), latest.silhouettePreviewPath.isEmpty() ? MUTED : colorForLabel(sample.observedColor), true), silhouette);
+            card.addView(evidence, new LinearLayout.LayoutParams(-1, dp(116)));
+            String silhouetteState = latest.silhouettePreviewPath.isEmpty() ? "silueta no disponible" : "foto + silueta";
+            card.addView(body(pendingCaptures.isEmpty() ? silhouetteState : silhouetteState + " · pendiente de AVANZAR"));
+        } else {
+            card.addView(body("foto + silueta  ·  pendiente"));
+        }
+
+        if (sample.tests.isEmpty()) {
+            card.addView(body("tests  ·  pendientes"));
+        } else {
+            card.addView(sectionLabel("TESTS Y REACCIONES"));
+            for (SampleSession.TestSession test : sample.tests) {
+                String reaction = test.observations.isEmpty()
+                        ? "sin reacción registrada"
+                        : test.observations.get(test.observations.size() - 1).color;
+                String state = "done".equalsIgnoreCase(test.status) ? "✓" : "pendiente";
+                card.addView(body(state + "  " + test.reagent + "  ·  reacción  ·  " + reaction
+                        + (test.elapsedMs > 0 ? "  ·  " + String.format(Locale.US, "%.1fs", test.elapsedMs / 1000f) : "")));
+            }
+        }
+
+        RdFieldDb.SampleRow local = null;
+        for (RdFieldDb.SampleRow row : rows) if (row.id.equals(sample.id)) { local = row; break; }
+        String sync = local == null ? "pendiente local" : "synced".equalsIgnoreCase(local.syncStatus)
+                ? "✓ recibido por host" : "pendiente de sincronizar";
+        card.addView(body("estado  ·  " + sample.status + "   ·   sincronización  ·  " + sync));
+        content.addView(card, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private void addRemoteSampleRow(JSONObject row) {
@@ -425,7 +602,7 @@ public final class MainActivity extends AppCompatActivity {
         pair.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(0, dp(154), 1f));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(0, dp(154), 1f); visualParams.setMargins(dp(7), 0, 0, 0);
         int visualColor = colorForLabel(declaredColor);
-        pair.addView(thumbnail(silhouettePath, visualGlyph(format), visualColor, true), visualParams);
+        pair.addView(thumbnail(silhouettePath, silhouettePath.isEmpty() ? "∅" : visualGlyph(format), silhouettePath.isEmpty() ? MUTED : visualColor, true), visualParams);
         content.addView(pair, new LinearLayout.LayoutParams(-1, dp(165)));
     }
 
@@ -539,13 +716,17 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout item = card();
         item.setOrientation(LinearLayout.HORIZONTAL);
         item.setGravity(Gravity.CENTER_VERTICAL);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setContentDescription("Abrir ingreso " + row.code);
+        item.setOnClickListener(view -> selectLocalSample(row));
         String photoPath = capture == null ? "" : capture.path;
         String silhouettePath = capture == null ? "" : capture.silhouettePreviewPath;
         VisualFeatures features = capture == null ? null : capture.features;
         int color = colorForLabel(row.observedColor);
         item.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(dp(62), dp(62)));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(dp(62), dp(62)); visualParams.setMargins(dp(5), 0, dp(9), 0);
-        item.addView(thumbnail(silhouettePath, visualGlyph(row.presentation), color, true), visualParams);
+        item.addView(thumbnail(silhouettePath, silhouettePath.isEmpty() ? "∅" : visualGlyph(row.presentation), silhouettePath.isEmpty() ? MUTED : color, true), visualParams);
         LinearLayout info = new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL); info.setGravity(Gravity.CENTER_VERTICAL);
         String substance = row.declaredSubstance == null || row.declaredSubstance.isEmpty() ? "sin declarar" : row.declaredSubstance;
         String format = row.presentation == null || row.presentation.isEmpty() ? "sin formato" : row.presentation;
@@ -601,26 +782,26 @@ public final class MainActivity extends AppCompatActivity {
 
         String selected = testColors.get(test.id);
         TextView reading = addColorRampControl(row, "", selected, "Rampa cromática del test " + (index + 1), value -> {
+            currentWasConfirmed = false;
             testColors.put(test.id, value);
-        });
+        }, this::render);
         Button noReading = actionButton("—  SIN CAMBIO / NO LEGIBLE", SURFACE_RAISED, MUTED);
         noReading.setContentDescription("Registrar sin lectura");
-        noReading.setOnClickListener(view -> { testColors.put(test.id, "sin lectura"); render(); });
+        noReading.setOnClickListener(view -> { currentWasConfirmed = false; testColors.put(test.id, "sin lectura"); render(); });
         row.addView(noReading, new LinearLayout.LayoutParams(-1, dp(38)));
-        timerButton.setOnClickListener(view -> { if (test.status.equals("running")) engine.stopTest(test); else engine.startTest(test); persist(); render(); });
+        timerButton.setOnClickListener(view -> { currentWasConfirmed = false; if (test.status.equals("running")) engine.stopTest(test); else engine.startTest(test); render(); });
         content.addView(row, new LinearLayout.LayoutParams(-1, dp(216)));
     }
 
     private List<SampleSession.TestSession> ensureColorimetryTests(SampleSession sample) {
         List<SampleSession.TestSession> result = new ArrayList<>();
         String[] plan = testPlanFor(sample.declaredSubstance);
-        boolean changed = false;
         for (String reagent : plan) {
             SampleSession.TestSession found = null;
             for (SampleSession.TestSession test : sample.tests) {
                 if (test.reagent != null && test.reagent.equalsIgnoreCase(reagent)) { found = test; break; }
             }
-            if (found == null) { found = engine.addTest("Colorimetría", reagent); changed = true; }
+            if (found == null) found = engine.addTest("Colorimetría", reagent);
             if (!testColors.containsKey(found.id) && !found.observations.isEmpty()) testColors.put(found.id, found.observations.get(found.observations.size() - 1).color);
             result.add(found);
         }
@@ -633,8 +814,51 @@ public final class MainActivity extends AppCompatActivity {
             }
         }
         if (activeTestIndex >= result.size()) activeTestIndex = Math.max(0, result.size() - 1);
-        if (changed) persist();
         return result;
+    }
+
+    private boolean testColorReady(SampleSession.TestSession test) {
+        String color = test == null ? "" : testColors.get(test.id);
+        return color != null && !color.trim().isEmpty();
+    }
+
+    private boolean allTestsReady(List<SampleSession.TestSession> tests) {
+        if (tests == null || tests.isEmpty()) return false;
+        for (SampleSession.TestSession test : tests) if (!testColorReady(test)) return false;
+        return true;
+    }
+
+    private boolean testComplete(SampleSession.TestSession test) {
+        return test != null && "done".equalsIgnoreCase(test.status) && !test.observations.isEmpty();
+    }
+
+    private boolean sampleTestsComplete(SampleSession sample) {
+        if (sample == null) return false;
+        String[] plan = testPlanFor(sample.declaredSubstance);
+        if (plan.length == 0) {
+            if (!"OTRA".equalsIgnoreCase(sample.declaredSubstance)) return false;
+            for (SampleSession.TestSession test : sample.tests) if (testComplete(test)) return true;
+            return false;
+        }
+        for (String reagent : plan) {
+            boolean complete = false;
+            for (SampleSession.TestSession test : sample.tests) {
+                if (test.reagent != null && test.reagent.equalsIgnoreCase(reagent) && testComplete(test)) {
+                    complete = true;
+                    break;
+                }
+            }
+            if (!complete) return false;
+        }
+        return true;
+    }
+
+    private boolean sampleCanConfirm(SampleSession sample) {
+        return !currentWasConfirmed && pendingCaptures.isEmpty() && entryReadyForTests(sample) && sampleTestsComplete(sample);
+    }
+
+    private boolean sampleCanSync(SampleSession sample) {
+        return sample != null && ("confirmed".equalsIgnoreCase(sample.status) || currentWasConfirmed);
     }
 
     private List<SampleSession.TestSession> applicableTests(SampleSession sample) {
@@ -659,55 +883,112 @@ public final class MainActivity extends AppCompatActivity {
 
     private void saveCurrentEntry() {
         SampleSession sample = engine.snapshot();
-        if (sample.declaredSubstance.isEmpty() || sample.presentation.isEmpty() || sample.observedColor.isEmpty()) {
-            Toast.makeText(this, "elige sustancia, formato y color", Toast.LENGTH_SHORT).show();
+        if (currentWasConfirmed) {
+            Toast.makeText(this, "La muestra ya está confirmada; edita un dato antes de volver a confirmarla", Toast.LENGTH_LONG).show();
             return;
         }
-        if (pendingCapture != null) {
-            SampleSession.Capture capture = pendingCapture;
-            engine.addCapture(capture);
-            engine.addVisualProposal(capture.id, capture.features);
-            database.insertCapture(sample.id, capture);
-            pendingCapture = null;
+        if (!entryReadyForTests(sample)) {
+            Toast.makeText(this, entryRequirements(sample), Toast.LENGTH_LONG).show();
+            render();
+            return;
+        }
+        if (!pendingCaptures.isEmpty()) {
+            for (SampleSession.Capture capture : new ArrayList<>(pendingCaptures)) {
+                engine.addCapture(capture);
+                engine.addVisualProposal(capture.id, capture.features);
+                database.insertCapture(sample.id, capture);
+            }
+            pendingCaptures.clear();
             pendingCameraFile = null;
         } else {
-            if (sample.captures.isEmpty()) sample.status = "saved_without_photo";
+            if (sample.captures.isEmpty()) sample.status = "entry_ready";
         }
-        engine.transitionTo(SampleSession.Phase.OBSERVE);
+        sample.status = "entry_ready";
+        engine.transitionTo(SampleSession.Phase.TEST);
         persist();
-        activeTab = 2;
-        Toast.makeText(this, "Ingreso guardado", Toast.LENGTH_SHORT).show();
+        activeTab = 1;
+        Toast.makeText(this, "Ingreso completo · avanzando a colorimetría", Toast.LENGTH_SHORT).show();
         render();
     }
 
     private void discardPendingCapture(boolean rerender) {
-        if (pendingCapture != null) {
-            database.deleteCapture(engine.snapshot().id, pendingCapture.id);
-            deleteEvidence(pendingCapture.path);
-            deleteEvidence(pendingCapture.silhouettePath);
-            deleteEvidence(pendingCapture.silhouettePreviewPath);
-            deleteEvidence(pendingCapture.reliefPath);
+        if (!pendingCaptures.isEmpty()) {
+            SampleSession.Capture capture = pendingCaptures.remove(pendingCaptures.size() - 1);
+            deleteEvidence(capture.path);
+            deleteEvidence(capture.silhouettePath);
+            deleteEvidence(capture.silhouettePreviewPath);
+            deleteEvidence(capture.reliefPath);
         } else if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
-        pendingCapture = null;
         pendingCameraFile = null;
         if (rerender) { Toast.makeText(this, "Foto descartada", Toast.LENGTH_SHORT).show(); render(); }
     }
 
+    private void discardAllPendingCaptures() {
+        while (!pendingCaptures.isEmpty()) discardPendingCapture(false);
+        if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
+        pendingCameraFile = null;
+    }
+
+    private void discardCameraDraft() {
+        if (pendingCameraFile != null) deleteEvidence(pendingCameraFile.getAbsolutePath());
+        pendingCameraFile = null;
+    }
+
     private void saveCurrentColorimetryTest(List<SampleSession.TestSession> tests) {
+        if (currentWasConfirmed) {
+            Toast.makeText(this, "La muestra ya está confirmada; cambia una lectura antes de guardarla", Toast.LENGTH_LONG).show();
+            return;
+        }
         SampleSession.TestSession test = tests.get(activeTestIndex);
         String color = testColors.containsKey(test.id) ? testColors.get(test.id) : "sin lectura";
-        if (test.status.equals("running")) engine.stopTest(test);
-        String previous = test.observations.isEmpty() ? "" : test.observations.get(test.observations.size() - 1).color;
-        if (!color.equals(previous)) engine.addObservation(test, color, "Color seleccionado por el operador");
-        engine.completeTest(test, color, "Observación colorimétrica; no es identificación química");
-        persist();
+        if (!testColorReady(test)) {
+            Toast.makeText(this, "selecciona el color de la reacción o SIN CAMBIO / NO LEGIBLE", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (activeTestIndex + 1 < tests.size()) {
             activeTestIndex++;
-            Toast.makeText(this, "Test " + test.ordinal + " guardado", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Test " + test.ordinal + " preparado", Toast.LENGTH_SHORT).show();
         } else {
+            if (!allTestsReady(tests)) {
+                Toast.makeText(this, "completa todos los tests antes de guardar", Toast.LENGTH_LONG).show();
+                return;
+            }
+            for (SampleSession.TestSession pending : tests) {
+                String pendingColor = testColors.get(pending.id);
+                if (pending.status.equals("running")) engine.stopTest(pending);
+                String previous = pending.observations.isEmpty() ? "" : pending.observations.get(pending.observations.size() - 1).color;
+                if (!pendingColor.equals(previous)) engine.addObservation(pending, pendingColor, "Color seleccionado por el operador");
+                engine.completeTest(pending, pendingColor, "Observación colorimétrica; no es identificación química");
+            }
+            persist();
             activeTab = 2;
-            Toast.makeText(this, "Tests guardados", Toast.LENGTH_SHORT).show();
+            engine.transitionTo(SampleSession.Phase.REVIEW);
+            Toast.makeText(this, "Todos los tests guardados · revisa y confirma", Toast.LENGTH_SHORT).show();
         }
+        render();
+    }
+
+    private void confirmCurrentSample() {
+        SampleSession confirmed = engine.snapshot();
+        if (!sampleCanConfirm(confirmed)) {
+            Toast.makeText(this, "Completa ingreso y todos los tests antes de confirmar", Toast.LENGTH_LONG).show();
+            return;
+        }
+        confirmed.status = "confirmed";
+        confirmed.phase = SampleSession.Phase.MEMORY;
+        database.saveSession(confirmed);
+        sendSample(confirmed, false);
+        String eventId = confirmed.eventId;
+        engine = SampleSessionEngine.create(eventId, "XIO-" + System.currentTimeMillis());
+        currentWasConfirmed = false;
+        activeTab = 0;
+        activeTestIndex = 0;
+        testColors.clear();
+        manualReagent = "";
+        discardAllPendingCaptures();
+        pendingCameraFile = null;
+        persist();
+        Toast.makeText(this, "Muestra confirmada · nueva muestra lista", Toast.LENGTH_LONG).show();
         render();
     }
 
@@ -927,17 +1208,27 @@ public final class MainActivity extends AppCompatActivity {
             pendingCameraFile = photoStore.prepareFile(engine.snapshot().id, captureId);
             Uri output = FileProvider.getUriForFile(this, "cl.reduciendodano.xiofield.files", pendingCameraFile);
             Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE); intent.putExtra(MediaStore.EXTRA_OUTPUT, output); intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION); startActivityForResult(intent, REQUEST_CAMERA);
-        } catch (IOException error) { Toast.makeText(this, "No se pudo preparar el almacenamiento privado", Toast.LENGTH_LONG).show(); }
+        } catch (IOException error) {
+            Toast.makeText(this, "No se pudo preparar el almacenamiento privado", Toast.LENGTH_LONG).show();
+        } catch (android.content.ActivityNotFoundException error) {
+            discardCameraDraft();
+            Toast.makeText(this, "No hay una aplicación de cámara disponible", Toast.LENGTH_LONG).show();
+        }
     }
 
-    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) { super.onRequestPermissionsResult(requestCode, permissions, results); if (requestCode == REQUEST_PERMISSION && results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) launchCamera(); }
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQUEST_PERMISSION) return;
+        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) launchCamera();
+        else Toast.makeText(this, "Se necesita permiso de cámara para tomar la evidencia", Toast.LENGTH_LONG).show();
+    }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_CAMERA) return;
-        if (resultCode != RESULT_OK || pendingCameraFile == null) { discardPendingCapture(false); return; }
+        if (resultCode != RESULT_OK || pendingCameraFile == null) { discardCameraDraft(); return; }
         Bitmap bitmap = BitmapFactory.decodeFile(pendingCameraFile.getAbsolutePath());
-        if (bitmap == null) { discardPendingCapture(false); Toast.makeText(this, "La captura no pudo leerse", Toast.LENGTH_LONG).show(); return; }
+        if (bitmap == null) { discardCameraDraft(); Toast.makeText(this, "La captura no pudo leerse", Toast.LENGTH_LONG).show(); return; }
         processCapture(bitmap, pendingCameraFile);
     }
 
@@ -956,24 +1247,25 @@ public final class MainActivity extends AppCompatActivity {
             File silhouettePreviewFile = analysis.silhouettePreview == null ? null : photoStore.storeSilhouettePreview(engine.snapshot().id, captureId, analysis.silhouettePreview);
             File reliefFile = analysis.reliefSvg.isEmpty() ? null : photoStore.storeRelief(engine.snapshot().id, captureId, analysis.reliefSvg);
             if (analysis.silhouettePreview != null) analysis.silhouettePreview.recycle();
-            String viewKind = "vista-" + (engine.snapshot().captures.size() + 1);
-            pendingCapture = new SampleSession.Capture(captureId, viewKind, stored.file.getAbsolutePath(), silhouetteFile == null ? "" : silhouetteFile.getAbsolutePath(), silhouettePreviewFile == null ? "" : silhouettePreviewFile.getAbsolutePath(), reliefFile == null ? "" : reliefFile.getAbsolutePath(), stored.sha256, System.currentTimeMillis(), features);
-            // The camera can recreate this Activity before the operator taps
-            // GUARDAR. Persist the evidence row immediately so the photo,
-            // silhouette and metadata survive that lifecycle boundary.
-            database.insertCapture(engine.snapshot().id, pendingCapture);
-            persist();
+            String viewKind = "vista-" + (engine.snapshot().captures.size() + pendingCaptures.size() + 1);
+            pendingCaptures.add(new SampleSession.Capture(captureId, viewKind, stored.file.getAbsolutePath(), silhouetteFile == null ? "" : silhouetteFile.getAbsolutePath(), silhouettePreviewFile == null ? "" : silhouettePreviewFile.getAbsolutePath(), reliefFile == null ? "" : reliefFile.getAbsolutePath(), stored.sha256, System.currentTimeMillis(), features));
+            currentWasConfirmed = false;
             pendingCameraFile = null;
-            Toast.makeText(this, "Revisa la foto y guarda el ingreso", Toast.LENGTH_SHORT).show(); render();
+            Toast.makeText(this, "Revisa la foto y completa el ingreso para avanzar", Toast.LENGTH_SHORT).show(); render();
         } catch (IOException error) { Toast.makeText(this, "No se pudo guardar la evidencia", Toast.LENGTH_LONG).show(); }
     }
 
-    private void persist() { database.saveSession(engine.snapshot()); }
+    private void persist() {
+        SampleSession sample = engine.snapshot();
+        boolean includeTests = sample.tests.isEmpty() || sampleTestsComplete(sample);
+        database.saveSession(sample, includeTests);
+    }
 
     /** Reconciles orphan or incomplete evidence for every local sample. */
     private void reconcileOrphanCaptureFiles() {
         String currentSampleId = engine.snapshot().id;
         for (RdFieldDb.SampleRow local : database.recentSamples()) {
+            if ("draft".equalsIgnoreCase(local.status)) continue;
             reconcileOrphanCaptureFiles(local.id, local.id.equals(currentSampleId));
         }
     }
@@ -1155,10 +1447,29 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void startNextSample() {
-        discardPendingCapture(false);
         SampleSession current = engine.snapshot();
-        persist();
-        engine = SampleSessionEngine.create(current.eventId, "XIO-" + System.currentTimeMillis());
+        boolean unusedDraft = current.captures.isEmpty()
+                && current.tests.isEmpty()
+                && current.declaredSubstance.trim().isEmpty()
+                && current.presentation.trim().isEmpty()
+                && current.observedColor.trim().isEmpty()
+                && pendingCaptures.isEmpty()
+                && "draft".equalsIgnoreCase(current.status);
+        if (unusedDraft) {
+            // The installation starts with one empty placeholder row. Reuse
+            // its identity so tapping “new sample” creates one real row,
+            // instead of leaving XIO-DRAFT behind as a second sample.
+            engine = SampleSessionEngine.createExisting(current.id, current.eventId, "XIO-" + System.currentTimeMillis(), current.createdAt, "OBSERVE", false);
+        } else if (!"confirmed".equalsIgnoreCase(current.status)) {
+            Toast.makeText(this, "Completa y confirma la muestra actual antes de crear otra", Toast.LENGTH_LONG).show();
+            render();
+            return;
+        } else {
+            discardAllPendingCaptures();
+            engine = SampleSessionEngine.create(current.eventId, "XIO-" + System.currentTimeMillis());
+        }
+        currentWasConfirmed = false;
+        manualReagent = "";
         activeTab = 0;
         persist();
         render();
@@ -1203,6 +1514,10 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void syncCurrentSample() {
+        if (!sampleCanSync(engine.snapshot())) {
+            Toast.makeText(this, "Confirma la muestra antes de sincronizar", Toast.LENGTH_LONG).show();
+            return;
+        }
         loadBootstrapAndMaybeChoose(false, true);
     }
 
@@ -1592,6 +1907,7 @@ public final class MainActivity extends AppCompatActivity {
                 event.setContentDescription("Evento " + labels[index]);
                 grouped.addView(event, new LinearLayout.LayoutParams(-1, dp(48)));
                 event.setOnClickListener(view -> {
+                    if (!canChangeEvent()) return;
                     String eventId = ids[index];
                     if (eventId == null || eventId.trim().isEmpty()) return;
                     try { applyEventContext(events.getJSONObject(index)); } catch (Exception ignored) { }
@@ -1648,10 +1964,15 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void sendCurrentSample() {
-        SampleSession sample = engine.snapshot();
+        sendSample(engine.snapshot(), true);
+    }
+
+    private void sendSample(SampleSession sample, boolean showProgress) {
         database.recordSampleSync(sample.id, "sending", "", "[]");
-        render();
-        Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
+        if (showProgress) {
+            render();
+            Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
+        }
         flujo.syncSample(sample, rdEndpoint(), "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
@@ -1665,7 +1986,7 @@ public final class MainActivity extends AppCompatActivity {
                 database.recordSampleSync(sample.id, "pending", message, "[]");
                 Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
             }
-            render();
+            if (showProgress) render();
         });
     }
 
@@ -1754,8 +2075,10 @@ public final class MainActivity extends AppCompatActivity {
                 float y = Math.max(0, Math.min(getHeight() - 1, event.getY()));
                 selectedX = x; selectedY = y; selectedColor = colorAt(x, y);
                 invalidate();
-                if (action != null) action.selected(hexForColor(selectedColor));
-                if (event.getAction() == MotionEvent.ACTION_UP && onCommit != null) onCommit.run();
+                if (event.getAction() == MotionEvent.ACTION_UP) {
+                    if (action != null) action.selected(hexForColor(selectedColor));
+                    if (onCommit != null) onCommit.run();
+                }
                 return true;
             }
             return true;

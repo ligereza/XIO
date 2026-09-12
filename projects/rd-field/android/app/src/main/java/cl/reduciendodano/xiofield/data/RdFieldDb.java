@@ -89,8 +89,8 @@ public final class RdFieldDb extends SQLiteOpenHelper {
 
     public SampleRow latestSample() {
         Cursor cursor = getReadableDatabase().query("samples", null,
-                "id<>? AND event_id<>? AND code NOT LIKE ?",
-                new String[]{"demo-sample", "demo-event", "XIO-DEMO-%"}, null, null,
+                "id<>? AND code NOT LIKE ?",
+                new String[]{"demo-sample", "XIO-DEMO-%"}, null, null,
                 "updated_at DESC", "1");
         try {
             if (!cursor.moveToFirst()) return null;
@@ -162,6 +162,16 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     }
 
     public void saveSession(SampleSession session) {
+        saveSession(session, true);
+    }
+
+    /**
+     * Saves the sample projection while optionally leaving test rows untouched.
+     * Tab 2 builds its required tests in memory first; incomplete rows must not
+     * test rows/observations must not become durable just because the
+     * operator returned to tab 1.
+     */
+    public void saveSession(SampleSession session, boolean includeTests) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put("id", session.id); values.put("event_id", session.eventId); values.put("code", session.code); values.put("created_at", session.createdAt); values.put("updated_at", session.updatedAt); values.put("declared_substance", session.declaredSubstance); values.put("presentation", session.presentation); values.put("observed_color", session.observedColor); values.put("status", session.status); values.put("phase", session.phase.name()); values.put("paused", session.paused ? 1 : 0);
@@ -169,15 +179,17 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         // remains intact, but the sample must be sent again.
         values.put("sync_status", "pending"); values.put("sync_error", ""); values.putNull("sync_at"); values.put("sync_receipts_json", "[]");
         if (db.update("samples", values, "id=?", new String[]{session.id}) == 0) db.insertOrThrow("samples", null, values);
-        db.delete("test_observations", "test_id IN (SELECT id FROM tests WHERE sample_id=?)", new String[]{session.id});
-        db.delete("tests", "sample_id=?", new String[]{session.id});
-        for (SampleSession.TestSession test : session.tests) {
-            ContentValues testValues = new ContentValues();
-            testValues.put("id", test.id); testValues.put("sample_id", session.id); testValues.put("ordinal", test.ordinal); testValues.put("method", test.method); testValues.put("reagent", test.reagent);
-            if (test.startedAt == 0) testValues.putNull("started_at"); else testValues.put("started_at", test.startedAt);
-            if (test.endedAt == 0) testValues.putNull("ended_at"); else testValues.put("ended_at", test.endedAt);
-            testValues.put("elapsed_ms", test.elapsedMs); testValues.put("status", test.status); testValues.put("operator_result", test.operatorResult); testValues.put("interpretation", test.interpretation); db.insertOrThrow("tests", null, testValues);
-            for (SampleSession.ReactionObservation observation : test.observations) { ContentValues observationValues = new ContentValues(); observationValues.put("id", observation.id); observationValues.put("test_id", test.id); observationValues.put("observed_at", observation.observedAt); observationValues.put("color_text", observation.color); observationValues.put("description", observation.description); db.insertOrThrow("test_observations", null, observationValues); }
+        if (includeTests) {
+            db.delete("test_observations", "test_id IN (SELECT id FROM tests WHERE sample_id=?)", new String[]{session.id});
+            db.delete("tests", "sample_id=?", new String[]{session.id});
+            for (SampleSession.TestSession test : session.tests) {
+                ContentValues testValues = new ContentValues();
+                testValues.put("id", test.id); testValues.put("sample_id", session.id); testValues.put("ordinal", test.ordinal); testValues.put("method", test.method); testValues.put("reagent", test.reagent);
+                if (test.startedAt == 0) testValues.putNull("started_at"); else testValues.put("started_at", test.startedAt);
+                if (test.endedAt == 0) testValues.putNull("ended_at"); else testValues.put("ended_at", test.endedAt);
+                testValues.put("elapsed_ms", test.elapsedMs); testValues.put("status", test.status); testValues.put("operator_result", test.operatorResult); testValues.put("interpretation", test.interpretation); db.insertOrThrow("tests", null, testValues);
+                for (SampleSession.ReactionObservation observation : test.observations) { ContentValues observationValues = new ContentValues(); observationValues.put("id", observation.id); observationValues.put("test_id", test.id); observationValues.put("observed_at", observation.observedAt); observationValues.put("color_text", observation.color); observationValues.put("description", observation.description); db.insertOrThrow("test_observations", null, observationValues); }
+            }
         }
         db.delete("action_log", "sample_id=?", new String[]{session.id});
         for (SampleSession.ActionRecord action : session.timeline) { ContentValues actionValues = new ContentValues(); actionValues.put("sample_id", session.id); actionValues.put("at", action.at); actionValues.put("action", action.action); actionValues.put("payload", action.payload); db.insert("action_log", null, actionValues); }
