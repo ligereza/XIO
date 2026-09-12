@@ -378,8 +378,8 @@ public final class FlujoGateway {
         if (features != null) {
             notes.append(String.format(Locale.US, "; geometry_confidence=%.3f; circularity=%.3f; solidity=%.3f; symmetry=%.3f; contour_points=%d; geometry_signature=%s; relief_confidence=%.3f; relief_signature=%s", features.silhouetteConfidence, features.circularity, features.solidity, features.symmetry, features.contourPointCount, features.geometrySignature, features.reliefConfidence, features.reliefSignature));
         }
-        if (latest != null && latest.silhouettePath != null && !latest.silhouettePath.isEmpty()) notes.append("; xio_silhouette_ref=svg:").append(latest.id);
-        if (latest != null && latest.reliefPath != null && !latest.reliefPath.isEmpty()) notes.append("; xio_relief_ref=svg:").append(latest.id);
+        // Evidence paths live in muestra_capturas; do not duplicate dangling
+        // svg:capture-* aliases inside the canonical sample notes.
         return notes.toString();
     }
 

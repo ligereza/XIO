@@ -104,6 +104,19 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         }
     }
 
+    /** Downgrades legacy "done" tests that lack durable timing or a reading. */
+    public void repairInvalidCompletedTests() {
+        ContentValues values = new ContentValues();
+        values.put("status", "draft");
+        values.putNull("started_at");
+        values.putNull("ended_at");
+        values.put("elapsed_ms", 0);
+        getWritableDatabase().update("tests", values,
+                "status=? AND (started_at IS NULL OR ended_at IS NULL OR elapsed_ms<=0 "
+                        + "OR NOT EXISTS (SELECT 1 FROM test_observations o WHERE o.test_id=tests.id))",
+                new String[]{"done"});
+    }
+
     public SampleRow latestSample() {
         Cursor cursor = getReadableDatabase().query("samples", null,
                 "id<>? AND code NOT LIKE ?",
@@ -241,6 +254,13 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         ContentValues values = new ContentValues();
         values.put("sync_status", "synced");
         values.put("review_status", reviewStatus == null || reviewStatus.trim().isEmpty() ? "pendiente_revision_humana" : reviewStatus);
+        getWritableDatabase().update("events", values, "id=?", new String[]{id});
+    }
+
+    /** A successful bootstrap is authoritative for whether a local event exists on the host. */
+    public void markEventPending(String id) {
+        ContentValues values = new ContentValues();
+        values.put("sync_status", "pending");
         getWritableDatabase().update("events", values, "id=?", new String[]{id});
     }
 

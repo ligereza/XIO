@@ -116,6 +116,7 @@ public final class MainActivity extends AppCompatActivity {
         database = new RdFieldDb(this);
         database.ensureFieldDraft();
         database.ensureSampleEventRelations();
+        database.repairInvalidCompletedTests();
         database.recoverInterruptedSampleSyncs();
         photoStore = new PhotoStore(this);
         flujo = new FlujoGateway(this);
@@ -1639,6 +1640,7 @@ public final class MainActivity extends AppCompatActivity {
                     if (!label.trim().isEmpty()) suggestedMoldDesigns.add(label.trim());
                 }
                 JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
+                reconcileLocalEventAvailability(events);
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
                 loadRemoteSamples(engine.snapshot().eventId);
@@ -1683,6 +1685,23 @@ public final class MainActivity extends AppCompatActivity {
             reconcileRemoteSampleReceipt(eventRef);
             render();
         });
+    }
+
+    private void reconcileLocalEventAvailability(JSONArray hostEvents) {
+        Set<String> hostEventIds = new HashSet<>();
+        if (hostEvents != null) {
+            for (int i = 0; i < hostEvents.length(); i++) {
+                JSONObject item = hostEvents.optJSONObject(i);
+                if (item == null) continue;
+                String eventId = item.optString("event_id", "").trim();
+                if (!eventId.isEmpty()) hostEventIds.add(eventId);
+            }
+        }
+        for (RdFieldDb.EventRow local : database.recentEvents()) {
+            if (!hostEventIds.contains(local.id) && "synced".equalsIgnoreCase(local.syncStatus)) {
+                database.markEventPending(local.id);
+            }
+        }
     }
 
     private void reconcileRemoteSampleReceipt(String eventRef) {

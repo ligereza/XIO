@@ -46,6 +46,7 @@ def main() -> None:
     assert 'database.findEvent(row.eventId)' in source
     assert 'reconcileRemoteSampleReceipt(eventRef)' in source
     assert 'database.recentSamples()' in source
+    assert 'reconcileLocalEventAvailability(events)' in source
     assert 'if (!sampleCanSync(sample)) return;' in source
     db_source = (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "RdFieldDb.java").read_text(encoding="utf-8")
     assert 'sampleSyncStatus' in db_source
@@ -74,6 +75,8 @@ def main() -> None:
     assert 'silhouetteBase64' in gateway
     assert 'silhouetteSvgBase64' in gateway
     assert 'reliefSvgBase64' in gateway
+    assert 'xio_silhouette_ref=svg:' not in gateway
+    assert 'xio_relief_ref=svg:' not in gateway
     assert 'requestWithUsbFallback' not in gateway
     assert 'silently redirecting it to Xiaomi localhost' in gateway
     assert 'XIO_BASE_ENDPOINT = "http://127.0.0.1:5000"' in gateway
@@ -90,6 +93,7 @@ def main() -> None:
     assert 'pending_review' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "MainActivity.java").read_text(encoding="utf-8")
     assert 'ensureFieldDraft' in source
     assert 'ensureSampleEventRelations' in source
+    assert 'repairInvalidCompletedTests' in source
     assert 'Repairs local sample -> event relations' in db_source
     assert 'ensureDemo()' not in source
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
