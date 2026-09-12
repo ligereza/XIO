@@ -245,7 +245,7 @@ public final class MainActivity extends AppCompatActivity {
         // reviewed/repeated and persist each choice so camera Activity
         // recreation cannot erase it.
         addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
-                value -> { engine.setObservedColor(value); persist(); });
+                value -> engine.setObservedColor(value), this::persist);
 
         if (pendingCapture != null) {
             LinearLayout actions = new LinearLayout(this);
@@ -410,6 +410,11 @@ public final class MainActivity extends AppCompatActivity {
 
     private TextView addColorRampControl(LinearLayout parent, String label, String selected,
                                          String description, RampAction action) {
+        return addColorRampControl(parent, label, selected, description, action, null);
+    }
+
+    private TextView addColorRampControl(LinearLayout parent, String label, String selected,
+                                         String description, RampAction action, Runnable commit) {
         if (label != null && !label.isEmpty()) parent.addView(sectionLabel(label));
         boolean hasSelection = selected != null && !selected.trim().isEmpty();
         TextView reading = text(hasSelection ? "color  " + selected : "sin color seleccionado", 12,
@@ -420,6 +425,7 @@ public final class MainActivity extends AppCompatActivity {
             reading.setText("color  " + value);
             reading.setTextColor(TEXT);
         });
+        ramp.setOnCommit(commit);
         ramp.setContentDescription(description);
         parent.addView(ramp, new LinearLayout.LayoutParams(-1, dp(116)));
         parent.addView(reading);
@@ -1265,6 +1271,7 @@ public final class MainActivity extends AppCompatActivity {
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint marker = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RampAction action;
+        private Runnable onCommit;
         private float selectedX = -1f;
         private float selectedY = -1f;
         private int selectedColor = Color.TRANSPARENT;
@@ -1277,6 +1284,8 @@ public final class MainActivity extends AppCompatActivity {
                 try { selectedColor = Color.parseColor(initial); } catch (IllegalArgumentException ignored) { selectedColor = Color.TRANSPARENT; }
             }
         }
+
+        void setOnCommit(Runnable commit) { onCommit = commit; }
 
         @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
             if (selectedColor == Color.TRANSPARENT || width <= 1 || height <= 1) return;
@@ -1336,6 +1345,7 @@ public final class MainActivity extends AppCompatActivity {
                 selectedX = x; selectedY = y; selectedColor = colorAt(x, y);
                 invalidate();
                 if (action != null) action.selected(hexForColor(selectedColor));
+                if (event.getAction() == MotionEvent.ACTION_UP && onCommit != null) onCommit.run();
                 return true;
             }
             return true;

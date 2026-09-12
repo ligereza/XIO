@@ -10,7 +10,7 @@ MAIN = ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "ja
 def main() -> None:
     source = MAIN.read_text(encoding="utf-8")
     assert 'addColorRampControl(content, "COLOR", sample.observedColor' in source
-    assert 'engine.setObservedColor(value); persist();' in source
+    assert 'value -> engine.setObservedColor(value), this::persist' in source
     assert 'String observedColorLabel = row.observedColor' in source
     assert 'info.addView(body(observedColorLabel));' in source
     assert 'database.insertCapture(sample.id, capture);' in source
