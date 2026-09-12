@@ -850,9 +850,23 @@ public final class MainActivity extends AppCompatActivity {
         if (photos == null) return;
         for (File photo : photos) {
             String captureId = photo.getName().substring(0, photo.getName().length() - 4);
-            boolean known = false;
-            for (SampleSession.Capture capture : engine.snapshot().captures) if (capture.id.equals(captureId)) { known = true; break; }
-            if (known) continue;
+            SampleSession.Capture existing = null;
+            int existingIndex = -1;
+            for (int i = 0; i < engine.snapshot().captures.size(); i++) {
+                SampleSession.Capture capture = engine.snapshot().captures.get(i);
+                if (capture.id.equals(captureId)) { existing = capture; existingIndex = i; break; }
+            }
+            // A capture can already be registered while its first analysis
+            // produced no silhouette. Re-run that exact evidence on launch
+            // so a corrected extractor repairs the row instead of treating
+            // the failed draft as permanently complete.
+            boolean usableExisting = existing != null
+                    && !existing.silhouettePreviewPath.isEmpty()
+                    && new File(existing.silhouettePreviewPath).isFile()
+                    && existing.features != null
+                    && existing.features.circularity >= .12f
+                    && !"no separada".equalsIgnoreCase(existing.features.silhouetteLabel);
+            if (usableExisting) continue;
             Bitmap bitmap = BitmapFactory.decodeFile(photo.getAbsolutePath());
             if (bitmap == null) continue;
             try {
@@ -866,9 +880,14 @@ public final class MainActivity extends AppCompatActivity {
                 if (silhouettePath.isEmpty() && analysis.separated && !analysis.silhouetteSvg.isEmpty()) silhouettePath = photoStore.storeSilhouette(sampleId, captureId, analysis.silhouetteSvg).getAbsolutePath();
                 if (previewPath.isEmpty() && analysis.silhouettePreview != null) previewPath = photoStore.storeSilhouettePreview(sampleId, captureId, analysis.silhouettePreview).getAbsolutePath();
                 if (reliefPath.isEmpty() && !analysis.reliefSvg.isEmpty()) reliefPath = photoStore.storeRelief(sampleId, captureId, analysis.reliefSvg).getAbsolutePath();
-                SampleSession.Capture capture = new SampleSession.Capture(captureId, "vista-recuperada", photo.getAbsolutePath(), silhouettePath, previewPath, reliefPath, sha256(photo), photo.lastModified() > 0 ? photo.lastModified() : System.currentTimeMillis(), analysis.features);
+                SampleSession.Capture capture = new SampleSession.Capture(captureId,
+                        existing == null ? "vista-recuperada" : existing.kind,
+                        photo.getAbsolutePath(), silhouettePath, previewPath, reliefPath,
+                        sha256(photo), existing == null ? (photo.lastModified() > 0 ? photo.lastModified() : System.currentTimeMillis()) : existing.capturedAt,
+                        analysis.features);
                 database.insertCapture(sampleId, capture);
-                engine.restoreCapture(capture);
+                if (existingIndex >= 0) engine.snapshot().captures.set(existingIndex, capture);
+                else engine.restoreCapture(capture);
                 engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
                 if (analysis.silhouettePreview != null && !analysis.silhouettePreview.isRecycled()) analysis.silhouettePreview.recycle();
             } catch (IOException ignored) {
