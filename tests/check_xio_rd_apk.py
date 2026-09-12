@@ -39,6 +39,7 @@ def main() -> None:
     assert 'MUESTRA ACTIVA' in source
     assert 'TESTS Y REACCIONES' in source
     assert 'reacción  ·  ' in source
+    assert 'pendiente de guardar' in source
     assert 'silueta no disponible' in source
     assert 'cleanupUncommittedDraftEvidence' in source
     assert 'Confirma la muestra antes de sincronizar' in source

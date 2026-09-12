@@ -337,7 +337,8 @@ public final class MainActivity extends AppCompatActivity {
 
     private void renderCaptureTab(SampleSession sample) {
         content.addView(sectionLabel("1  ·  INGRESO"));
-        content.addView(heading(pendingCaptures.isEmpty() ? "Nueva muestra" : "Revisar captura"));
+        String captureHeading = !pendingCaptures.isEmpty() ? "Revisar captura" : sample.captures.isEmpty() ? "Nueva muestra" : "Editar muestra";
+        content.addView(heading(captureHeading));
         if (!pendingCaptures.isEmpty()) {
             SampleSession.Capture latest = pendingCaptures.get(pendingCaptures.size() - 1);
             addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
@@ -386,7 +387,7 @@ public final class MainActivity extends AppCompatActivity {
             actions.setOrientation(LinearLayout.HORIZONTAL);
             Button discard = actionButton("🗑", SURFACE, CORAL);
             discard.setContentDescription("Descartar foto");
-            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", TEAL, BG);
+            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", ready ? TEAL : SURFACE_RAISED, ready ? BG : MUTED);
             save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
             save.setEnabled(ready);
             actions.addView(discard, new LinearLayout.LayoutParams(0, dp(50), .28f));
@@ -395,7 +396,7 @@ public final class MainActivity extends AppCompatActivity {
             discard.setOnClickListener(view -> discardPendingCapture(true));
             save.setOnClickListener(view -> saveCurrentEntry());
         } else {
-            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", TEAL, BG);
+            Button save = actionButton(ready ? "→  AVANZAR A COLORIMETRÍA" : "AVANCE BLOQUEADO", ready ? TEAL : SURFACE_RAISED, ready ? BG : MUTED);
             save.setContentDescription(ready ? "Avanzar a colorimetría" : "Avance bloqueado: editar o completar ingreso");
             save.setEnabled(ready);
             content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
@@ -450,8 +451,9 @@ public final class MainActivity extends AppCompatActivity {
         if (!testTimingReady(current)) content.addView(body("Inicia y detén el cronómetro antes de guardar este test."));
         boolean currentReady = !currentWasConfirmed && testInputReady(tests.get(activeTestIndex));
         boolean allReady = allTestsReady(tests);
-        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "→  SIGUIENTE TEST" : "✓  GUARDAR TESTS", TEAL, BG);
-        save.setEnabled(currentReady && (activeTestIndex + 1 < tests.size() || allReady));
+        boolean saveEnabled = currentReady && (activeTestIndex + 1 < tests.size() || allReady);
+        Button save = actionButton(activeTestIndex + 1 < tests.size() ? "→  SIGUIENTE TEST" : "✓  GUARDAR TESTS", saveEnabled ? TEAL : SURFACE_RAISED, saveEnabled ? BG : MUTED);
+        save.setEnabled(saveEnabled);
         content.addView(save, new LinearLayout.LayoutParams(-1, dp(50)));
         save.setOnClickListener(view -> saveCurrentColorimetryTest(tests));
     }
@@ -504,8 +506,9 @@ public final class MainActivity extends AppCompatActivity {
             SampleSession.Capture latest = captures.isEmpty() ? null : captures.get(captures.size() - 1);
             addEntryRow(row, latest);
         }
-        Button confirm = actionButton(sampleCanConfirm(engine.snapshot()) ? "✓  CONFIRMAR Y NUEVA MUESTRA" : "CONFIRMAR BLOQUEADO · COMPLETA EL PIPELINE", TEAL, BG);
-        confirm.setEnabled(sampleCanConfirm(engine.snapshot()));
+        boolean confirmEnabled = sampleCanConfirm(engine.snapshot());
+        Button confirm = actionButton(confirmEnabled ? "✓  CONFIRMAR Y NUEVA MUESTRA" : "CONFIRMAR BLOQUEADO · COMPLETA EL PIPELINE", confirmEnabled ? TEAL : SURFACE_RAISED, confirmEnabled ? BG : MUTED);
+        confirm.setEnabled(confirmEnabled);
         content.addView(confirm, new LinearLayout.LayoutParams(-1, dp(50)));
         confirm.setOnClickListener(view -> confirmCurrentSample());
     }
@@ -542,10 +545,14 @@ public final class MainActivity extends AppCompatActivity {
         } else {
             card.addView(sectionLabel("TESTS Y REACCIONES"));
             for (SampleSession.TestSession test : sample.tests) {
-                String reaction = test.observations.isEmpty()
-                        ? "sin reacción registrada"
+                String persistedReaction = test.observations.isEmpty()
+                        ? ""
                         : test.observations.get(test.observations.size() - 1).color;
-                String state = "done".equalsIgnoreCase(test.status) ? "✓" : "pendiente";
+                String stagedReaction = testColors.get(test.id);
+                String reaction = stagedReaction != null ? stagedReaction
+                        : persistedReaction.isEmpty() ? "sin reacción registrada" : persistedReaction;
+                boolean stagedChange = stagedReaction != null && !stagedReaction.equals(persistedReaction);
+                String state = "done".equalsIgnoreCase(test.status) && !stagedChange ? "✓" : "pendiente de guardar";
                 card.addView(body(state + "  " + test.reagent + "  ·  reacción  ·  " + reaction
                         + (test.elapsedMs > 0 ? "  ·  " + String.format(Locale.US, "%.1fs", test.elapsedMs / 1000f) : "")));
             }
