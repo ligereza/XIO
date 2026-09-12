@@ -227,6 +227,16 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         getWritableDatabase().update("samples", values, "sync_status=?", new String[]{"sending"});
     }
 
+    /** Keeps evidence recovery in the same append-friendly audit stream as operator actions. */
+    public void appendAction(String sampleId, String action, String payload) {
+        ContentValues values = new ContentValues();
+        values.put("sample_id", sampleId);
+        values.put("at", System.currentTimeMillis());
+        values.put("action", action == null ? "evidence_recovery" : action);
+        values.put("payload", payload == null ? "" : payload);
+        getWritableDatabase().insert("action_log", null, values);
+    }
+
     public List<EventRow> recentEvents() {
         List<EventRow> result = new ArrayList<>();
         Cursor cursor = getReadableDatabase().query("events", null, "id<>?", new String[]{"pending-event"}, null, null, "scheduled_at DESC", "60");

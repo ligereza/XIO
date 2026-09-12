@@ -131,7 +131,7 @@ public final class MainActivity extends AppCompatActivity {
             engine.restoreCapture(capture);
             engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
         }
-        recoverOrphanCaptureFiles(row.id);
+        reconcileOrphanCaptureFiles();
         for (SampleSession.TestSession test : database.loadTests(row.id)) engine.restoreTest(test);
         for (SampleSession.Correction correction : database.loadCorrections(row.id)) engine.restoreCorrection(correction);
         for (SampleSession.ActionRecord action : database.loadActions(row.id)) engine.restoreAction(action);
@@ -969,17 +969,26 @@ public final class MainActivity extends AppCompatActivity {
 
     private void persist() { database.saveSession(engine.snapshot()); }
 
-    /** Reconciles evidence written by the pre-draft build with the local DB. */
-    private void recoverOrphanCaptureFiles(String sampleId) {
+    /** Reconciles orphan or incomplete evidence for every local sample. */
+    private void reconcileOrphanCaptureFiles() {
+        String currentSampleId = engine.snapshot().id;
+        for (RdFieldDb.SampleRow local : database.recentSamples()) {
+            reconcileOrphanCaptureFiles(local.id, local.id.equals(currentSampleId));
+        }
+    }
+
+    /** Re-runs only evidence that is absent or incomplete; never deletes the original photo. */
+    private void reconcileOrphanCaptureFiles(String sampleId, boolean hydrateCurrentSample) {
         File directory = new File(getFilesDir(), "evidence" + File.separator + sampleId);
         File[] photos = directory.listFiles((dir, name) -> name != null && name.endsWith(".jpg"));
         if (photos == null) return;
+        List<SampleSession.Capture> registered = database.loadCaptures(sampleId);
         for (File photo : photos) {
             String captureId = photo.getName().substring(0, photo.getName().length() - 4);
             SampleSession.Capture existing = null;
             int existingIndex = -1;
-            for (int i = 0; i < engine.snapshot().captures.size(); i++) {
-                SampleSession.Capture capture = engine.snapshot().captures.get(i);
+            for (int i = 0; i < registered.size(); i++) {
+                SampleSession.Capture capture = registered.get(i);
                 if (capture.id.equals(captureId)) { existing = capture; existingIndex = i; break; }
             }
             // A capture can already be registered while its first analysis
@@ -1012,9 +1021,18 @@ public final class MainActivity extends AppCompatActivity {
                         sha256(photo), existing == null ? (photo.lastModified() > 0 ? photo.lastModified() : System.currentTimeMillis()) : existing.capturedAt,
                         analysis.features);
                 database.insertCapture(sampleId, capture);
-                if (existingIndex >= 0) engine.snapshot().captures.set(existingIndex, capture);
-                else engine.restoreCapture(capture);
-                engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
+                if (existingIndex >= 0) registered.set(existingIndex, capture);
+                else registered.add(capture);
+                database.appendAction(sampleId, "evidence_reconciled", captureId + " · " + (existing == null ? "huérfana" : "reprocesada"));
+                if (hydrateCurrentSample) {
+                    int currentIndex = -1;
+                    for (int i = 0; i < engine.snapshot().captures.size(); i++) {
+                        if (captureId.equals(engine.snapshot().captures.get(i).id)) { currentIndex = i; break; }
+                    }
+                    if (currentIndex >= 0) engine.snapshot().captures.set(currentIndex, capture);
+                    else engine.restoreCapture(capture);
+                    engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
+                }
                 if (analysis.silhouettePreview != null && !analysis.silhouettePreview.isRecycled()) analysis.silhouettePreview.recycle();
             } catch (IOException ignored) {
                 // Keep the original evidence intact; a later launch may retry.
