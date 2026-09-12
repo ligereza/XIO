@@ -62,6 +62,7 @@ import cl.reduciendodano.xiofield.data.FlujoGateway;
 import cl.reduciendodano.xiofield.data.RdFieldDb;
 import cl.reduciendodano.xiofield.data.RdFieldExporter;
 import cl.reduciendodano.xiofield.visual.BatchPatternDetector;
+import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 import cl.reduciendodano.xiofield.visual.VisualFeatureExtractor;
 import cl.reduciendodano.xiofield.visual.VisualMemory;
 
@@ -803,6 +804,7 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout card = card();
         card.addView(sectionLabel("RECONOCIMIENTO DE MOLDE / DISEÑO"));
         card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
+        card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(query)));
         List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), query, 3);
         if (matches.isEmpty()) {
             card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));

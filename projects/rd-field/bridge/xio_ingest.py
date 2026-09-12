@@ -31,6 +31,8 @@ def _ensure_mold_design_column(conn: sqlite3.Connection) -> None:
     columns = {row[1] for row in conn.execute("PRAGMA table_info(muestras)")}
     if "molde_diseno" not in columns:
         conn.execute("ALTER TABLE muestras ADD COLUMN molde_diseno TEXT")
+    if "molde_huella" not in columns:
+        conn.execute("ALTER TABLE muestras ADD COLUMN molde_huella TEXT")
 
 
 def bootstrap(db_path: str | Path) -> dict[str, Any]:
@@ -111,6 +113,7 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
     texture = _bounded_text(payload.get("texture"), 120)
     logo = _bounded_text(payload.get("logoOrMark"), 240)
     mold_design = _bounded_text(payload.get("moldDesign"), 240)
+    mold_fingerprint = _bounded_text(payload.get("moldFingerprint"), 80)
     notes = _bounded_text(payload.get("notes"), MAX_NOTE)
 
     with _connect(db_path) as conn:
@@ -137,9 +140,9 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             conn.execute(
                 "UPDATE muestras SET fecha=?, evento_ref=?, evento_origen=?, "
                 "sustancia_declarada=?, tipo_muestra=?, color=?, textura=?, "
-                "logo_o_marca=?, molde_diseno=?, foto_ref=?, notas=? WHERE id=?",
+                "logo_o_marca=?, molde_diseno=?, molde_huella=?, foto_ref=?, notas=? WHERE id=?",
                 (date_value, event_ref, event_origin, declared, sample_type, color,
-                 texture, logo, mold_design, foto_value, notes_value, sample_id),
+                 texture, logo, mold_design, mold_fingerprint, foto_value, notes_value, sample_id),
             )
             duplicate = True
         else:
@@ -147,9 +150,9 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             cur = conn.execute(
                 "INSERT INTO muestras(fecha, mesa_id, evento_ref, evento_origen, "
                 "codigo_muestra, sustancia_declarada, tipo_muestra, color, textura, "
-                "logo_o_marca, molde_diseno, foto_ref, notas) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "logo_o_marca, molde_diseno, molde_huella, foto_ref, notas) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (date_value, mesa_id, event_ref, event_origin, code, declared,
-                 sample_type, color, texture, logo, mold_design, foto_ref, notes_value),
+                 sample_type, color, texture, logo, mold_design, mold_fingerprint, foto_ref, notes_value),
             )
             sample_id = int(cur.lastrowid)
             duplicate = False

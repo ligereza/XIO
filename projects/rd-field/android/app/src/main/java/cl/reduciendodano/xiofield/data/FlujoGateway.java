@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
 import cl.reduciendodano.xiofield.core.VisualFeatures;
+import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 
 /**
  * Small LAN client for the XIO RD host. The mobile app remains usable
@@ -98,6 +99,7 @@ public final class FlujoGateway {
         payload.put("texture", textureText(features));
         payload.put("logoOrMark", reviewedMark(sample, features));
         payload.put("moldDesign", reviewedMoldDesign(sample));
+        payload.put("moldFingerprint", MoldPatternMatcher.fingerprint(features));
         payload.put("mesa", new JSONObject().put("label", "XIO / mesa móvil").put("number", 1));
         payload.put("notes", notes(sample, features));
 
@@ -244,6 +246,7 @@ public final class FlujoGateway {
         notes.append(visual).append("; phase=").append(sample.phase.name());
         String mold = reviewedMoldDesign(sample);
         if (!mold.isEmpty()) notes.append("; xio_mold_design=").append(mold);
+        if (features != null) notes.append("; xio_mold_fingerprint=").append(MoldPatternMatcher.fingerprint(features));
         if (features != null) {
             notes.append(String.format(Locale.US, "; geometry_confidence=%.3f; circularity=%.3f; solidity=%.3f; symmetry=%.3f; contour_points=%d; geometry_signature=%s; relief_confidence=%.3f; relief_signature=%s", features.silhouetteConfidence, features.circularity, features.solidity, features.symmetry, features.contourPointCount, features.geometrySignature, features.reliefConfidence, features.reliefSignature));
         }

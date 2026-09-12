@@ -152,6 +152,7 @@ def _payload(event_ref="EVT-001"):
         "texture": "Compacto",
         "logoOrMark": "",
         "moldDesign": "corona",
+        "moldFingerprint": "MOLD-ABC123",
         "notes": "fixture sin identidad",
         "mesa": {"label": "PWA RD"},
         "tests": [{"reagent": "Marquis", "resultColor": "amarillo", "order": 1}],
@@ -222,6 +223,7 @@ def test_rd_sync_persiste_en_host_y_es_idempotente(tmp_path):
         assert conn.execute("SELECT COUNT(*) FROM muestras").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM muestra_resultados").fetchone()[0] == 1
         assert conn.execute("SELECT molde_diseno FROM muestras").fetchone()[0] == "corona"
+        assert conn.execute("SELECT molde_huella FROM muestras").fetchone()[0] == "MOLD-ABC123"
 
 
 if __name__ == "__main__":

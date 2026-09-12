@@ -93,5 +93,6 @@ public final class SampleSessionEngineTest {
         assertEquals("molde: corona", matches.get(0).entry.reviewedLabel);
         assertTrue(matches.get(0).similarity > .75f);
         assertTrue(MoldPatternMatcher.explanation(query, sameDesign).contains("contorno") || MoldPatternMatcher.explanation(query, sameDesign).contains("relieve"));
+        assertTrue(MoldPatternMatcher.fingerprint(query).startsWith("MOLD-"));
     }
 }
