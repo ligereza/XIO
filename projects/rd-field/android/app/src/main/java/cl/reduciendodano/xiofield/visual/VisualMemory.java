@@ -14,6 +14,8 @@ public final class VisualMemory {
         public final String eventId;
         public final long capturedAt;
         public final String reviewedLabel;
+        public final String declaredSubstance;
+        public final String reviewedField;
         public final VisualFeatures features;
 
         public Entry(String captureId, String sampleCode, String reviewedLabel, VisualFeatures features) {
@@ -21,11 +23,18 @@ public final class VisualMemory {
         }
 
         public Entry(String captureId, String sampleCode, String eventId, long capturedAt, String reviewedLabel, VisualFeatures features) {
+            this(captureId, sampleCode, eventId, capturedAt, reviewedLabel, "", "", features);
+        }
+
+        public Entry(String captureId, String sampleCode, String eventId, long capturedAt, String reviewedLabel,
+                     String declaredSubstance, String reviewedField, VisualFeatures features) {
             this.captureId = captureId;
             this.sampleCode = sampleCode;
             this.eventId = eventId;
             this.capturedAt = capturedAt;
-            this.reviewedLabel = reviewedLabel;
+            this.reviewedLabel = reviewedLabel == null ? "" : reviewedLabel;
+            this.declaredSubstance = declaredSubstance == null ? "" : declaredSubstance;
+            this.reviewedField = reviewedField == null ? "" : reviewedField;
             this.features = features;
         }
     }
@@ -33,8 +42,12 @@ public final class VisualMemory {
     public static final class Match {
         public final Entry entry;
         public final float similarity;
+        public final String explanation;
 
-        public Match(Entry entry, float similarity) { this.entry = entry; this.similarity = similarity; }
+        public Match(Entry entry, float similarity) { this(entry, similarity, "parecido visual"); }
+        public Match(Entry entry, float similarity, String explanation) {
+            this.entry = entry; this.similarity = similarity; this.explanation = explanation == null ? "" : explanation;
+        }
     }
 
     private final List<Entry> entries = new ArrayList<>();
@@ -62,6 +75,32 @@ public final class VisualMemory {
     }
 
     public int reviewedCount() { return entries.size(); }
+
+    public List<Match> findMoldMatches(String substance, String eventId, long now, VisualFeatures query, int limit) {
+        List<Match> matches = new ArrayList<>();
+        if (!isEcstasy(substance) || query == null) return matches;
+        for (Entry entry : entries) {
+            if (!isMoldEntry(entry) || (!entry.declaredSubstance.isEmpty() && !isEcstasy(entry.declaredSubstance))) continue;
+            float score = MoldPatternMatcher.similarity(query, entry.features);
+            long ageDays = entry.capturedAt <= 0L ? 0L : Math.max(0L, (now - entry.capturedAt) / 86_400_000L);
+            float recency = ageDays <= 365 ? 1f : Math.max(.88f, 1f - (Math.min(ageDays, 3650L) / 3650f) * .12f);
+            float sameEvent = !eventId.isEmpty() && eventId.equals(entry.eventId) ? 1.04f : 1f;
+            matches.add(new Match(entry, Math.min(1f, score * recency * sameEvent), MoldPatternMatcher.explanation(query, entry.features)));
+        }
+        matches.sort(Comparator.comparingDouble((Match match) -> match.similarity).reversed());
+        return matches.subList(0, Math.min(limit, matches.size()));
+    }
+
+    private static boolean isMoldEntry(Entry entry) {
+        return "mold_design".equalsIgnoreCase(entry.reviewedField)
+                || entry.reviewedLabel.toLowerCase().startsWith("molde:");
+    }
+
+    private static boolean isEcstasy(String value) {
+        if (value == null) return false;
+        String clean = value.toLowerCase().replace("é", "e");
+        return clean.contains("extasis") || clean.contains("mdma");
+    }
 
     private static float similarity(VisualFeatures a, VisualFeatures b) { return BatchPatternDetector.similarity(a, b); }
 }

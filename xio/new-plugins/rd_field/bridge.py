@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS muestras (
     color TEXT,
     textura TEXT,
     logo_o_marca TEXT,
+    molde_diseno TEXT,
     peso_mg REAL,
     foto_ref TEXT,
     notas TEXT,
@@ -187,6 +188,9 @@ CREATE INDEX IF NOT EXISTS idx_muestra_capturas_muestra
 def ensure_event_schema(conn: sqlite3.Connection) -> None:
     """Create XIO context and canonical signal tables safely."""
     conn.executescript(XIO_OPERATIONAL_SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(muestras)")}
+    if "molde_diseno" not in columns:
+        conn.execute("ALTER TABLE muestras ADD COLUMN molde_diseno TEXT")
     conn.executescript(XIO_EVENT_SCHEMA)
     conn.executescript(XIO_SIGNAL_SCHEMA)
 
@@ -275,10 +279,11 @@ def load_samples(
     event_ref = _required_text({"eventRef": event_ref}, "eventRef", 160)
     code_filter = _bounded_text(sample_code, 100)
     with _connection(db_path) as conn:
+        ensure_event_schema(conn)
         query = (
             "SELECT id, fecha, mesa_id, evento_ref, evento_origen, "
             "codigo_muestra, sustancia_declarada, tipo_muestra, color, "
-            "textura, logo_o_marca, peso_mg, foto_ref, notas, descartada "
+            "textura, logo_o_marca, molde_diseno, peso_mg, foto_ref, notas, descartada "
             "FROM muestras WHERE evento_ref=?"
         )
         params: list[Any] = [event_ref]
@@ -353,6 +358,7 @@ def load_samples(
                 "color": row["color"],
                 "texture": row["textura"],
                 "logoOrMark": row["logo_o_marca"],
+                "moldDesign": row["molde_diseno"],
                 "weightMg": row["peso_mg"],
                 "photoRef": row["foto_ref"],
                 "notes": row["notas"],
@@ -598,9 +604,11 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
     color = _bounded_text(payload.get("color"), 120)
     texture = _bounded_text(payload.get("texture"), 120)
     logo = _bounded_text(payload.get("logoOrMark"), 240)
+    mold_design = _bounded_text(payload.get("moldDesign"), 240)
     notes = _bounded_text(payload.get("notes"), MAX_NOTE)
 
     with _connection(db_path) as conn:
+        ensure_event_schema(conn)
         ensure_capture_schema(conn)
         mesa_id = _resolve_mesa(conn, payload, event_ref, event_origin)
         captures = payload.get("captures") if isinstance(payload.get("captures"), list) else []
@@ -658,9 +666,9 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             conn.execute(
                 "UPDATE muestras SET fecha=?, evento_ref=?, evento_origen=?, "
                 "sustancia_declarada=?, tipo_muestra=?, color=?, textura=?, "
-                "logo_o_marca=?, foto_ref=?, notas=? WHERE id=?",
+                "logo_o_marca=?, molde_diseno=?, foto_ref=?, notas=? WHERE id=?",
                 (date_value, event_ref, event_origin, declared, sample_type, color,
-                 texture, logo, foto_value, notes_value, sample_id),
+                 texture, logo, mold_design, foto_value, notes_value, sample_id),
             )
             duplicate = True
         else:
@@ -668,9 +676,9 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             cur = conn.execute(
                 "INSERT INTO muestras(fecha, mesa_id, evento_ref, evento_origen, "
                 "codigo_muestra, sustancia_declarada, tipo_muestra, color, textura, "
-                "logo_o_marca, foto_ref, notas) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                "logo_o_marca, molde_diseno, foto_ref, notas) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (date_value, mesa_id, event_ref, event_origin, code, declared,
-                 sample_type, color, texture, logo, foto_ref, notes_value),
+                 sample_type, color, texture, logo, mold_design, foto_ref, notes_value),
             )
             sample_id = int(cur.lastrowid)
             duplicate = False

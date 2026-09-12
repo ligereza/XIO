@@ -6,11 +6,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "MainActivity.java"
 VISION = ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "visual" / "VisualFeatureExtractor.java"
+MEMORY = ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "visual" / "VisualMemory.java"
 
 
 def main() -> None:
     source = MAIN.read_text(encoding="utf-8")
     vision = VISION.read_text(encoding="utf-8")
+    memory = MEMORY.read_text(encoding="utf-8")
     assert 'addColorRampControl(content, "COLOR", sample.observedColor' in source
     assert 'value -> engine.setObservedColor(value)' in source
     assert 'ramp.setOnCommit(commit);' in source
@@ -28,6 +30,10 @@ def main() -> None:
     assert 'bestCluster(relaxedRaw, width, height)' in vision
     assert 'fillEnclosedHoles' in vision
     assert 'directionalThreshold' in vision
+    assert 'findMoldMatches' in memory
+    assert 'mold_design' in memory
+    assert 'RECONOCIMIENTO DE MOLDE / DISEÑO' in source
+    assert 'moldDesign' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 
 

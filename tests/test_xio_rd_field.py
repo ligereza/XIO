@@ -151,6 +151,7 @@ def _payload(event_ref="EVT-001"):
         "color": "Rosado",
         "texture": "Compacto",
         "logoOrMark": "",
+        "moldDesign": "corona",
         "notes": "fixture sin identidad",
         "mesa": {"label": "PWA RD"},
         "tests": [{"reagent": "Marquis", "resultColor": "amarillo", "order": 1}],
@@ -220,6 +221,7 @@ def test_rd_sync_persiste_en_host_y_es_idempotente(tmp_path):
     with sqlite3.connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM muestras").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM muestra_resultados").fetchone()[0] == 1
+        assert conn.execute("SELECT molde_diseno FROM muestras").fetchone()[0] == "corona"
 
 
 if __name__ == "__main__":

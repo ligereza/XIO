@@ -237,6 +237,8 @@ public final class MainActivity extends AppCompatActivity {
             capture.setOnClickListener(view -> openCamera());
         }
 
+        addMoldRecognitionCard(sample);
+
         content.addView(sectionLabel("DECLARACIÓN"));
         addOptionStrip("sustancia", SUBSTANCE_OPTIONS, sample.declaredSubstance, value -> {
             engine.setDeclaredSubstance(value);
@@ -752,6 +754,11 @@ public final class MainActivity extends AppCompatActivity {
             LinearLayout card = card(); card.addView(sectionLabel("PROPUESTA")); card.addView(text(features.compactDescription(), 17, TEXT)); card.addView(body("Sólo rasgos visibles · no composición"));
             Button confirm = actionButton("✓  ACEPTAR", TEAL, BG); card.addView(confirm, new LinearLayout.LayoutParams(-1, dp(46))); confirm.setOnClickListener(view -> saveReviewedExample(sample.captures.get(sample.captures.size() - 1), features.compactDescription(), "visual_summary"));
             Button mark = actionButton("✎  MARCA / LOGO", SURFACE, TEAL); card.addView(mark, new LinearLayout.LayoutParams(-1, dp(42))); mark.setOnClickListener(view -> askForMarkingLabel(sample.captures.get(sample.captures.size() - 1), features));
+            if (isEcstasy(sample.declaredSubstance)) {
+                Button mold = actionButton("✦  MOLDE / DISEÑO", SURFACE, AMBER);
+                card.addView(mold, new LinearLayout.LayoutParams(-1, dp(42)));
+                mold.setOnClickListener(view -> askForMoldDesignLabel(sample.captures.get(sample.captures.size() - 1), features));
+            }
             content.addView(card, new LinearLayout.LayoutParams(-1, -2));
         } else {
             content.addView(body("Aún no hay captura visual que corregir."));
@@ -764,6 +771,7 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(heading("Parecidos y recurrencia"));
         if (sample.captures.isEmpty()) { content.addView(body("Captura primero una muestra para consultar la memoria.")); return; }
         VisualFeatures query = sample.captures.get(sample.captures.size() - 1).features;
+        addMoldRecognitionCard(sample);
         List<BatchPatternDetector.Pattern> patterns = new BatchPatternDetector().detect(database.sampleVisualObservations(sample.eventId));
         BatchPatternDetector.Pattern currentPattern = null;
         for (BatchPatternDetector.Pattern pattern : patterns) if (pattern.sampleCodes.contains(sample.code)) { currentPattern = pattern; break; }
@@ -787,6 +795,29 @@ public final class MainActivity extends AppCompatActivity {
         }
         Button back = actionButton("←  CORREGIR", SURFACE, TEAL); content.addView(back, new LinearLayout.LayoutParams(-1, dp(42))); back.setOnClickListener(view -> { engine.transitionTo(SampleSession.Phase.REVIEW); render(); });
         Button export = actionButton("⇩  EXPORTAR", TEAL, BG); content.addView(export, new LinearLayout.LayoutParams(-1, dp(46))); export.setOnClickListener(view -> exportSample());
+    }
+
+    private void addMoldRecognitionCard(SampleSession sample) {
+        if (!isEcstasy(sample.declaredSubstance) || sample.captures.isEmpty()) return;
+        VisualFeatures query = sample.captures.get(sample.captures.size() - 1).features;
+        LinearLayout card = card();
+        card.addView(sectionLabel("RECONOCIMIENTO DE MOLDE / DISEÑO"));
+        card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
+        List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), query, 3);
+        if (matches.isEmpty()) {
+            card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
+        } else {
+            for (VisualMemory.Match match : matches) {
+                String label = match.entry.reviewedLabel;
+                if (label.toLowerCase(Locale.ROOT).startsWith("molde:")) label = label.substring("molde:".length()).trim();
+                card.addView(text("✦  " + label + "  ·  " + Math.round(match.similarity * 100f) + "%", 16, TEXT));
+                card.addView(body(match.entry.sampleCode + "  ·  " + match.explanation));
+            }
+        }
+        Button register = actionButton("✦  REGISTRAR DISEÑO DEL MOLDE", SURFACE, AMBER);
+        card.addView(register, new LinearLayout.LayoutParams(-1, dp(42)));
+        register.setOnClickListener(view -> askForMoldDesignLabel(sample.captures.get(sample.captures.size() - 1), query));
+        content.addView(card, new LinearLayout.LayoutParams(-1, -2));
     }
 
     private void openCamera() {
@@ -918,7 +949,8 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession.Correction correction = sample.corrections.get(sample.corrections.size() - 1);
         sample.status = "reviewed";
         database.saveCorrectionAndTrainingExample(sample.id, correction, label);
-        memory.addReviewed(new VisualMemory.Entry(capture.id, sample.code, sample.eventId, capture.capturedAt, label, capture.features));
+        memory.addReviewed(new VisualMemory.Entry(capture.id, sample.code, sample.eventId, capture.capturedAt, label,
+                sample.declaredSubstance, field, capture.features));
         persist();
         Toast.makeText(this, "Corrección conservada y disponible para recuperar", Toast.LENGTH_SHORT).show();
         render();
@@ -939,6 +971,29 @@ public final class MainActivity extends AppCompatActivity {
                     saveReviewedExample(capture, features.compactDescription() + " · operador: " + label, "marking_label");
                 })
                 .show();
+    }
+
+    private void askForMoldDesignLabel(SampleSession.Capture capture, VisualFeatures features) {
+        EditText input = new EditText(this);
+        input.setHint("Ej.: corona, calavera, estrella, logo sin leer");
+        input.setSingleLine(true);
+        new AlertDialog.Builder(this)
+                .setTitle("¿Qué diseño tiene el molde?")
+                .setMessage("Guarda una etiqueta visual para encontrar comprimidos parecidos en futuros turnos; no identifica la sustancia.")
+                .setView(input)
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("GUARDAR MOLDE", (dialog, which) -> {
+                    String label = input.getText().toString().trim();
+                    if (label.isEmpty()) label = "diseño visible sin nombre";
+                    saveReviewedExample(capture, "molde: " + label, "mold_design");
+                })
+                .show();
+    }
+
+    private boolean isEcstasy(String value) {
+        if (value == null) return false;
+        String clean = value.toLowerCase(Locale.ROOT).replace("é", "e");
+        return clean.contains("extasis") || clean.contains("mdma");
     }
 
     private void startNextSample() {

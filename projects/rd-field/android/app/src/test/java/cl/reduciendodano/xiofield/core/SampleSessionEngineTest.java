@@ -7,6 +7,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import cl.reduciendodano.xiofield.visual.BatchPatternDetector;
+import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 import cl.reduciendodano.xiofield.visual.VisualMemory;
 
 public final class SampleSessionEngineTest {
@@ -78,5 +79,19 @@ public final class SampleSessionEngineTest {
         assertTrue(BatchPatternDetector.geometrySimilarity(first, sameMould) > .8f);
         assertTrue(BatchPatternDetector.reliefSimilarity(first, sameMould) > .8f);
         assertTrue(BatchPatternDetector.similarity(first, sameMould) > BatchPatternDetector.similarity(first, otherMould));
+    }
+    @Test public void ecstasyMouldMatchesUseReviewedDesignLabelsAndIgnoreOtherSubstances() {
+        String contour = "1,.8,.5,.8,1,.8,.5,.8";
+        String relief = "0,0,.8,0,0,.8,0,0,0,0,.8,0,0,.8,0,0";
+        VisualFeatures query = new VisualFeatures("rosado", "compacta", 1f, .4f, .7f, .3f, .2f, 200, 140, 140, 12L, "marca", .7f, .8f, relief, .9f, .8f, .95f, .9f, 48, contour);
+        VisualFeatures sameDesign = new VisualFeatures("beige", "compacta", 1.02f, .4f, .7f, .3f, .2f, 190, 135, 130, 12L, "marca", .7f, .8f, relief, .9f, .8f, .95f, .9f, 48, ".8,.5,.8,1,.8,.5,.8,1");
+        VisualMemory memory = new VisualMemory();
+        memory.addReviewed(new VisualMemory.Entry("mold-1", "XIO-EXT-001", "event-1", 1L, "molde: corona", "ÉXTASIS", "mold_design", sameDesign));
+        memory.addReviewed(new VisualMemory.Entry("other-1", "XIO-MDMA-002", "event-1", 2L, "marca: otra", "COCAÍNA", "mold_design", sameDesign));
+        java.util.List<VisualMemory.Match> matches = memory.findMoldMatches("ÉXTASIS", "event-1", 3L, query, 5);
+        assertEquals(1, matches.size());
+        assertEquals("molde: corona", matches.get(0).entry.reviewedLabel);
+        assertTrue(matches.get(0).similarity > .75f);
+        assertTrue(MoldPatternMatcher.explanation(query, sameDesign).contains("contorno") || MoldPatternMatcher.explanation(query, sameDesign).contains("relieve"));
     }
 }

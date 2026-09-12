@@ -97,6 +97,7 @@ public final class FlujoGateway {
         payload.put("color", sample.observedColor == null || sample.observedColor.isEmpty() ? (features == null ? "" : features.colorLabel) : sample.observedColor);
         payload.put("texture", textureText(features));
         payload.put("logoOrMark", reviewedMark(sample, features));
+        payload.put("moldDesign", reviewedMoldDesign(sample));
         payload.put("mesa", new JSONObject().put("label", "XIO / mesa móvil").put("number", 1));
         payload.put("notes", notes(sample, features));
 
@@ -225,11 +226,24 @@ public final class FlujoGateway {
         return fallback;
     }
 
+    private static String reviewedMoldDesign(SampleSession sample) {
+        for (int i = sample.corrections.size() - 1; i >= 0; i--) {
+            SampleSession.Correction correction = sample.corrections.get(i);
+            if (!"mold_design".equals(correction.field)) continue;
+            String value = correction.correctedValue == null ? "" : correction.correctedValue.trim();
+            if (value.toLowerCase(Locale.ROOT).startsWith("molde:")) return value.substring("molde:".length()).trim();
+            return value;
+        }
+        return "";
+    }
+
     private static String notes(SampleSession sample, VisualFeatures features) {
         String visual = features == null ? "" : features.compactDescription();
         SampleSession.Capture latest = latestCapture(sample);
         StringBuilder notes = new StringBuilder("xio_visual_source=proposal; model=visual-contour-v0.3; ");
         notes.append(visual).append("; phase=").append(sample.phase.name());
+        String mold = reviewedMoldDesign(sample);
+        if (!mold.isEmpty()) notes.append("; xio_mold_design=").append(mold);
         if (features != null) {
             notes.append(String.format(Locale.US, "; geometry_confidence=%.3f; circularity=%.3f; solidity=%.3f; symmetry=%.3f; contour_points=%d; geometry_signature=%s; relief_confidence=%.3f; relief_signature=%s", features.silhouetteConfidence, features.circularity, features.solidity, features.symmetry, features.contourPointCount, features.geometrySignature, features.reliefConfidence, features.reliefSignature));
         }

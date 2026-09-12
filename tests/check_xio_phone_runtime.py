@@ -34,6 +34,7 @@ REQUIRED_FILES = (
     "new/server.py",
     "new/run_server.sh",
     "new-plugins/rd_field/__init__.py",
+    "new-plugins/rd_field/bridge.py",
     "new-plugins/rd_field/static/index.html",
     "new-plugins/foh_monitor/__init__.py",
     "new-plugins/foh_monitor/foh_vj_context.json",
@@ -48,6 +49,7 @@ SYNC_FILES = (
     "new-plugins/foh_monitor/__init__.py",
     "new-plugins/foh_monitor/static/raider.html",
     "new-plugins/rd_field/__init__.py",
+    "new-plugins/rd_field/bridge.py",
     "new-plugins/rd_field/static/raider.html",
     "new-plugins/connectivity_supervisor/__init__.py",
 )

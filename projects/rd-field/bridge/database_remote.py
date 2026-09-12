@@ -479,6 +479,7 @@ CREATE TABLE IF NOT EXISTS muestras (
     color TEXT,
     textura TEXT,
     logo_o_marca TEXT,
+    molde_diseno TEXT,
     peso_mg REAL,
     foto_ref TEXT,
     notas TEXT,

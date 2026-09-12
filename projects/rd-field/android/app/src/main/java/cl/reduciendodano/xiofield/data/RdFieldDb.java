@@ -232,9 +232,13 @@ public final class RdFieldDb extends SQLiteOpenHelper {
 
     public List<VisualMemory.Entry> reviewedMemory() {
         List<VisualMemory.Entry> result = new ArrayList<>();
-        String sql = "SELECT t.capture_id, s.code, s.event_id, c.captured_at, t.label, c.* FROM training_examples t JOIN samples s ON s.id=t.sample_id JOIN captures c ON c.id=t.capture_id WHERE t.review_status='reviewed' ORDER BY c.captured_at DESC";
+        String sql = "SELECT t.capture_id, s.code, s.event_id, s.declared_substance, c.captured_at, t.label, "
+                + "COALESCE((SELECT cr.field FROM corrections cr WHERE cr.sample_id=t.sample_id AND cr.capture_id=t.capture_id "
+                + "ORDER BY cr.reviewed_at DESC LIMIT 1), '') AS review_field, c.* "
+                + "FROM training_examples t JOIN samples s ON s.id=t.sample_id JOIN captures c ON c.id=t.capture_id "
+                + "WHERE t.review_status='reviewed' ORDER BY c.captured_at DESC";
         Cursor cursor = getReadableDatabase().rawQuery(sql, null);
-        try { while (cursor.moveToNext()) result.add(new VisualMemory.Entry(cursor.getString(cursor.getColumnIndexOrThrow("capture_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getLong(cursor.getColumnIndexOrThrow("captured_at")), cursor.getString(cursor.getColumnIndexOrThrow("label")), featuresFrom(cursor))); } finally { cursor.close(); }
+        try { while (cursor.moveToNext()) result.add(new VisualMemory.Entry(cursor.getString(cursor.getColumnIndexOrThrow("capture_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getLong(cursor.getColumnIndexOrThrow("captured_at")), cursor.getString(cursor.getColumnIndexOrThrow("label")), cursor.getString(cursor.getColumnIndexOrThrow("declared_substance")), cursor.getString(cursor.getColumnIndexOrThrow("review_field")), featuresFrom(cursor))); } finally { cursor.close(); }
         return result;
     }
 
