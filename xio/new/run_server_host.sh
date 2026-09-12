@@ -5,7 +5,10 @@ set -euo pipefail
 # host relationship explicit instead of silently creating an empty RD DB.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FLUJO_ROOT="${FLUJO_ROOT:-/home/mak/flujo}"
-export XIO_BIND_HOST="${XIO_BIND_HOST:-127.0.0.1}"
+# The MAK host is the selectable RD endpoint for field phones. Bind the
+# private LAN by default; operators can still override this explicitly for a
+# loopback-only deployment.
+export XIO_BIND_HOST="${XIO_BIND_HOST:-0.0.0.0}"
 export XIO_PORT="${XIO_PORT:-5000}"
 export XIO_HOST_DOMAIN="${XIO_HOST_DOMAIN:-rd}"
 export XIO_DATA_DIR="${XIO_DATA_DIR:-$ROOT/data}"

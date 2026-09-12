@@ -42,6 +42,12 @@ def main() -> None:
     assert 'pendiente de guardar' in source
     assert 'silueta no disponible' in source
     assert 'cleanupUncommittedDraftEvidence' in source
+    assert 'database.upsertEvent(eventId' in source
+    assert 'database.findEvent(row.eventId)' in source
+    assert 'reconcileRemoteSampleReceipt(eventRef)' in source
+    assert 'if (!sampleCanSync(sample)) return;' in source
+    db_source = (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "RdFieldDb.java").read_text(encoding="utf-8")
+    assert 'sampleSyncStatus' in db_source
     assert 'Confirma la muestra antes de sincronizar' in source
     assert 'Termina o confirma la muestra antes de cambiar de evento' in source
     assert 'RdFieldExporter.exportLocalBackup(this)' in source
@@ -65,7 +71,11 @@ def main() -> None:
     assert 'moldFingerprint' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     gateway = (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'silhouetteBase64' in gateway
+    assert 'silhouetteSvgBase64' in gateway
     assert 'reliefSvgBase64' in gateway
+    assert 'requestWithUsbFallback' not in gateway
+    assert 'silently redirecting it to Xiaomi localhost' in gateway
+    assert 'XIO_BASE_ENDPOINT = "http://127.0.0.1:5000"' in gateway
     assert 'suggestedMoldDesigns' in source
     assert 'OTRA VISTA' in source
     assert 'moldDesigns' in (ROOT / "xio" / "new-plugins" / "rd_field" / "bridge.py").read_text(encoding="utf-8")
@@ -78,6 +88,8 @@ def main() -> None:
     assert 'submitVisualCandidate' in source
     assert 'pending_review' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "MainActivity.java").read_text(encoding="utf-8")
     assert 'ensureFieldDraft' in source
+    assert 'ensureSampleEventRelations' in source
+    assert 'Repairs local sample -> event relations' in db_source
     assert 'ensureDemo()' not in source
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 

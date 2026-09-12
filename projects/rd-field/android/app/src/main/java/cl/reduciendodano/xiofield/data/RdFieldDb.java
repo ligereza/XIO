@@ -87,6 +87,23 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         sample.put("id", "draft-sample-" + now); sample.put("event_id", "pending-event"); sample.put("code", "XIO-DRAFT-" + now); sample.put("created_at", now); sample.put("updated_at", now); sample.put("declared_substance", ""); sample.put("presentation", ""); sample.put("status", "draft"); sample.put("phase", "OBSERVE"); sample.put("paused", 0); db.insertOrThrow("samples", null, sample);
     }
 
+    /** Repairs local sample -> event relations without inventing host approval. */
+    public void ensureSampleEventRelations() {
+        Cursor cursor = getReadableDatabase().query("samples", new String[]{"event_id"},
+                "id<>? AND code NOT LIKE ? AND event_id<>?",
+                new String[]{"demo-sample", "XIO-DEMO-%", "pending-event"},
+                "event_id", null, null);
+        List<String> eventIds = new ArrayList<>();
+        try {
+            while (cursor.moveToNext()) eventIds.add(cursor.getString(0));
+        } finally { cursor.close(); }
+        for (String eventId : eventIds) {
+            if (findEvent(eventId) == null) {
+                upsertEvent(eventId, eventId, "", "", "", "", "[]", "{}", "", "", "pending");
+            }
+        }
+    }
+
     public SampleRow latestSample() {
         Cursor cursor = getReadableDatabase().query("samples", null,
                 "id<>? AND code NOT LIKE ?",
@@ -235,6 +252,14 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         values.put("sync_at", System.currentTimeMillis());
         values.put("sync_receipts_json", receiptsJson == null || receiptsJson.trim().isEmpty() ? "[]" : receiptsJson);
         getWritableDatabase().update("samples", values, "id=?", new String[]{sampleId});
+    }
+
+    /** Returns the last durable host projection state for one local sample. */
+    public String sampleSyncStatus(String sampleId) {
+        Cursor cursor = getReadableDatabase().query("samples", new String[]{"sync_status"},
+                "id=?", new String[]{sampleId}, null, null, null, "1");
+        try { return cursor.moveToFirst() ? cursor.getString(0) : ""; }
+        finally { cursor.close(); }
     }
 
     /** A process killed while uploading must become retryable on next launch. */

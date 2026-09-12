@@ -37,7 +37,6 @@ import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 public final class FlujoGateway {
     public static final String XIO_BASE_ENDPOINT = "http://127.0.0.1:5000";
     public static final String DEFAULT_ENDPOINT = XIO_BASE_ENDPOINT + "/api/plugins/rd_field";
-    private static final String USB_TUNNEL_ENDPOINT = XIO_BASE_ENDPOINT;
     private static final int CONNECT_TIMEOUT_MS = 4500;
     private static final int READ_TIMEOUT_MS = 12000;
     private static final int MAX_PHOTO_BYTES = 5 * 1024 * 1024;
@@ -55,7 +54,7 @@ public final class FlujoGateway {
         executor.execute(() -> {
             try {
                 JSONObject payload = buildPayload(sample);
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/sync", payload, token);
+                JSONObject response = request("POST", endpoint + "/sync", payload, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -66,7 +65,7 @@ public final class FlujoGateway {
     public void syncEvent(JSONObject event, String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/events/sync", event, token);
+                JSONObject response = request("POST", endpoint + "/events/sync", event, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -77,7 +76,7 @@ public final class FlujoGateway {
     public void loadBootstrap(String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("GET", endpoint + "/bootstrap", null, token);
+                JSONObject response = request("GET", endpoint + "/bootstrap", null, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -93,7 +92,7 @@ public final class FlujoGateway {
                 if (sampleCode != null && !sampleCode.trim().isEmpty()) {
                     target += "&sampleCode=" + URLEncoder.encode(sampleCode.trim(), "UTF-8");
                 }
-                JSONObject response = requestWithUsbFallback("GET", target, null, "");
+                JSONObject response = request("GET", target, null, "");
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -104,7 +103,7 @@ public final class FlujoGateway {
     public void loadVisualCatalog(String endpoint, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("GET", endpoint + "/catalog", null, "");
+                JSONObject response = request("GET", endpoint + "/catalog", null, "");
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -157,7 +156,7 @@ public final class FlujoGateway {
                     views.put(view);
                 }
                 payload.put("views", views);
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/catalog/candidates", payload, "");
+                JSONObject response = request("POST", endpoint + "/catalog/candidates", payload, "");
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));
@@ -223,6 +222,8 @@ public final class FlujoGateway {
             }
             encodedBytes = putDerivedAsset(item, "silhouetteBase64", "silhouetteSha256",
                     capture.silhouettePreviewPath, "png", encodedBytes);
+            encodedBytes = putDerivedAsset(item, "silhouetteSvgBase64", "silhouetteSvgSha256",
+                    capture.silhouettePath, "svg", encodedBytes);
             encodedBytes = putDerivedAsset(item, "reliefSvgBase64", "reliefSha256",
                     capture.reliefPath, "svg", encodedBytes);
             captures.put(item);
@@ -260,6 +261,9 @@ public final class FlujoGateway {
         item.put("markingScore", features.markingScore);
     }
 
+    // The target is the operator-selected data boundary. A failed LAN request
+    // must remain a failure; silently redirecting it to Xiaomi localhost can
+    // report success while writing into a different database.
     private JSONObject request(String method, String target, JSONObject body, String token) throws IOException, JSONException {
         HttpURLConnection connection = (HttpURLConnection) new URL(target).openConnection();
         connection.setRequestMethod(method);
@@ -280,17 +284,6 @@ public final class FlujoGateway {
         connection.disconnect();
         if (status < 200 || status >= 300) throw new IOException("XIO-RD HTTP " + status + ": " + responseText);
         return new JSONObject(responseText);
-    }
-
-    private JSONObject requestWithUsbFallback(String method, String target, JSONObject body, String token) throws IOException, JSONException {
-        try {
-            return request(method, target, body, token);
-        } catch (IOException first) {
-            if (target.startsWith(USB_TUNNEL_ENDPOINT)) throw first;
-            // Development/field handoff: when USB reverse is active, keep the
-            // same client usable even if the MAK firewall blocks the LAN port.
-            return request(method, USB_TUNNEL_ENDPOINT + target.substring(target.indexOf('/', 8)), body, token);
-        }
     }
 
     private static byte[] readBytes(File file, int maxBytes) throws IOException {

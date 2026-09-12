@@ -113,6 +113,7 @@ public final class MainActivity extends AppCompatActivity {
         super.onCreate(state);
         database = new RdFieldDb(this);
         database.ensureFieldDraft();
+        database.ensureSampleEventRelations();
         database.recoverInterruptedSampleSyncs();
         photoStore = new PhotoStore(this);
         flujo = new FlujoGateway(this);
@@ -140,6 +141,13 @@ public final class MainActivity extends AppCompatActivity {
         testColors.clear();
         activeTestIndex = 0;
         android.content.SharedPreferences contextStore = getSharedPreferences("xio_event_context", MODE_PRIVATE);
+        if (!"pending-event".equals(row.eventId) && database.findEvent(row.eventId) == null) {
+            String storedEventId = contextStore.getString("event_id", "");
+            String storedLabel = storedEventId.equals(row.eventId) ? contextStore.getString("event_label", "") : "";
+            String storedProducer = storedEventId.equals(row.eventId) ? contextStore.getString("event_producer", "") : "";
+            database.upsertEvent(row.eventId, storedLabel.isEmpty() ? row.eventId : storedLabel,
+                    "", storedProducer, "", "", "[]", "{}", "", "", "pending");
+        }
         if (row.eventId.equals(contextStore.getString("event_id", ""))) {
             eventLabel = contextStore.getString("event_label", "");
             eventProducer = contextStore.getString("event_producer", "");
@@ -1670,8 +1678,19 @@ public final class MainActivity extends AppCompatActivity {
             remoteSamplesEventRef = eventRef;
             remoteSamplesLoading = false;
             remoteSamplesFailed = false;
+            reconcileRemoteSampleReceipt(eventRef);
             render();
         });
+    }
+
+    private void reconcileRemoteSampleReceipt(String eventRef) {
+        SampleSession sample = engine.snapshot();
+        if (sample == null || !eventRef.equals(sample.eventId)) return;
+        if (!"synced".equalsIgnoreCase(database.sampleSyncStatus(sample.id))) return;
+        for (JSONObject row : remoteSamples) {
+            if (sample.code.equals(row.optString("sampleCode", ""))) return;
+        }
+        database.recordSampleSync(sample.id, "pending", "el host no reconoce el recibo local", "[]");
     }
 
     private void loadApprovedVisualCatalog() {
@@ -1874,7 +1893,9 @@ public final class MainActivity extends AppCompatActivity {
         // The host catalog is authoritative. A local row may be a legacy draft
         // from an older build, but it must never be re-sent as an implicit event
         // after the RD endpoint has accepted only exact host eventRefs.
-        sendCurrentSample();
+        SampleSession sample = engine.snapshot();
+        if (!sampleCanSync(sample)) return;
+        sendSample(sample, false);
     }
 
     private void showEventPicker(JSONArray events, int selected, boolean syncAfter) {
@@ -1982,17 +2003,32 @@ public final class MainActivity extends AppCompatActivity {
 
     private void applyEventContext(JSONObject item) {
         if (item == null) return;
+        String eventId = item.optString("event_id", "").trim();
         eventLabel = item.optString("event_label_candidate", "").trim();
         eventContextPending = !"APROBADO".equalsIgnoreCase(item.optString("link_review_status", ""));
         eventProducer = "";
+        String producerForDb = "";
         JSONArray producers = item.optJSONArray("productoras");
         if (producers != null && producers.length() > 0) {
             JSONObject first = producers.optJSONObject(0);
-            if (first != null) eventProducer = capitalize(first.optString("productora_slug", ""));
+            if (first != null) {
+                producerForDb = first.optString("productora_slug", "").trim();
+                eventProducer = capitalize(producerForDb);
+            }
             if (producers.length() > 1) eventProducer += " +" + (producers.length() - 1);
         }
+        String venueForDb = "";
+        JSONArray venues = item.optJSONArray("venues");
+        if (venues != null && venues.length() > 0) {
+            JSONObject first = venues.optJSONObject(0);
+            if (first != null) venueForDb = first.optString("venue_nombre", first.optString("name", "")).trim();
+        }
+        if (!eventId.isEmpty()) {
+            database.upsertEvent(eventId, eventLabel.isEmpty() ? eventId : eventLabel,
+                    venueForDb, producerForDb, "", "", "[]", "{}", "", "", "synced");
+        }
         getSharedPreferences("xio_event_context", MODE_PRIVATE).edit()
-                .putString("event_id", item.optString("event_id", ""))
+                .putString("event_id", eventId)
                 .putString("event_label", eventLabel)
                 .putString("event_producer", eventProducer)
                 .putBoolean("pending", eventContextPending)

@@ -1005,6 +1005,18 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             ref = _store_photo(capture, evidence_root)
             if ref:
                 photo_refs.append(ref)
+            silhouette_preview_ref = _store_binary_asset(
+                capture.get("silhouetteBase64"), evidence_root,
+                _bounded_text(capture.get("silhouetteSha256"), 128).lower(), "png"
+            )
+            silhouette_svg_ref = _store_binary_asset(
+                capture.get("silhouetteSvgBase64"), evidence_root,
+                _bounded_text(capture.get("silhouetteSvgSha256"), 128).lower(), "svg"
+            )
+            relief_asset_ref = _store_binary_asset(
+                capture.get("reliefSvgBase64"), evidence_root,
+                _bounded_text(capture.get("reliefSha256"), 128).lower(), "svg"
+            )
             capture_key = _bounded_text(capture.get("id"), 160)
             if not capture_key:
                 continue
@@ -1014,11 +1026,15 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
                 "captured_at_epoch": _optional_int(capture.get("capturedAt")),
                 "sha256": _bounded_text(capture.get("sha256"), 128).lower(),
                 "photo_ref": _bounded_text(ref, 500),
-                "silhouette_ref": _bounded_text(capture.get("silhouetteRef"), 500),
-                "silhouette_preview_ref": _bounded_text(
-                    capture.get("silhouettePreviewRef"), 500
+                "silhouette_ref": _bounded_text(
+                    silhouette_svg_ref or capture.get("silhouetteRef"), 500
                 ),
-                "relief_ref": _bounded_text(capture.get("reliefRef"), 500),
+                "silhouette_preview_ref": _bounded_text(
+                    silhouette_preview_ref or capture.get("silhouettePreviewRef"), 500
+                ),
+                "relief_ref": _bounded_text(
+                    relief_asset_ref or capture.get("reliefRef"), 500
+                ),
                 "geometry_signature": _bounded_text(
                     capture.get("geometrySignature"), 240
                 ),
