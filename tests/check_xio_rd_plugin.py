@@ -84,6 +84,7 @@ def main():
         raider = (PLUGIN.parent / "static" / "raider.html").read_text(encoding="utf-8")
         assert 'request_more_evidence' in raider
         assert 'data-review="retire"' in raider
+        assert 'includeHistory=true' in raider
         assert 'sourceEventRef' in raider
         assert 'silhouetteConfidence' in raider and 'reliefConfidence' in raider
 

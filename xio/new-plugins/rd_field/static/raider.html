@@ -53,7 +53,7 @@
     }
     async function loadVisualCatalog() {
       try {
-        const data = await get('/api/plugins/rd_field/catalog?includePending=true');
+        const data = await get('/api/plugins/rd_field/catalog?includePending=true&includeHistory=true');
         const refs = data.references || [];
         document.getElementById('visualCatalog').innerHTML = refs.length ? refs.map(ref => {
           const pending = ref.status === 'pending_review';

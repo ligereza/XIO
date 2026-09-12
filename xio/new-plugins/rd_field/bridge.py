@@ -317,12 +317,12 @@ def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
 
 
 def visual_catalog(
-    db_path: str | Path, include_pending: bool = False
+    db_path: str | Path, include_pending: bool = False, include_history: bool = False
 ) -> dict[str, Any]:
-    """Read approved catalogue references, optionally including review queue."""
+    """Read approved references, queue entries, or the complete audit history."""
     with _connection(db_path) as conn:
         assert_read_schema(conn)
-        statuses = ("approved", "pending_review") if include_pending else ("approved",)
+        statuses = ("approved", "pending_review", "rejected", "retired") if include_history else (("approved", "pending_review") if include_pending else ("approved",))
         placeholders = ",".join("?" for _ in statuses)
         rows = conn.execute(
             "SELECT * FROM xio_visual_references WHERE status IN (" + placeholders + ") "
@@ -331,7 +331,7 @@ def visual_catalog(
         ).fetchall()
         revision_row = conn.execute(
             "SELECT COALESCE(MAX(catalog_revision), 0) AS revision "
-            "FROM xio_visual_references WHERE status='approved'"
+            "FROM xio_visual_references"
         ).fetchone()
         references: list[dict[str, Any]] = []
         for row in rows:

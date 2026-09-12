@@ -204,7 +204,8 @@ class RdFieldPlugin(PluginBase):
             return self._json_error("base RD del host no disponible", 503)
         try:
             include_pending = str(request.args.get("includePending") or "").lower() == "true"
-            result = self._bridge().visual_catalog(self._db_path(), include_pending)
+            include_history = str(request.args.get("includeHistory") or "").lower() == "true"
+            result = self._bridge().visual_catalog(self._db_path(), include_pending, include_history)
             result.update({"ok": True, "domain": "rd", "canonical_host": "xio"})
             return jsonify(result)
         except Exception as exc:

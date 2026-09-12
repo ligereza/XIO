@@ -82,6 +82,10 @@ def main():
         )
         assert retired["status"] == "retired"
         assert bridge.visual_catalog(db)["references"] == []
+        assert bridge.visual_catalog(db)["catalogRevision"] == 3
+        history = bridge.visual_catalog(db, include_history=True)
+        assert history["catalogRevision"] == 3
+        assert history["references"][0]["status"] == "retired"
         with __import__("sqlite3").connect(db) as conn:
             assert conn.execute("SELECT COUNT(*) FROM xio_visual_reference_reviews WHERE reference_id='ref-smoke'").fetchone()[0] == 3
     print("OK: XIO-RD bridge bootstrap/ingest/read/idempotence")
