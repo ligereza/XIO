@@ -30,6 +30,9 @@ def main() -> None:
     assert 'CONFIRMAR Y NUEVA MUESTRA' in source
     assert 'selectLocalSample(row)' in source
     assert 'GUARDAR TESTS' in source
+    assert 'testTimingReady' in source
+    assert 'Inicia y detén el cronómetro antes de guardar este test.' in source
+    assert 'engine.snapshot().status = "tests_ready"' in source
     assert 'confirmed.status = "confirmed"' in source
     assert 'sendSample(confirmed, false)' in source
     assert 'Toca un ingreso para revisarlo' in source
@@ -37,6 +40,7 @@ def main() -> None:
     assert 'TESTS Y REACCIONES' in source
     assert 'reacción  ·  ' in source
     assert 'silueta no disponible' in source
+    assert 'cleanupUncommittedDraftEvidence' in source
     assert 'Confirma la muestra antes de sincronizar' in source
     assert 'Termina o confirma la muestra antes de cambiar de evento' in source
     assert 'RdFieldExporter.exportLocalBackup(this)' in source

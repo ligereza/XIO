@@ -119,6 +119,7 @@ public final class MainActivity extends AppCompatActivity {
         memory = new VisualMemory();
         RdFieldDb.SampleRow row = database.latestSample();
         loadSampleIntoEngine(row);
+        cleanupUncommittedDraftEvidence();
         reconcileOrphanCaptureFiles();
         for (VisualMemory.Entry entry : database.reviewedMemory()) memory.addReviewed(entry);
         buildShell();
@@ -232,7 +233,12 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private String statusLine(SampleSession sample) {
-        return "◉ " + sample.captures.size() + "   ⏱ " + applicableTests(sample).size() + "   " + (sample.paused ? "Ⅱ" : "●") + " guardado";
+        String state = pendingCaptures.isEmpty() ? sample.status : "en revisión";
+        if ("draft".equalsIgnoreCase(state)) state = "borrador";
+        else if ("entry_ready".equalsIgnoreCase(state)) state = "ingreso listo";
+        else if ("tests_ready".equalsIgnoreCase(state)) state = "tests listos";
+        else if ("confirmed".equalsIgnoreCase(state)) state = "confirmada";
+        return "◉ " + sample.captures.size() + "   ⏱ " + applicableTests(sample).size() + "   " + (sample.paused ? "Ⅱ" : "●") + " " + state;
     }
 
     private LinearLayout phaseBar(SampleSession.Phase active) {
@@ -441,7 +447,8 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession.TestSession current = tests.get(activeTestIndex);
         content.addView(body("reactivo correspondiente  ·  " + current.reagent));
         addColorimetryInput(current, activeTestIndex);
-        boolean currentReady = !currentWasConfirmed && testColorReady(tests.get(activeTestIndex));
+        if (!testTimingReady(current)) content.addView(body("Inicia y detén el cronómetro antes de guardar este test."));
+        boolean currentReady = !currentWasConfirmed && testInputReady(tests.get(activeTestIndex));
         boolean allReady = allTestsReady(tests);
         Button save = actionButton(activeTestIndex + 1 < tests.size() ? "→  SIGUIENTE TEST" : "✓  GUARDAR TESTS", TEAL, BG);
         save.setEnabled(currentReady && (activeTestIndex + 1 < tests.size() || allReady));
@@ -822,14 +829,22 @@ public final class MainActivity extends AppCompatActivity {
         return color != null && !color.trim().isEmpty();
     }
 
+    private boolean testTimingReady(SampleSession.TestSession test) {
+        return test != null && !"running".equalsIgnoreCase(test.status) && test.elapsedMs > 0L;
+    }
+
+    private boolean testInputReady(SampleSession.TestSession test) {
+        return testColorReady(test) && testTimingReady(test);
+    }
+
     private boolean allTestsReady(List<SampleSession.TestSession> tests) {
         if (tests == null || tests.isEmpty()) return false;
-        for (SampleSession.TestSession test : tests) if (!testColorReady(test)) return false;
+        for (SampleSession.TestSession test : tests) if (!testInputReady(test)) return false;
         return true;
     }
 
     private boolean testComplete(SampleSession.TestSession test) {
-        return test != null && "done".equalsIgnoreCase(test.status) && !test.observations.isEmpty();
+        return test != null && "done".equalsIgnoreCase(test.status) && testTimingReady(test) && !test.observations.isEmpty();
     }
 
     private boolean sampleTestsComplete(SampleSession sample) {
@@ -941,6 +956,10 @@ public final class MainActivity extends AppCompatActivity {
         }
         SampleSession.TestSession test = tests.get(activeTestIndex);
         String color = testColors.containsKey(test.id) ? testColors.get(test.id) : "sin lectura";
+        if (!testTimingReady(test)) {
+            Toast.makeText(this, "inicia y detén el cronómetro antes de guardar este test", Toast.LENGTH_LONG).show();
+            return;
+        }
         if (!testColorReady(test)) {
             Toast.makeText(this, "selecciona el color de la reacción o SIN CAMBIO / NO LEGIBLE", Toast.LENGTH_LONG).show();
             return;
@@ -955,11 +974,11 @@ public final class MainActivity extends AppCompatActivity {
             }
             for (SampleSession.TestSession pending : tests) {
                 String pendingColor = testColors.get(pending.id);
-                if (pending.status.equals("running")) engine.stopTest(pending);
                 String previous = pending.observations.isEmpty() ? "" : pending.observations.get(pending.observations.size() - 1).color;
                 if (!pendingColor.equals(previous)) engine.addObservation(pending, pendingColor, "Color seleccionado por el operador");
                 engine.completeTest(pending, pendingColor, "Observación colorimétrica; no es identificación química");
             }
+            engine.snapshot().status = "tests_ready";
             persist();
             activeTab = 2;
             engine.transitionTo(SampleSession.Phase.REVIEW);
@@ -1259,6 +1278,31 @@ public final class MainActivity extends AppCompatActivity {
         SampleSession sample = engine.snapshot();
         boolean includeTests = sample.tests.isEmpty() || sampleTestsComplete(sample);
         database.saveSession(sample, includeTests);
+    }
+
+    /** Removes camera evidence that never reached AVANZAR and has no DB row. */
+    private void cleanupUncommittedDraftEvidence() {
+        List<String> draftIds = new ArrayList<>();
+        if ("draft".equalsIgnoreCase(engine.snapshot().status)) draftIds.add(engine.snapshot().id);
+        for (RdFieldDb.SampleRow local : database.recentSamples()) {
+            if ("draft".equalsIgnoreCase(local.status) && !draftIds.contains(local.id)) draftIds.add(local.id);
+        }
+        for (String sampleId : draftIds) {
+            File directory = new File(getFilesDir(), "evidence" + File.separator + sampleId);
+            File[] photos = directory.listFiles((dir, name) -> name != null && name.endsWith(".jpg"));
+            if (photos == null) continue;
+            List<SampleSession.Capture> registered = database.loadCaptures(sampleId);
+            for (File photo : photos) {
+                String captureId = photo.getName().substring(0, photo.getName().length() - 4);
+                boolean registeredCapture = false;
+                for (SampleSession.Capture capture : registered) if (capture.id.equals(captureId)) { registeredCapture = true; break; }
+                if (registeredCapture) continue;
+                deleteEvidence(photo.getAbsolutePath());
+                deleteEvidence(new File(directory, captureId + ".svg").getAbsolutePath());
+                deleteEvidence(new File(directory, captureId + ".silhouette.png").getAbsolutePath());
+                deleteEvidence(new File(directory, captureId + ".relief.svg").getAbsolutePath());
+            }
+        }
     }
 
     /** Reconciles orphan or incomplete evidence for every local sample. */
