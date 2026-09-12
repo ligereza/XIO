@@ -38,6 +38,7 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -48,6 +49,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
 import cl.reduciendodano.xiofield.core.SampleSessionEngine;
@@ -118,6 +121,7 @@ public final class MainActivity extends AppCompatActivity {
             engine.restoreCapture(capture);
             engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
         }
+        recoverOrphanCaptureFiles(row.id);
         for (SampleSession.TestSession test : database.loadTests(row.id)) engine.restoreTest(test);
         for (SampleSession.Correction correction : database.loadCorrections(row.id)) engine.restoreCorrection(correction);
         for (SampleSession.ActionRecord action : database.loadActions(row.id)) engine.restoreAction(action);
@@ -828,6 +832,55 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void persist() { database.saveSession(engine.snapshot()); }
+
+    /** Reconciles evidence written by the pre-draft build with the local DB. */
+    private void recoverOrphanCaptureFiles(String sampleId) {
+        File directory = new File(getFilesDir(), "evidence" + File.separator + sampleId);
+        File[] photos = directory.listFiles((dir, name) -> name != null && name.endsWith(".jpg"));
+        if (photos == null) return;
+        for (File photo : photos) {
+            String captureId = photo.getName().substring(0, photo.getName().length() - 4);
+            boolean known = false;
+            for (SampleSession.Capture capture : engine.snapshot().captures) if (capture.id.equals(captureId)) { known = true; break; }
+            if (known) continue;
+            Bitmap bitmap = BitmapFactory.decodeFile(photo.getAbsolutePath());
+            if (bitmap == null) continue;
+            try {
+                VisualFeatureExtractor.VisualAnalysis analysis = VisualFeatureExtractor.analyzeDetailed(bitmap);
+                File svg = new File(directory, captureId + ".svg");
+                File preview = new File(directory, captureId + ".silhouette.png");
+                File relief = new File(directory, captureId + ".relief.svg");
+                String silhouettePath = svg.isFile() ? svg.getAbsolutePath() : "";
+                String previewPath = preview.isFile() ? preview.getAbsolutePath() : "";
+                String reliefPath = relief.isFile() ? relief.getAbsolutePath() : "";
+                if (silhouettePath.isEmpty() && analysis.separated && !analysis.silhouetteSvg.isEmpty()) silhouettePath = photoStore.storeSilhouette(sampleId, captureId, analysis.silhouetteSvg).getAbsolutePath();
+                if (previewPath.isEmpty() && analysis.silhouettePreview != null) previewPath = photoStore.storeSilhouettePreview(sampleId, captureId, analysis.silhouettePreview).getAbsolutePath();
+                if (reliefPath.isEmpty() && !analysis.reliefSvg.isEmpty()) reliefPath = photoStore.storeRelief(sampleId, captureId, analysis.reliefSvg).getAbsolutePath();
+                SampleSession.Capture capture = new SampleSession.Capture(captureId, "vista-recuperada", photo.getAbsolutePath(), silhouettePath, previewPath, reliefPath, sha256(photo), photo.lastModified() > 0 ? photo.lastModified() : System.currentTimeMillis(), analysis.features);
+                database.insertCapture(sampleId, capture);
+                engine.restoreCapture(capture);
+                engine.restoreVisualProposal(capture.id, capture.features, SampleSessionEngine.VISUAL_MODEL_VERSION, capture.capturedAt);
+                if (analysis.silhouettePreview != null && !analysis.silhouettePreview.isRecycled()) analysis.silhouettePreview.recycle();
+            } catch (IOException ignored) {
+                // Keep the original evidence intact; a later launch may retry.
+            } finally {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            }
+        }
+    }
+
+    private String sha256(File file) throws IOException {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            try (FileInputStream input = new FileInputStream(file)) {
+                byte[] buffer = new byte[8192]; int count;
+                while ((count = input.read(buffer)) != -1) digest.update(buffer, 0, count);
+            }
+            StringBuilder result = new StringBuilder();
+            for (byte value : digest.digest()) result.append(String.format(Locale.US, "%02x", value));
+            return result.toString();
+        } catch (NoSuchAlgorithmException error) { return "hash-unavailable"; }
+    }
 
     private void saveReviewedExample(SampleSession.Capture capture, String label, String field) {
         SampleSession sample = engine.snapshot();

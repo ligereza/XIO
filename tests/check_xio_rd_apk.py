@@ -16,6 +16,9 @@ def main() -> None:
     assert 'database.insertCapture(sample.id, capture);' in source
     assert 'database.insertCapture(engine.snapshot().id, pendingCapture);' in source
     assert 'database.deleteCapture(engine.snapshot().id, pendingCapture.id);' in source
+    assert 'recoverOrphanCaptureFiles(row.id);' in source
+    assert 'String captureId = photo.getName().substring' in source
+    assert 'database.insertCapture(sampleId, capture);' in source
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 
 
