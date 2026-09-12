@@ -12,7 +12,7 @@ tasks.register("syncFohAssets", Sync) {
     from(new File(fohSource, "foh_vj_context.json"))
     from(new File(rootProject.projectDir, "../../../xio/show_kit/setlist_festival_sentir.txt")) { rename { "setlist_festival_sentir.txt" } }
     from(new File(rootProject.projectDir, "../../../xio/show_kit/setlist_durations_dref.json")) { rename { "setlist_durations_dref.json" } }
-    from(new File(rootProject.projectDir, "../../../xio/new/static/raider.html")) { rename { "raider.html" } }
+    from(new File(fohSource, "static/raider.html")) { rename { "raider.html" } }
     into(fohAssets)
 
     doLast {

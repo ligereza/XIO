@@ -124,6 +124,9 @@ public final class MainActivity extends AppCompatActivity {
         for (VisualMemory.Entry entry : database.reviewedMemory()) memory.addReviewed(entry);
         buildShell();
         render();
+        // The host RD catalog is the source of truth for prior events. Load it
+        // on startup so the field screen does not look like an empty/demo DB.
+        loadBootstrapAndMaybeChoose(false, false);
     }
 
     private void buildShell() {
@@ -238,7 +241,8 @@ public final class MainActivity extends AppCompatActivity {
             addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { engine.setPresentation(value); render(); });
         }
         if (!sample.declaredSubstance.isEmpty() && !sample.presentation.isEmpty()) {
-            addColorStrip("color", COLOR_OPTIONS, COLOR_VALUES, sample.observedColor, value -> { engine.setObservedColor(value); render(); });
+            addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
+                    value -> engine.setObservedColor(value));
         }
 
         if (pendingCapture != null) {
@@ -402,22 +406,34 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(horizontal, new LinearLayout.LayoutParams(-1, dp(40)));
     }
 
-    private void addColorStrip(String label, String[] options, int[] colors, String selected, OptionAction action) {
-        content.addView(sectionLabel(label.toUpperCase(Locale.ROOT)));
-        ScrollView horizontal = new ScrollView(this);
-        horizontal.setHorizontalScrollBarEnabled(false);
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < options.length; i++) {
-            String option = options[i];
-            Button choice = actionButton(option.equalsIgnoreCase(selected) ? "✓" : "●", colors[i], readableOn(colors[i]));
-            choice.setTextSize(16);
-            choice.setContentDescription(label + ": " + option);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(42), dp(38)); params.setMargins(0, 0, dp(5), 0); row.addView(choice, params);
-            choice.setOnClickListener(view -> action.select(option));
+    private TextView addColorRampControl(LinearLayout parent, String label, String selected,
+                                         String description, RampAction action) {
+        if (label != null && !label.isEmpty()) parent.addView(sectionLabel(label));
+        boolean hasSelection = selected != null && !selected.trim().isEmpty();
+        TextView reading = text(hasSelection ? "color  " + selected : "sin color seleccionado", 12,
+                hasSelection ? TEXT : MUTED);
+        reading.setPadding(0, dp(4), 0, dp(4));
+        ColorRampView ramp = new ColorRampView(this, rampInitialColor(selected), value -> {
+            if (action != null) action.selected(value);
+            reading.setText("color  " + value);
+            reading.setTextColor(TEXT);
+        });
+        ramp.setContentDescription(description);
+        parent.addView(ramp, new LinearLayout.LayoutParams(-1, dp(116)));
+        parent.addView(reading);
+        return reading;
+    }
+
+    private String rampInitialColor(String value) {
+        if (value == null || value.trim().isEmpty()) return "";
+        String clean = value.trim();
+        if (clean.startsWith("#")) return clean;
+        for (int i = 0; i < COLOR_OPTIONS.length; i++) {
+            if (COLOR_OPTIONS[i].equalsIgnoreCase(clean)) {
+                return String.format(Locale.US, "#%06X", COLOR_VALUES[i] & 0x00ffffff);
+            }
         }
-        horizontal.addView(row);
-        content.addView(horizontal, new LinearLayout.LayoutParams(-1, dp(40)));
+        return "";
     }
 
     private void addEntryRow(RdFieldDb.SampleRow row, SampleSession.Capture capture) {
@@ -479,16 +495,9 @@ public final class MainActivity extends AppCompatActivity {
         row.addView(header);
 
         String selected = testColors.get(test.id);
-        TextView reading = text(selected == null || selected.isEmpty() ? "sin lectura seleccionada" : "lectura  " + selected, 12, selected == null || selected.isEmpty() ? MUTED : TEXT);
-        reading.setPadding(0, dp(4), 0, dp(4));
-        ColorRampView ramp = new ColorRampView(this, selected, value -> {
+        TextView reading = addColorRampControl(row, "", selected, "Rampa cromática del test " + (index + 1), value -> {
             testColors.put(test.id, value);
-            reading.setText("lectura  " + value);
-            reading.setTextColor(TEXT);
         });
-        ramp.setContentDescription("Rampa cromática del test " + (index + 1));
-        row.addView(ramp, new LinearLayout.LayoutParams(-1, dp(116)));
-        row.addView(reading);
         Button noReading = actionButton("—  SIN CAMBIO / NO LEGIBLE", SURFACE_RAISED, MUTED);
         noReading.setContentDescription("Registrar sin lectura");
         noReading.setOnClickListener(view -> { testColors.put(test.id, "sin lectura"); render(); });
@@ -860,7 +869,7 @@ public final class MainActivity extends AppCompatActivity {
     private void openRaider() {
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW,
-                    Uri.parse(xioHostRoot() + "/raider?domain=rd"));
+                    Uri.parse(rdEndpoint() + "/raider"));
             startActivity(intent);
         } catch (Exception error) {
             Toast.makeText(this, "No se pudo abrir RAIDER en XIO", Toast.LENGTH_LONG).show();
@@ -1121,8 +1130,7 @@ public final class MainActivity extends AppCompatActivity {
                         }
                     }
                 }
-                if (!logoLoaded) continue;
-                producer = "(LOGO) " + producer;
+                producer = (logoLoaded ? "(LOGO) " : "(SIN LOGO) ") + producer;
                 List<Integer> members = byProducer.get(producer);
                 if (members == null) { members = new ArrayList<>(); byProducer.put(producer, members); }
                 members.add(i);
@@ -1151,7 +1159,7 @@ public final class MainActivity extends AppCompatActivity {
         hostOnly.setPadding(0, dp(8), 0, dp(4));
         grouped.addView(hostOnly, new LinearLayout.LayoutParams(-1, dp(48)));
         if (byProducer.isEmpty()) {
-            TextView placeholder = text("No hay productoras con logo cargado en este snapshot RD. Revisa el catálogo en el host; no se inventan eventos ni logos desde la mesa.", 12, AMBER);
+            TextView placeholder = text("El host RD no entregó eventos preparados en este snapshot.", 12, AMBER);
             placeholder.setPadding(0, dp(12), 0, dp(12));
             grouped.addView(placeholder, new LinearLayout.LayoutParams(-1, dp(72)));
         }
@@ -1241,6 +1249,8 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private final class ColorRampView extends View {
+        private final int[] hueColors = {0xffff3b30, 0xffff2dce, 0xff5b5ce2, 0xff00a7ff, 0xff00bd83, 0xffffc107, 0xffff3b30};
+        private final float[] huePositions = {0f, .17f, .34f, .51f, .68f, .84f, 1f};
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint marker = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RampAction action;
@@ -1259,19 +1269,30 @@ public final class MainActivity extends AppCompatActivity {
 
         @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
             if (selectedColor == Color.TRANSPARENT || width <= 1 || height <= 1) return;
-            float[] hsv = new float[3]; Color.colorToHSV(selectedColor, hsv);
-            selectedX = (hsv[0] / 360f) * Math.max(1, width - 1);
-            selectedY = hsv[2] >= .98f ? hsv[1] * height / 2f : height / 2f + (1f - hsv[2]) * height / 2f;
+            // Find the marker in the same RGB ramp that is rendered and used
+            // by colorAt(). HSV coordinates are not equivalent to the RGB
+            // interpolation between the visible hue stops.
+            float best = Float.MAX_VALUE;
+            int steps = 64;
+            for (int xi = 0; xi <= steps; xi++) for (int yi = 0; yi <= steps; yi++) {
+                float x = (width - 1) * xi / (float) steps;
+                float y = (height - 1) * yi / (float) steps;
+                int candidate = colorAt(x, y);
+                float distance = square(Color.red(candidate) - Color.red(selectedColor))
+                        + square(Color.green(candidate) - Color.green(selectedColor))
+                        + square(Color.blue(candidate) - Color.blue(selectedColor));
+                if (distance < best) { best = distance; selectedX = x; selectedY = y; }
+            }
         }
+
+        private float square(float value) { return value * value; }
 
         @Override protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             int width = getWidth();
             int height = getHeight();
             if (width <= 1 || height <= 1) return;
-            int[] hues = {0xffff3b30, 0xffff2dce, 0xff5b5ce2, 0xff00a7ff, 0xff00bd83, 0xffffc107, 0xffff3b30};
-            float[] positions = {0f, .17f, .34f, .51f, .68f, .84f, 1f};
-            paint.setShader(new LinearGradient(0, 0, width, 0, hues, positions, Shader.TileMode.CLAMP));
+            paint.setShader(new LinearGradient(0, 0, width, 0, hueColors, huePositions, Shader.TileMode.CLAMP));
             canvas.drawRect(0, 0, width, height, paint);
             paint.setShader(null);
             canvas.save();
@@ -1310,10 +1331,22 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         private int colorAt(float x, float y) {
-            float hue = (x / Math.max(1f, getWidth() - 1f)) * 360f;
-            int pure = Color.HSVToColor(new float[]{hue, 1f, 1f});
+            float position = x / Math.max(1f, getWidth() - 1f);
+            int pure = hueColorAt(position);
             if (y <= getHeight() / 2f) return blend(Color.WHITE, pure, y / Math.max(1f, getHeight() / 2f));
             return blend(pure, Color.BLACK, (y - getHeight() / 2f) / Math.max(1f, getHeight() / 2f));
+        }
+
+        private int hueColorAt(float position) {
+            float p = Math.max(0f, Math.min(1f, position));
+            for (int i = 1; i < huePositions.length; i++) {
+                if (p <= huePositions[i]) {
+                    float span = huePositions[i] - huePositions[i - 1];
+                    float amount = span <= 0f ? 0f : (p - huePositions[i - 1]) / span;
+                    return blend(hueColors[i - 1], hueColors[i], amount);
+                }
+            }
+            return hueColors[hueColors.length - 1];
         }
 
         private int blend(int from, int to, float amount) {

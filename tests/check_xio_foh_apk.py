@@ -15,10 +15,11 @@ ACTIVITY = PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh" / "M
 SERVICE = PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh" / "FohCaptureService.java"
 LISTENER = PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh" / "FohListener.java"
 STORE = PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh" / "FohLogStore.java"
+NATIVE = PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh" / "FohNativeServer.java"
 
 
 def main() -> None:
-    for path in (BUILD, MANIFEST, ACTIVITY, SERVICE, LISTENER, STORE):
+    for path in (BUILD, MANIFEST, ACTIVITY, SERVICE, LISTENER, STORE, NATIVE):
         assert path.is_file(), path
     build = BUILD.read_text(encoding="utf-8")
     manifest = MANIFEST.read_text(encoding="utf-8")
@@ -26,6 +27,7 @@ def main() -> None:
     service = SERVICE.read_text(encoding="utf-8")
     listener = LISTENER.read_text(encoding="utf-8")
     store = STORE.read_text(encoding="utf-8")
+    native = NATIVE.read_text(encoding="utf-8")
     assert 'applicationId "cl.xio.foh"' in build
     assert 'android:name=".FohCaptureService"' in manifest
     assert "FOREGROUND_SERVICE" in manifest
@@ -34,6 +36,13 @@ def main() -> None:
         assert marker in activity, marker
     for marker in ("ACTION_START", "startForeground", "FohListener", "xio_foh.db"):
         assert marker in (service + store), marker
+    assert "public static final int PORT = 5100" in native
+    assert '"rdHostPort", 5000' in native
+    assert "no acepta identidad RD eventRef" in native
+    assert 'optJSONObject(channel[1])' in native
+    assert 'eventsJson(queryValue(query, "eventKey"), limit)' in native
+    assert "isLocalNativeHost" in service
+    assert "age == null ? JSONObject.NULL : age" in activity
     for marker in ("ARTNET_PORT = 6454", "SACN_PORT = 5568", "OSC_PORT = 7000", "MulticastSocket", "#bundle"):
         assert marker in listener, marker
     print("OK: XIO-FOH native APK contract/package/menu/service/ports")

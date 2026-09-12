@@ -66,6 +66,8 @@ def main():
 
         routes = {item["rule"] for item in plugin.get_routes()}
         assert "/api/plugins/rd_field/bootstrap" in routes
+        assert "/api/plugins/rd_field/raider" in routes
+        assert "/api/plugins/rd_field/events/sync" in routes
         assert "/api/plugins/rd_field/sync" in routes
         assert "/api/plugins/rd_field/view" in routes
         assert plugin._bootstrap()["domain"] == "rd"
@@ -77,10 +79,32 @@ def main():
         assert 'window.location.protocol === "file:"' in app_js
         assert 'id="newEventButton"' in index_html and "disabled" in index_html
         assert "Conecta el host RD para cargar un evento preparado" in index_html
+        assert 'href="/api/plugins/rd_field/raider"' in index_html
+        assert (PLUGIN.parent / "static" / "raider.html").is_file()
 
         _Request.payload = _payload("NO-EXISTE")
         unknown = plugin._sync()
         assert unknown[1] == 409, unknown
+
+        _Request.payload = {
+            "clientEventId": "XIO-EVT-001",
+            "eventName": "Evento XIO de prueba",
+            "venue": "Sala RD",
+            "producer": "rd-demo",
+            "startDate": "2026-09-11",
+            "endDate": "2026-09-11",
+            "djs": [],
+            "triangulation": {"sources": ["fixture"]},
+            "flyerRef": "",
+            "flyerSha256": "",
+        }
+        created = plugin._sync_event()
+        assert created["eventRef"] == "XIO-EVT-001"
+        assert plugin._bootstrap()["xioEvents"][0]["client_event_id"] == "XIO-EVT-001"
+
+        _Request.payload = _payload("XIO-EVT-001")
+        linked_sample = plugin._sync()
+        assert linked_sample["domain"] == "rd"
 
         _Request.payload = _payload()
         first = plugin._sync()

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>RAIDER · ISKVW / FOH</title>
+  <style>
+    :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#07090d;color:#e8eaed}
+    body{max-width:1180px;margin:0 auto;padding:20px;background:#07090d}.card{border:1px solid #293247;border-radius:14px;background:#101522;padding:16px;margin:12px 0}
+    h1{margin:0;font-size:1.4rem}h2{font-size:1rem;color:#c4b5fd}.eyebrow{font-size:.7rem;letter-spacing:.14em;color:#a78bfa;text-transform:uppercase}.muted{color:#8993a8;font-size:.85rem}
+    select,button{background:#171e2c;color:#e8eaed;border:1px solid #3a4660;border-radius:8px;padding:9px}button{cursor:pointer}.key{font-family:monospace;color:#c4b5fd}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}.signal{border-top:1px solid #293247;padding:10px 0}
+  </style>
+</head>
+<body>
+  <section class="card"><div class="eyebrow">FLUJO / ISKVW · FOH · RAIDER</div><h1>Contexto visual y señales del show</h1><p class="muted">Esta vista contiene FOH/ISKVW únicamente. No consulta ni muestra eventos RD.</p><label>Evento FOH <select id="events"><option>Cargando…</option></select></label> <button id="refresh">Actualizar</button><p id="state" class="muted"></p></section>
+  <section id="context" class="card"><h2>Contexto</h2><p class="muted">Sin evento seleccionado.</p></section>
+  <section id="signals" class="card"><h2>Registro FOH</h2><p class="muted">Sin registros.</p></section>
+  <script>
+    const select=document.getElementById('events'), state=document.getElementById('state'), esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const get=u=>fetch(u,{cache:'no-store'}).then(async r=>{let b=await r.json().catch(()=>({}));if(!r.ok)throw Error(b.error||`HTTP ${r.status}`);return b});
+    async function load(){try{let data=await get('/api/plugins/foh_monitor/context/data');let events=Array.isArray(data.events)?data.events:[];select.innerHTML='<option value="">Seleccionar…</option>'+events.map(e=>`<option value="${esc(e.eventKey)}">${esc(e.name||e.eventKey)} · ${esc(e.dateIso||'sin fecha')}</option>`).join('');let key=data.current?.eventKey||events[0]?.eventKey||'';select.value=key;state.textContent=`${events.length} eventos VJ/FOH disponibles · dominio vj_foh`;if(key)await show(key)}catch(e){state.textContent=e.message}}
+    async function show(key){try{let context=await get(`/api/plugins/foh_monitor/context/data`),summary=await get(`/api/plugins/foh_monitor/resumen?eventKey=${encodeURIComponent(key)}`);let e=(context.events||[]).find(x=>x.eventKey===key)||{};document.getElementById('context').innerHTML=`<h2>Contexto FOH</h2><div class="grid"><div>Evento<br><b>${esc(e.name||key)}</b></div><div>Venue<br><b>${esc(e.venueName||'pendiente')}</b></div><div>eventKey<br><span class="key">${esc(key)}</span></div><div>Registros<br><b>${summary.summary?.total||summary.total||0}</b></div></div>`;let rows=summary.rows||summary.events||[];document.getElementById('signals').innerHTML='<h2>Registro FOH</h2>'+(rows.length?rows.slice(-30).reverse().map(r=>`<div class="signal"><b>${esc(r.protocol||r.tipo||'señal')}</b> · ${esc(r.detail||r.detalle||'')}<br><span class="muted">${esc(r.ts||'')} · eventKey ${esc(r.eventKey||key)}</span></div>`).join(''):'<p class="muted">Sin registros para este evento.</p>')}catch(e){document.getElementById('signals').innerHTML=`<p class="muted">${esc(e.message)}</p>`}}
+    select.addEventListener('change',()=>show(select.value));document.getElementById('refresh').addEventListener('click',load);load();
+  </script>
+</body>
+</html>

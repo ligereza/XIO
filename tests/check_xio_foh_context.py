@@ -93,6 +93,9 @@ def main():
         mapping = plugin._api_mapping()
         assert isinstance(mapping, Path)
         assert mapping.name == "mapping.html"
+        raider = plugin._api_raider()
+        assert isinstance(raider, Path)
+        assert raider.name == "raider.html"
         view = plugin._foh_context_view()
         assert view["domain"] == "vj_foh"
         assert view["catalogAvailable"] is True
@@ -120,6 +123,9 @@ def main():
         _Request.payload = {"eventRef": "RD-EVENT-001"}
         wrong_domain = plugin._api_context_post()
         assert wrong_domain[1] == 400
+        _Request.payload = {"protocol": "Art-Net", "detail": "uni=1", "eventRef": "RD-EVENT-001"}
+        wrong_ingest = plugin._api_ingest()
+        assert wrong_ingest[1] == 422
 
         plugin._setlist = {
             "songs": ["00:00:00:00 tema"], "durations": [60], "index": 0,

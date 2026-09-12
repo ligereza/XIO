@@ -20,6 +20,10 @@ cd "$HOME/xioserver" || exit 1
 export XIO_BACKEND=rish
 export RISH_PATH="$HOME/rish"
 export PLUGINS_DIR="$HOME/xioplugins"
+# The shared phone host is the RD surface. FOH/ISKVW is owned by the native
+# APK on port 5100; loading the Python FOH plugin here would bind the same
+# Art-Net/OSC ports twice and produce a broken/partial visual monitor.
+export XIO_HOST_DOMAIN="${XIO_HOST_DOMAIN:-rd}"
 # Durable host state.  The runtime copies above are disposable; these paths
 # survive code redeploys and are the canonical owners of RD/FOH evidence.
 export XIO_DATA_DIR="${XIO_DATA_DIR:-/sdcard/xio_termux/data}"

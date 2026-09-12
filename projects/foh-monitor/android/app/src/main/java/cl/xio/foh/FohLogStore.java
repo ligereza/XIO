@@ -70,10 +70,16 @@ public final class FohLogStore extends SQLiteOpenHelper {
 
     /** Structured evidence for the native UI and the embedded hotspot host. */
     public synchronized JSONArray eventsJson(int limit) throws JSONException {
+        return eventsJson("", limit);
+    }
+
+    public synchronized JSONArray eventsJson(String eventKey, int limit) throws JSONException {
         JSONArray rows = new JSONArray();
+        String selection = eventKey == null || eventKey.trim().isEmpty() ? null : "event_key = ?";
+        String[] args = selection == null ? null : new String[]{eventKey.trim()};
         try (Cursor cursor = getReadableDatabase().query("foh_log",
                 new String[]{"id", "at", "protocol", "detail", "event_key", "tc_value"},
-                null, null, null, null, "at DESC", Integer.toString(Math.max(1, Math.min(limit, 200))))) {
+                selection, args, null, null, "at DESC", Integer.toString(Math.max(1, Math.min(limit, 200))))) {
             while (cursor.moveToNext()) {
                 rows.put(eventObject(cursor.getLong(0), cursor.getLong(1), cursor.getString(2), cursor.getString(3), cursor.getString(4), cursor.isNull(5) ? null : cursor.getString(5)));
             }

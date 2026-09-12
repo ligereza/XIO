@@ -15,7 +15,7 @@ import atexit
 from pathlib import Path
 from flask import (
     Flask, request, jsonify, send_file, send_from_directory,
-    Response, make_response
+    Response, make_response, redirect
 )
 from werkzeug.utils import secure_filename
 from xiaomi_controller import XiaomiController
@@ -201,8 +201,15 @@ def init_plugins():
     plugin_registry = PluginRegistry(plugin_context)
 
     allow_unsafe = os.environ.get("PLUGINS_ALLOW_UNSAFE") == "1"
+    host_domain = os.environ.get("XIO_HOST_DOMAIN", "all").strip().lower()
     loaded, skipped = {}, []
     for pid in plugin_registry.discover():
+        if host_domain in {"rd", "xio-rd"} and pid == "foh_monitor":
+            skipped.append(f"{pid} (RD host keeps FOH/ISKVW in the native APK)")
+            continue
+        if host_domain in {"foh", "iskvw"} and pid == "rd_field":
+            skipped.append(f"{pid} (FOH host keeps RD in the RD surface)")
+            continue
         if pid in UNSAFE_PLUGINS and not allow_unsafe:
             skipped.append(pid)
             continue
@@ -274,6 +281,11 @@ def static_files(filename):
 @app.route("/raider")
 def raider():
     """Standalone RAIDER tool shared by the RD and FOH XIO surfaces."""
+    domain = (request.args.get("domain") or "").strip().lower()
+    if domain == "rd":
+        return redirect("/api/plugins/rd_field/raider")
+    if domain == "foh":
+        return redirect("/api/plugins/foh_monitor/raider")
     return send_from_directory("static", "raider.html")
 
 
@@ -822,9 +834,10 @@ def after_request(response):
 # MAIN
 # ══════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
+    port = int(os.environ.get("XIO_PORT", "5000"))
     print("=" * 56)
     print("  Xiaomi ADB Web Controller + Plugin System")
-    print("  Serving on http://0.0.0.0:5000")
+    print(f"  Serving on http://{os.environ.get('XIO_BIND_HOST', '0.0.0.0')}:{port}")
     print("=" * 56)
 
     # Initialize plugins before starting server
@@ -832,7 +845,7 @@ if __name__ == "__main__":
 
     app.run(
         host=os.environ.get("XIO_BIND_HOST", "0.0.0.0"),
-        port=5000,
+        port=port,
         debug=False,
         threaded=True,
     )

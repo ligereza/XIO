@@ -64,6 +64,7 @@ public final class MainActivity extends ComponentActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("xio_foh", MODE_PRIVATE);
+        migrateLegacyEmbeddedHost();
         store = new FohLogStore(this);
         buildShell();
         receiver = new BroadcastReceiver() {
@@ -177,8 +178,8 @@ public final class MainActivity extends ComponentActivity {
     private void buildToolsPage() {
         LinearLayout box = card(); box.addView(text("HERRAMIENTAS FOH / ISKVW", 11, AMBER));
         box.addView(text("Estas acciones abren las herramientas existentes del host; no se reemplazan por pantallas falsas.", 12, MUTED));
-        addTool(box, "HUB ISKVW", "/api/plugins/foh_monitor/view"); addTool(box, "PANEL FOH", "/api/plugins/foh_monitor/panel"); addTool(box, "MAPPING LED", "/api/plugins/foh_monitor/mapping"); addTool(box, "RAIDER", "/raider?domain=foh"); addTool(box, "REGISTRO", "/api/plugins/foh_monitor/registro");
-        box.addView(text("Escucha: Art-Net :6454 · sACN :5568 · OSC/timecode :7000 · host HTTP :5000", 11, MUTED)); pageHost.addView(box);
+        addTool(box, "HUB ISKVW", "/api/plugins/foh_monitor/view"); addTool(box, "PANEL FOH", "/api/plugins/foh_monitor/panel"); addTool(box, "MAPPING LED", "/api/plugins/foh_monitor/mapping"); addTool(box, "RAIDER FOH", "/api/plugins/foh_monitor/raider"); addTool(box, "REGISTRO", "/api/plugins/foh_monitor/registro");
+        box.addView(text("Escucha: Art-Net :6454 · sACN :5568 · OSC/timecode :7000 · FOH HTTP :5100 · RD/FLUJO :5000", 11, MUTED)); pageHost.addView(box);
     }
     private void addTool(LinearLayout box, String label, String path) { Button b = button(label, SURFACE, TEXT); box.addView(b); b.setOnClickListener(v -> openUrl(hostUrl() + path)); }
 
@@ -194,7 +195,7 @@ public final class MainActivity extends ComponentActivity {
         if (statusView != null) {
             boolean listening = s.optBoolean("listener");
             boolean server = s.optBoolean("server");
-            statusView.setText("Estado: " + (listening ? "ESCUCHANDO" : "escucha detenida") + " · APK nativa" + (server ? " · host :5000" : " · visualizador externo"));
+            statusView.setText("Estado: " + (listening ? "ESCUCHANDO" : "escucha detenida") + " · APK nativa" + (server ? " · FOH :5100" : " · visualizador externo"));
         }
         JSONObject c = s.optJSONObject("channels");
         renderTile(lightsState, lightsMeta, combined(c, "artnet", "sacn"), "Art-Net/sACN");
@@ -254,7 +255,24 @@ public final class MainActivity extends ComponentActivity {
     }
     private String formatSeconds(double value) { int total = (int) Math.round(value); return String.format(Locale.ROOT, "%02d:%02d", total / 60, total % 60); }
 
-    private JSONObject combined(JSONObject channels, String first, String second) { if (channels == null) return null; JSONObject a = channels.optJSONObject(first), b = channels.optJSONObject(second); if (a == null && b == null) return null; JSONObject r = new JSONObject(); try { boolean active = (a != null && a.optBoolean("active")) || (b != null && b.optBoolean("active")); r.put("active", active).put("pps", (a == null ? 0 : a.optLong("pps")) + (b == null ? 0 : b.optLong("pps"))).put("age", active ? 0 : JSONObject.NULL); } catch (Exception ignored) { } return r; }
+    private JSONObject combined(JSONObject channels, String first, String second) {
+        if (channels == null) return null;
+        JSONObject a = channels.optJSONObject(first), b = channels.optJSONObject(second);
+        if (a == null && b == null) return null;
+        JSONObject r = new JSONObject();
+        try {
+            boolean active = (a != null && a.optBoolean("active")) || (b != null && b.optBoolean("active"));
+            long packets = (a == null ? 0 : a.optLong("pps")) + (b == null ? 0 : b.optLong("pps"));
+            Long age = null;
+            for (JSONObject value : new JSONObject[]{a, b}) {
+                if (value == null || value.isNull("age")) continue;
+                long candidate = value.optLong("age", Long.MAX_VALUE);
+                if (candidate != Long.MAX_VALUE && (age == null || candidate < age)) age = candidate;
+            }
+            r.put("active", active).put("pps", packets).put("age", age == null ? JSONObject.NULL : age);
+        } catch (Exception ignored) { }
+        return r;
+    }
     private void renderTile(TextView state, TextView meta, JSONObject value, String label) { if (value == null || value.isNull("age")) setTile(state, meta, "N/D", "sin señal aun", MUTED); else setTile(state, meta, value.optBoolean("active") ? "ON" : "OFF", (value.optLong("pps") + " pps") + " · " + label, value.optBoolean("active") ? GREEN : RED); }
     private void setTile(TextView state, TextView meta, String title, String detail, int color) { if (state != null) { state.setText(title); state.setTextColor(color); } if (meta != null) meta.setText(detail); }
     private void renderFeed(JSONArray events) {
@@ -288,7 +306,13 @@ public final class MainActivity extends ComponentActivity {
 
     private void startCapture() { String key = prefs.getString("eventKey", ""); Intent i = new Intent(this, FohCaptureService.class).setAction(FohCaptureService.ACTION_START).putExtra(FohCaptureService.EXTRA_EVENT_KEY, key); ContextCompat.startForegroundService(this, i); }
     private void stopCapture() { startService(new Intent(this, FohCaptureService.class).setAction(FohCaptureService.ACTION_STOP)); }
-    private String hostUrl() { String value = prefs.getString("host", "http://127.0.0.1:5000").trim(); return (value.isEmpty() ? "http://127.0.0.1:5000" : value).replaceAll("/+$", ""); }
+    private String hostUrl() { String value = prefs.getString("host", "http://127.0.0.1:5100").trim(); return (value.isEmpty() ? "http://127.0.0.1:5100" : value).replaceAll("/+$", ""); }
+    private void migrateLegacyEmbeddedHost() {
+        String value = prefs.getString("host", "").trim();
+        if ("http://127.0.0.1:5000".equals(value)) {
+            prefs.edit().putString("host", "http://127.0.0.1:5100").apply();
+        }
+    }
     private void openUrl(String value) { try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(value))); } catch (Exception ignored) { } }
     private EditText input(String hint, String value) { EditText e = new EditText(this); e.setHint(hint); e.setText(value); e.setTextColor(TEXT); e.setHintTextColor(MUTED); e.setSingleLine(true); return e; }
     private TextView text(String value, int size, int color) { TextView t = new TextView(this); t.setText(value); t.setTextSize(size); t.setTextColor(color); t.setPadding(0, dp(3), 0, dp(3)); return t; }

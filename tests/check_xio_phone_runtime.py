@@ -38,12 +38,17 @@ REQUIRED_FILES = (
     "new-plugins/foh_monitor/__init__.py",
     "new-plugins/foh_monitor/foh_vj_context.json",
     "new-plugins/foh_monitor/static/mapping.html",
+    "new-plugins/foh_monitor/static/raider.html",
     "new-plugins/connectivity_supervisor/__init__.py",
+    "new-plugins/rd_field/static/raider.html",
 )
 SYNC_FILES = (
     "new/server.py",
     "new/run_server.sh",
     "new-plugins/foh_monitor/__init__.py",
+    "new-plugins/foh_monitor/static/raider.html",
+    "new-plugins/rd_field/__init__.py",
+    "new-plugins/rd_field/static/raider.html",
     "new-plugins/connectivity_supervisor/__init__.py",
 )
 
@@ -89,6 +94,7 @@ def main() -> int:
     parser.add_argument("--adb", default=DEFAULT_ADB)
     parser.add_argument("--serial", default=DEFAULT_SERIAL)
     parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--foh-port", type=int, default=5100)
     parser.add_argument("--skip-http", action="store_true")
     args = parser.parse_args()
 
@@ -160,19 +166,37 @@ def main() -> int:
     else:
         print(f"LISTENER=PASS port={args.port}")
 
+    foh_port_pattern = re.compile(rf"(?:\*|0\.0\.0\.0|127\.0\.0\.1):{args.foh_port}\b")
+    if rc != 0 or not foh_port_pattern.search(listeners):
+        fail(errors, f"native FOH listener not found on port {args.foh_port}: {detail or listeners or rc}")
+    else:
+        print(f"FOH_LISTENER=PASS port={args.foh_port}")
+
     if not args.skip_http:
-        url = f"http://{phone_ip}:{args.port}/api/plugins"
+        url = f"http://{phone_ip}:{args.port}/api/plugins/rd_field/info"
         try:
             with urllib.request.urlopen(url, timeout=4) as response:
-                body = response.read(8192).decode("utf-8", "replace")
+                body = response.read().decode("utf-8", "replace")
             try:
                 payload = json.loads(body)
             except json.JSONDecodeError:
                 payload = None
-            if response.status != 200 or not isinstance(payload, (dict, list)):
+            if (
+                response.status != 200
+                or not isinstance(payload, dict)
+                or payload.get("domain") != "rd"
+                or not payload.get("ready")
+            ):
                 fail(errors, f"XIO HTTP response invalid: {url} status={response.status}")
             else:
-                print(f"HTTP=PASS url={url} status={response.status}")
+                print(f"HTTP=PASS url={url} status={response.status} domain=rd ready=true")
+            foh_url = f"http://{phone_ip}:{args.foh_port}/api/plugins/foh_monitor/status"
+            with urllib.request.urlopen(foh_url, timeout=4) as foh_response:
+                foh_payload = json.loads(foh_response.read().decode("utf-8", "replace"))
+            if foh_response.status != 200 or foh_payload.get("domain") != "vj_foh":
+                fail(errors, f"FOH HTTP response invalid: {foh_url} status={foh_response.status}")
+            else:
+                print(f"HTTP=PASS url={foh_url} status={foh_response.status} domain=vj_foh")
         except (OSError, urllib.error.URLError, urllib.error.HTTPError) as exc:
             fail(errors, f"XIO HTTP unreachable: {url}: {exc}")
     else:

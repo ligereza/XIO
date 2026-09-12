@@ -45,9 +45,11 @@ class RdFieldPlugin(PluginBase):
         # UI and API are deliberately namespaced below /rd_field.  FOH keeps
         # its own /foh_monitor and showcontrol routes on the same listener.
         self.register_route("/view", self._view, methods=["GET"])
+        self.register_route("/raider", self._raider, methods=["GET"])
         self.register_route("/info", self._info, methods=["GET"])
         self.register_route("/bootstrap", self._bootstrap, methods=["GET"])
         self.register_route("/samples", self._samples, methods=["GET"])
+        self.register_route("/events/sync", self._sync_event, methods=["POST"])
         self.register_route("/sync", self._sync, methods=["POST"])
         self.register_route("/manifest.webmanifest", self._manifest, methods=["GET"])
         self.register_route("/<path:filename>", self._static_file, methods=["GET"])
@@ -118,6 +120,9 @@ class RdFieldPlugin(PluginBase):
         for event in payload.get("events", []):
             if isinstance(event, dict) and event.get("event_id"):
                 refs.add(str(event["event_id"]))
+        for event in payload.get("xioEvents", []):
+            if isinstance(event, dict) and event.get("client_event_id"):
+                refs.add(str(event["client_event_id"]))
         return refs
 
     # ------------------------------------------------------------------ UI/API
@@ -126,6 +131,12 @@ class RdFieldPlugin(PluginBase):
         path = self._field_root / "index.html"
         if not path.is_file():
             return self._json_error("superficie RD no desplegada", 404)
+        return send_file(path, mimetype="text/html")
+
+    def _raider(self):
+        path = self._field_root / "raider.html"
+        if not path.is_file():
+            return self._json_error("RAIDER RD no desplegado", 404)
         return send_file(path, mimetype="text/html")
 
     def _info(self):
@@ -177,6 +188,33 @@ class RdFieldPlugin(PluginBase):
         except Exception as exc:
             self.logger.error("RD samples failed: %s", exc)
             return self._json_error("no se pudieron leer las muestras del evento", 503)
+
+    def _sync_event(self):
+        """Persist an XIO-RD event draft before accepting its samples.
+
+        Event context and sample evidence use separate routes deliberately:
+        ``/events/sync`` writes the additive ``xio_eventos`` table, while
+        ``/sync`` writes canonical RD samples and only accepts an event that
+        is already visible in the host bootstrap.
+        """
+        if not self._db_path().is_file():
+            return self._json_error("base RD del host no disponible; no se acepta escritura", 503)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return self._json_error("payload JSON invalido", 400)
+        try:
+            result = self._bridge().sync_event(payload, self._db_path())
+            result.update({
+                "domain": "rd",
+                "canonical_host": "xio",
+                "canonical_storage": "host_rd_db_plus_external_evidence",
+            })
+            return jsonify(result)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            return self._json_error(str(exc), 422)
+        except Exception as exc:
+            self.logger.error("RD event sync failed: %s", exc)
+            return self._json_error("no se pudo guardar el evento XIO-RD", 500)
 
     def _sync(self):
         if not self._db_path().is_file():

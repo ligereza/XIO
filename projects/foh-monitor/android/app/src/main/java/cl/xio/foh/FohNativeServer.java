@@ -35,7 +35,8 @@ import java.util.Map;
  * WebView: the APK UI never depends on this server to measure signals.
  */
 public final class FohNativeServer {
-    public static final int PORT = 5000;
+    /** Native FOH surface; XIO-RD/FLUJO keeps the shared host port 5000. */
+    public static final int PORT = 5100;
     private final Context context;
     private final FohLogStore store;
     private final FohListener listener;
@@ -70,7 +71,7 @@ public final class FohNativeServer {
 
     public boolean isRunning() { return running; }
 
-    /** Snapshot for the native Activity when another host already owns :5000. */
+    /** Snapshot for the native Activity and remote FOH browser clients. */
     public JSONObject localStatusJson() {
         try { return statusJson(); }
         catch (JSONException error) { return errorJson("estado local no disponible"); }
@@ -173,6 +174,9 @@ public final class FohNativeServer {
 
     private Response ingest(String body) throws JSONException {
         JSONObject data = new JSONObject(body.isEmpty() ? "{}" : body);
+        if (data.has("eventRef") || data.has("rdEventRef") || data.has("rd_event_ref")) {
+            return json(422, errorJson("FOH usa eventKey; no acepta identidad RD eventRef"));
+        }
         String protocol = data.optString("protocol", "").trim();
         String detail = data.optString("detail", "").trim();
         String eventKey = data.optString("eventKey", "").trim();
@@ -250,6 +254,7 @@ public final class FohNativeServer {
         if (key.isEmpty()) return asset("resumen.html", "text/html; charset=utf-8");
         if (findEvent(key) == null) return json(409, errorJson("eventKey no existe en catalogo VJ/FOH"));
         JSONObject result = store.summaryJson(key);
+        result.put("rows", store.eventsJson(key, 200));
         result.put("ok", true).put("domain", "vj_foh").put("readOnly", true);
         return json(result);
     }
@@ -270,7 +275,8 @@ public final class FohNativeServer {
                 .put("level_db", JSONObject.NULL).put("age", JSONObject.NULL)
                 .put("reason", "audio nativo aun no habilitado; el panel conserva N/D honesto");
         return new JSONObject().put("ok", true).put("domain", "vj_foh").put("listener_mode", "native_apk")
-                .put("server", running).put("listener", listener.isRunning()).put("channels", channels).put("timecode", listener.timecodeSnapshot())
+                .put("server", running).put("httpPort", PORT).put("rdHostPort", 5000)
+                .put("listener", listener.isRunning()).put("channels", channels).put("timecode", listener.timecodeSnapshot())
                 .put("audio", audio).put("battery", batteryJson()).put("eventKey", currentEventKey())
                 .put("context", currentContext()).put("setlist", setlistJson())
                 .put("active_window", 5).put("log_file", "app-private/xio_foh.db")
@@ -280,7 +286,7 @@ public final class FohNativeServer {
     private JSONArray eventsJson(String query) throws JSONException {
         int limit = 20;
         try { limit = Integer.parseInt(queryValue(query, "limit")); } catch (NumberFormatException ignored) { }
-        return store.eventsJson(limit);
+        return store.eventsJson(queryValue(query, "eventKey"), limit);
     }
 
     private JSONObject contextJson() throws JSONException {
@@ -422,9 +428,12 @@ public final class FohNativeServer {
         JSONObject channels = s.optJSONObject("channels");
         StringBuilder html = new StringBuilder("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'><title>FOH Monitor</title><style>body{font:16px system-ui;background:#07090d;color:#e8eaed;padding:16px}article{border:1px solid #293247;border-radius:14px;padding:14px;margin:10px 0}b{font-size:20px}a{color:#60a5fa;margin-right:12px}</style><h1>FOH / ISKVW</h1>");
         html.append("<p>evento: ").append(escapeHtml(currentEventKey().isEmpty() ? "sin seleccionar" : currentEventKey())).append("</p>");
-        for (String name : new String[]{"Art-Net", "sACN", "OSC / TC"}) {
-            JSONObject c = channels == null ? null : channels.optJSONObject(name);
-            html.append("<article><b>").append(name).append("</b><br>").append(c != null && c.optBoolean("active") ? "ACTIVO" : "sin señal");
+        String[][] channelLabels = {{"Art-Net", "artnet"}, {"sACN", "sacn"}, {"OSC / visual", "osc"}};
+        for (String[] channel : channelLabels) {
+            String name = channel[0];
+            JSONObject c = channels == null ? null : channels.optJSONObject(channel[1]);
+            String state = c == null || c.isNull("age") ? "N/D" : c.optBoolean("active") ? "ACTIVO" : "OFF";
+            html.append("<article><b>").append(name).append("</b><br>").append(state);
             if (c != null) html.append(" · ").append(c.optInt("pps", 0)).append(" paquetes/s · ").append(escapeHtml(c.optString("detail", "")));
             html.append("</article>");
         }

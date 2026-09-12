@@ -12,6 +12,10 @@ The existing XIO listener on port `5000` serves this surface under:
 - `/api/plugins/foh_monitor/registro` and `/log` — FOH evidence
 - `/api/plugins/showcontrol/panel` — existing opt-in show-control tools
 
+The native FOH APK uses its own embedded HTTP listener on port `5100` so it
+can coexist on the same Xiaomi with the RD/FLUJO host on port `5000`. The APK
+may still be configured to forward evidence to a remote XIO host.
+
 The context selector accepts only an exact `eventKey` from
 `foh_vj_context.json`. It persists the current selection in the FOH log
 directory and labels new JSONL records with `domain: vj_foh` and

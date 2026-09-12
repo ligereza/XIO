@@ -157,6 +157,21 @@ def _payload(event_ref="EVT-001"):
     }
 
 
+def _event_payload(event_id="XIO-EVT-001"):
+    return {
+        "clientEventId": event_id,
+        "eventName": "Evento XIO de prueba",
+        "venue": "Sala RD",
+        "producer": "rd-demo",
+        "startDate": "2026-09-11",
+        "endDate": "2026-09-11",
+        "djs": [],
+        "triangulation": {"sources": ["fixture"]},
+        "flyerRef": "",
+        "flyerSha256": "",
+    }
+
+
 def test_rd_routes_are_namespaced_and_bootstrap_is_readable(tmp_path):
     client, _ = _client(tmp_path)
     info = client.get("/api/plugins/rd_field/info")
@@ -175,6 +190,23 @@ def test_rd_rejects_unknown_event_without_creating_it(tmp_path):
     with sqlite3.connect(db) as conn:
         assert conn.execute("SELECT COUNT(*) FROM muestras").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM mesas_testeo").fetchone()[0] == 0
+
+
+def test_rd_event_sync_registers_event_before_sample_sync(tmp_path):
+    client, db = _client(tmp_path)
+    event = client.post("/api/plugins/rd_field/events/sync", json=_event_payload())
+    assert event.status_code == 200
+    assert event.get_json()["eventRef"] == "XIO-EVT-001"
+
+    bootstrap = client.get("/api/plugins/rd_field/bootstrap").get_json()
+    assert bootstrap["xioEvents"][0]["client_event_id"] == "XIO-EVT-001"
+
+    sample = client.post("/api/plugins/rd_field/sync", json=_payload("XIO-EVT-001"))
+    assert sample.status_code == 200
+    assert sample.get_json()["domain"] == "rd"
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM xio_eventos").fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM muestras WHERE evento_ref='XIO-EVT-001'").fetchone()[0] == 1
 
 
 def test_rd_sync_persiste_en_host_y_es_idempotente(tmp_path):
@@ -196,6 +228,7 @@ if __name__ == "__main__":
     tests = (
         test_rd_routes_are_namespaced_and_bootstrap_is_readable,
         test_rd_rejects_unknown_event_without_creating_it,
+        test_rd_event_sync_registers_event_before_sample_sync,
         test_rd_sync_persiste_en_host_y_es_idempotente,
     )
     with tempfile.TemporaryDirectory(prefix="xio-rd-test-") as directory:

@@ -428,6 +428,7 @@ class FohMonitorPlugin(PluginBase):
 
         self.register_route("/status", self._api_status, methods=["GET"])
         self.register_route("/view", self._api_view, methods=["GET"])
+        self.register_route("/raider", self._api_raider, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
         self.register_route("/resumen", self._api_resumen, methods=["GET"])
@@ -1216,10 +1217,21 @@ class FohMonitorPlugin(PluginBase):
             return Response("hub FOH no desplegado", status=404, mimetype="text/plain")
         return send_file(path, mimetype="text/html", conditional=True)
 
+    def _api_raider(self):
+        """Serve the FOH/ISKVW RAIDER without exposing RD surfaces."""
+        from flask import send_file
+        path = os.path.join(os.path.dirname(__file__), "static", "raider.html")
+        if not os.path.isfile(path):
+            return Response("RAIDER FOH no desplegado", status=404, mimetype="text/plain")
+        return send_file(path, mimetype="text/html", conditional=True)
+
     def _api_ingest(self):
         """Accept throttled signal records forwarded by the native FOH client."""
         from flask import jsonify, request
         data = request.get_json(silent=True) or {}
+        if any(key in data for key in ("eventRef", "rdEventRef", "rd_event_ref")):
+            return jsonify({"ok": False, "domain": "vj_foh",
+                            "error": "FOH usa eventKey; no acepta identidad RD eventRef"}), 422
         protocol = str(data.get("protocol") or "").strip()
         detail = str(data.get("detail") or "").strip()
         event_key = str(data.get("eventKey") or "").strip()
@@ -1286,7 +1298,7 @@ class FohMonitorPlugin(PluginBase):
                             "byType": by_type, "dates": sorted(dates),
                             "firstTs": rows[0].get("ts") if rows else None,
                             "lastTs": rows[-1].get("ts") if rows else None,
-                        }, "readOnly": True,
+                        }, "rows": rows[-200:], "readOnly": True,
                         "interpretation": "descriptive_signal_counts_only"})
 
     def _api_context_get(self):

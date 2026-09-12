@@ -25,9 +25,11 @@ REQUIRED_FILES = (
     "new-plugins/foh_monitor/__init__.py",
     "new-plugins/foh_monitor/foh_vj_context.json",
     "new-plugins/foh_monitor/static/mapping.html",
+    "new-plugins/foh_monitor/static/raider.html",
     "new-plugins/rd_field/__init__.py",
     "new-plugins/rd_field/bridge.py",
     "new-plugins/rd_field/static/index.html",
+    "new-plugins/rd_field/static/raider.html",
     "new-plugins/rd_field/static/app.js",
     "new-plugins/rd_field/static/manifest.webmanifest",
     "new-plugins/rd_field/static/styles.css",
@@ -86,7 +88,7 @@ def main() -> int:
             "XIO_DATA_DIR",
             "PLUGINS_DIR",
             "XIO_BIND_HOST",
-            "port=5000",
+            'os.environ.get("XIO_PORT", "5000")',
         ):
             if marker not in server:
                 errors.append(f"server marker absent: {marker}")
@@ -97,6 +99,7 @@ def main() -> int:
             "XIO_DATA_DIR",
             "XIO_RD_PERSIST",
             "XIO_FOH_LOG_DIR",
+            'XIO_HOST_DOMAIN="${XIO_HOST_DOMAIN:-rd}"',
             "python server.py",
         ):
             if marker not in launcher:
@@ -118,9 +121,15 @@ def main() -> int:
             'context_actual.json',
             '"domain": "vj_foh"',
             'register_route("/mapping"',
+            'register_route("/raider"',
         ):
             if marker not in foh:
                 errors.append(f"FOH context marker absent: {marker}")
+
+        rd = read("new-plugins/rd_field/__init__.py")
+        for marker in ('register_route("/events/sync"', 'register_route("/raider"', 'client_event_id'):
+            if marker not in rd:
+                errors.append(f"RD field marker absent: {marker}")
     except (OSError, zipfile.BadZipFile, KeyError, UnicodeDecodeError) as exc:
         errors.append(f"bundle unreadable: {exc}")
 

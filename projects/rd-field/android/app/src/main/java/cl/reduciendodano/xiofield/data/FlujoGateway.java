@@ -59,7 +59,7 @@ public final class FlujoGateway {
     public void syncEvent(JSONObject event, String endpoint, String token, Callback callback) {
         executor.execute(() -> {
             try {
-                JSONObject response = requestWithUsbFallback("POST", endpoint + "/sync", event, token);
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/events/sync", event, token);
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));

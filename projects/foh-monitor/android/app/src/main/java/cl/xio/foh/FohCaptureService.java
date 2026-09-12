@@ -22,6 +22,7 @@ public final class FohCaptureService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        migrateLegacyEmbeddedHost();
         store = new FohLogStore(this);
         WifiManager wifi = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
         if (wifi != null) {
@@ -75,7 +76,12 @@ public final class FohCaptureService extends Service {
 
     private void sendPacketToHost(String protocol, String detail) {
         String eventKey = getSharedPreferences("xio_foh", MODE_PRIVATE).getString("eventKey", "");
-        String host = getSharedPreferences("xio_foh", MODE_PRIVATE).getString("host", "http://127.0.0.1:5000").replaceAll("/+$", "");
+        String host = getSharedPreferences("xio_foh", MODE_PRIVATE).getString("host", "http://127.0.0.1:5100").replaceAll("/+$", "");
+        // The native listener already persists every packet locally. Do not
+        // POST it back to the same embedded server: that would duplicate the
+        // evidence row once for every accepted signal. Forward only when the
+        // operator explicitly configured a different XIO/FOH host.
+        if (isLocalNativeHost(host)) return;
         new Thread(() -> {
             try {
                 java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(host + "/api/plugins/foh_monitor/ingest").openConnection();
@@ -85,6 +91,19 @@ public final class FohCaptureService extends Service {
                 connection.getResponseCode(); connection.disconnect();
             } catch (Exception ignored) { /* Local SQLite remains the source of truth while the host is offline. */ }
         }, "xio-foh-host-sync").start();
+    }
+
+    private boolean isLocalNativeHost(String host) {
+        return "http://127.0.0.1:5100".equalsIgnoreCase(host)
+                || "http://localhost:5100".equalsIgnoreCase(host)
+                || "http://[::1]:5100".equalsIgnoreCase(host);
+    }
+
+    private void migrateLegacyEmbeddedHost() {
+        android.content.SharedPreferences prefs = getSharedPreferences("xio_foh", MODE_PRIVATE);
+        if ("http://127.0.0.1:5000".equals(prefs.getString("host", "").trim())) {
+            prefs.edit().putString("host", "http://127.0.0.1:5100").apply();
+        }
     }
 
     @Override public void onDestroy() {
