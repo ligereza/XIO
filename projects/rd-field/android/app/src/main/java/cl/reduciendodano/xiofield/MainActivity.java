@@ -95,6 +95,7 @@ public final class MainActivity extends AppCompatActivity {
     private int activeTestIndex;
     private SampleSession.Capture pendingCapture;
     private final Map<String, String> testColors = new HashMap<>();
+    private final List<String> suggestedMoldDesigns = new ArrayList<>();
     private String manualReagent = "";
     private static final String[] SUBSTANCE_OPTIONS = {"MDMA", "ÉXTASIS", "COCAÍNA", "LSD", "KETAMINA", "CANNABIS", "OPIOIDE", "BENZODIACEPINA", "ANFETAMINA", "OTRA"};
     private static final String[] COLOR_OPTIONS = {"blanco", "amarillo", "verde", "azul", "morado", "rosado", "rojo", "transparente", "otro"};
@@ -808,6 +809,7 @@ public final class MainActivity extends AppCompatActivity {
         List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), query, 3);
         if (matches.isEmpty()) {
             card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
+            if (!suggestedMoldDesigns.isEmpty()) card.addView(body("Vocabulario histórico RD (no es coincidencia visual): " + suggestedMoldDesignsText()));
         } else {
             for (VisualMemory.Match match : matches) {
                 String label = match.entry.reviewedLabel;
@@ -981,7 +983,7 @@ public final class MainActivity extends AppCompatActivity {
         input.setSingleLine(true);
         new AlertDialog.Builder(this)
                 .setTitle("¿Qué diseño tiene el molde?")
-                .setMessage("Guarda una etiqueta visual para encontrar comprimidos parecidos en futuros turnos; no identifica la sustancia.")
+                .setMessage("Guarda una etiqueta visual para encontrar comprimidos parecidos en futuros turnos; no identifica la sustancia. Vocabulario histórico disponible: " + suggestedMoldDesignsText())
                 .setView(input)
                 .setNegativeButton("Cancelar", null)
                 .setPositiveButton("GUARDAR MOLDE", (dialog, which) -> {
@@ -996,6 +998,12 @@ public final class MainActivity extends AppCompatActivity {
         if (value == null) return false;
         String clean = value.toLowerCase(Locale.ROOT).replace("é", "e");
         return clean.contains("extasis") || clean.contains("mdma");
+    }
+
+    private String suggestedMoldDesignsText() {
+        if (suggestedMoldDesigns.isEmpty()) return "sin referencias textuales";
+        int limit = Math.min(12, suggestedMoldDesigns.size());
+        return String.join(", ", suggestedMoldDesigns.subList(0, limit));
     }
 
     private void startNextSample() {
@@ -1085,6 +1093,13 @@ public final class MainActivity extends AppCompatActivity {
                 return;
             }
             try {
+                suggestedMoldDesigns.clear();
+                JSONArray moldDesigns = result.response.optJSONArray("moldDesigns");
+                if (moldDesigns != null) for (int i = 0; i < moldDesigns.length(); i++) {
+                    JSONObject item = moldDesigns.optJSONObject(i);
+                    String label = item == null ? moldDesigns.optString(i, "") : item.optString("label", "");
+                    if (!label.trim().isEmpty()) suggestedMoldDesigns.add(label.trim());
+                }
                 JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));

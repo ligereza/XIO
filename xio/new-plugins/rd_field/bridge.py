@@ -203,6 +203,24 @@ def ensure_capture_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(XIO_CAPTURE_SCHEMA)
 
 
+def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Return text labels seen in RD history, not visual matches."""
+    table = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='testeo_filas_fuente'"
+    ).fetchone()
+    if table is None:
+        return []
+    rows = conn.execute(
+        "SELECT MIN(TRIM(format_raw)) AS label, COUNT(*) AS observations "
+        "FROM testeo_filas_fuente "
+        "WHERE LOWER(COALESCE(substance_normalized_candidate, substance_raw, '')) LIKE '%mdma%' "
+        "AND TRIM(COALESCE(format_raw, '')) <> '' "
+        "AND LOWER(TRIM(format_raw)) NOT IN ('pastilla', 'pasti', 'polvo', 'polvo blanco', 'cristal', 'sin registro') "
+        "GROUP BY LOWER(TRIM(format_raw)) ORDER BY observations DESC, label LIMIT 80"
+    ).fetchall()
+    return [{"label": row["label"], "observations": int(row["observations"]), "visualReference": False} for row in rows]
+
+
 def bootstrap(db_path: str | Path) -> dict[str, Any]:
     """Return the controlled vocabulary and event/mesa context for XIO."""
     with _connection(db_path) as conn:
@@ -264,6 +282,7 @@ def bootstrap(db_path: str | Path) -> dict[str, Any]:
             event["triangulation"] = _decode_json_blob(
                 event.pop("triangulation_json"), {}
             )
+        mold_designs = historical_mold_designs(conn)
         return {
             "schema": "xio-flujo-rd-v1",
             "date_granularity": "day",
@@ -273,6 +292,7 @@ def bootstrap(db_path: str | Path) -> dict[str, Any]:
             "sustancias": substances,
             "events": list(events.values()),
             "xioEvents": xio_events,
+            "moldDesigns": mold_designs,
         }
 
 def load_samples(
