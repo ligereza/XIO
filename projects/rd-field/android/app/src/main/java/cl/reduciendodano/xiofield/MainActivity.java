@@ -10,6 +10,8 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
+import android.graphics.PorterDuffColorFilter;
 import android.graphics.Typeface;
 import android.graphics.Shader;
 import android.net.Uri;
@@ -223,11 +225,11 @@ public final class MainActivity extends AppCompatActivity {
         content.addView(sectionLabel("1  ·  INGRESO"));
         content.addView(heading(pendingCapture == null ? "Nueva muestra" : "Revisar captura"));
         if (pendingCapture != null) {
-            addEvidencePair(pendingCapture.path, pendingCapture.silhouettePreviewPath, sample.presentation, pendingCapture.features);
+            addEvidencePair(pendingCapture.path, pendingCapture.silhouettePreviewPath, sample.presentation, sample.observedColor, pendingCapture.features);
             content.addView(body("foto  +  visión"));
         } else if (!sample.captures.isEmpty()) {
             SampleSession.Capture latest = sample.captures.get(sample.captures.size() - 1);
-            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, latest.features);
+            addEvidencePair(latest.path, latest.silhouettePreviewPath, sample.presentation, sample.observedColor, latest.features);
             content.addView(body("último ingreso guardado"));
         } else {
             Button capture = actionButton("▣  FOTO", CORAL, TEXT);
@@ -335,19 +337,23 @@ public final class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void addEvidencePair(String photoPath, String silhouettePath, String format, VisualFeatures features) {
+    private void addEvidencePair(String photoPath, String silhouettePath, String format, String declaredColor, VisualFeatures features) {
         LinearLayout pair = new LinearLayout(this);
         pair.setOrientation(LinearLayout.HORIZONTAL);
         pair.setGravity(Gravity.CENTER_VERTICAL);
         pair.setPadding(0, dp(8), 0, dp(3));
         pair.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(0, dp(154), 1f));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(0, dp(154), 1f); visualParams.setMargins(dp(7), 0, 0, 0);
-        int visualColor = features == null ? SURFACE_RAISED : Color.rgb(features.meanRed, features.meanGreen, features.meanBlue);
-        pair.addView(thumbnail(silhouettePath, visualGlyph(format), visualColor), visualParams);
+        int visualColor = colorForLabel(declaredColor);
+        pair.addView(thumbnail(silhouettePath, visualGlyph(format), visualColor, true), visualParams);
         content.addView(pair, new LinearLayout.LayoutParams(-1, dp(165)));
     }
 
     private View thumbnail(String path, String fallback, int fallbackColor) {
+        return thumbnail(path, fallback, fallbackColor, false);
+    }
+
+    private View thumbnail(String path, String fallback, int fallbackColor, boolean tint) {
         FrameLayout tile = new FrameLayout(this);
         tile.setBackgroundColor(SURFACE_RAISED);
         if (path != null && !path.isEmpty() && new File(path).isFile()) {
@@ -357,6 +363,7 @@ public final class MainActivity extends AppCompatActivity {
                 image.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
                 image.setPadding(dp(5), dp(5), dp(5), dp(5));
                 image.setImageBitmap(bitmap);
+                if (tint) image.setColorFilter(new PorterDuffColorFilter(fallbackColor, PorterDuff.Mode.SRC_IN));
                 tile.addView(image, new FrameLayout.LayoutParams(-1, -1));
                 return tile;
             }
@@ -455,10 +462,10 @@ public final class MainActivity extends AppCompatActivity {
         String photoPath = capture == null ? "" : capture.path;
         String silhouettePath = capture == null ? "" : capture.silhouettePreviewPath;
         VisualFeatures features = capture == null ? null : capture.features;
-        int color = features == null ? colorForLabel(row.observedColor) : Color.rgb(features.meanRed, features.meanGreen, features.meanBlue);
+        int color = colorForLabel(row.observedColor);
         item.addView(thumbnail(photoPath, "⊘", MUTED), new LinearLayout.LayoutParams(dp(62), dp(62)));
         LinearLayout.LayoutParams visualParams = new LinearLayout.LayoutParams(dp(62), dp(62)); visualParams.setMargins(dp(5), 0, dp(9), 0);
-        item.addView(thumbnail(silhouettePath, visualGlyph(row.presentation), color), visualParams);
+        item.addView(thumbnail(silhouettePath, visualGlyph(row.presentation), color, true), visualParams);
         LinearLayout info = new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL); info.setGravity(Gravity.CENTER_VERTICAL);
         String substance = row.declaredSubstance == null || row.declaredSubstance.isEmpty() ? "sin declarar" : row.declaredSubstance;
         String format = row.presentation == null || row.presentation.isEmpty() ? "sin formato" : row.presentation;
@@ -638,6 +645,9 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private int colorForLabel(String value) {
+        if (value != null && value.trim().startsWith("#")) {
+            try { return Color.parseColor(value.trim()); } catch (IllegalArgumentException ignored) { }
+        }
         if (value != null) for (int i = 0; i < COLOR_OPTIONS.length; i++) if (COLOR_OPTIONS[i].equalsIgnoreCase(value)) return COLOR_VALUES[i];
         return SURFACE_RAISED;
     }

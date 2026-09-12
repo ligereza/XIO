@@ -10,9 +10,12 @@ MAIN = ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "ja
 def main() -> None:
     source = MAIN.read_text(encoding="utf-8")
     assert 'addColorRampControl(content, "COLOR", sample.observedColor' in source
-    assert 'value -> engine.setObservedColor(value), this::persist' in source
+    assert 'value -> engine.setObservedColor(value)' in source
+    assert 'ramp.setOnCommit(commit);' in source
     assert 'String observedColorLabel = row.observedColor' in source
     assert 'info.addView(body(observedColorLabel));' in source
+    assert 'new PorterDuffColorFilter(fallbackColor, PorterDuff.Mode.SRC_IN)' in source
+    assert 'Color.parseColor(value.trim())' in source
     assert 'database.insertCapture(sample.id, capture);' in source
     assert 'database.insertCapture(engine.snapshot().id, pendingCapture);' in source
     assert 'database.deleteCapture(engine.snapshot().id, pendingCapture.id);' in source
