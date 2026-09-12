@@ -348,6 +348,7 @@ public final class VisualFeatureExtractor {
         int[] queue = new int[source.length];
         int[] component = new int[source.length];
         int bestInteriorCount = 0;
+        float bestScore = -1f;
         float marginX = width * .08f, marginY = height * .08f;
         for (int start = 0; start < source.length; start++) {
             if (!source[start] || visited[start]) continue;
@@ -373,10 +374,22 @@ public final class VisualFeatureExtractor {
             // pixel while retaining a small central tablet/powder sample.
             boolean interior = minX > marginX && minY > marginY
                     && maxX < width - marginX && maxY < height - marginY;
-            if (interior && componentCount > bestInteriorCount) {
-                Arrays.fill(best, false);
-                for (int i = 0; i < componentCount; i++) best[component[i]] = true;
-                bestInteriorCount = componentCount;
+            if (interior && componentCount >= width * height * .003f) {
+                float boxWidth = maxX - minX + 1f;
+                float boxHeight = maxY - minY + 1f;
+                float fill = componentCount / Math.max(1f, boxWidth * boxHeight);
+                float aspectBalance = Math.min(boxWidth, boxHeight) / Math.max(boxWidth, boxHeight);
+                float areaSupport = Math.min(1f, componentCount / (width * height * .02f));
+                // Prefer a compact, central object over a larger interior
+                // shadow or a broad piece of furniture. Area still matters,
+                // so tiny isolated texture marks cannot win by circularity.
+                float score = fill * .45f + aspectBalance * .35f + areaSupport * .20f;
+                if (score > bestScore || (Math.abs(score - bestScore) < .02f && componentCount > bestInteriorCount)) {
+                    Arrays.fill(best, false);
+                    for (int i = 0; i < componentCount; i++) best[component[i]] = true;
+                    bestInteriorCount = componentCount;
+                    bestScore = score;
+                }
             }
         }
         return bestInteriorCount > 0 ? best : new boolean[source.length];

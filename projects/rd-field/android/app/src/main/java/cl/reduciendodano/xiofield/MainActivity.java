@@ -996,7 +996,9 @@ public final class MainActivity extends AppCompatActivity {
             // produced no silhouette. Re-run that exact evidence on launch
             // so a corrected extractor repairs the row instead of treating
             // the failed draft as permanently complete.
-            boolean usableExisting = existing != null
+            boolean currentModel = existing != null
+                    && SampleSessionEngine.VISUAL_MODEL_VERSION.equals(database.captureModelVersion(sampleId, captureId));
+            boolean usableExisting = currentModel
                     && !existing.silhouettePreviewPath.isEmpty()
                     && new File(existing.silhouettePreviewPath).isFile()
                     && existing.features != null

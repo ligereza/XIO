@@ -32,6 +32,8 @@ def main() -> None:
     assert 'database.insertCapture(sampleId, capture);' in source
     assert 'existing.features.circularity >= .12f' in source
     assert 'bestCluster(relaxedRaw, width, height)' in vision
+    assert 'aspectBalance' in vision
+    assert 'VISUAL_MODEL_VERSION = "visual-contour-v0.4"' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "core" / "SampleSessionEngine.java").read_text(encoding="utf-8")
     assert 'fillEnclosedHoles' in vision
     assert 'directionalThreshold' in vision
     assert 'findMoldMatches' in memory

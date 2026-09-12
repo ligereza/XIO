@@ -4,7 +4,7 @@ import java.util.UUID;
 
 /** Domain actions for the field workflow. UI code calls actions; it does not mutate rows directly. */
 public final class SampleSessionEngine {
-    public static final String VISUAL_MODEL_VERSION = "visual-contour-v0.3";
+    public static final String VISUAL_MODEL_VERSION = "visual-contour-v0.4";
     private final SampleSession session;
 
     public SampleSessionEngine(SampleSession session) {

@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import cl.reduciendodano.xiofield.core.SampleSession;
+import cl.reduciendodano.xiofield.core.SampleSessionEngine;
 import cl.reduciendodano.xiofield.core.VisualFeatures;
 import cl.reduciendodano.xiofield.visual.MoldPatternMatcher;
 
@@ -121,7 +122,7 @@ public final class FlujoGateway {
                 payload.put("sourceEventRef", safe(sample.eventId, ""));
                 payload.put("sourceSampleCode", safe(sample.code, ""));
                 payload.put("createdBy", safe(createdBy, "operator"));
-                payload.put("featureModelVersion", "visual-contour-v0.3");
+                payload.put("featureModelVersion", SampleSessionEngine.VISUAL_MODEL_VERSION);
                 JSONArray views = new JSONArray();
                 int encodedBytes = 0;
                 for (SampleSession.Capture capture : sample.captures) {
@@ -372,7 +373,7 @@ public final class FlujoGateway {
     private static String notes(SampleSession sample, VisualFeatures features) {
         String visual = features == null ? "" : features.compactDescription();
         SampleSession.Capture latest = latestCapture(sample);
-        StringBuilder notes = new StringBuilder("xio_visual_source=proposal; model=visual-contour-v0.3; ");
+        StringBuilder notes = new StringBuilder("xio_visual_source=proposal; model=").append(SampleSessionEngine.VISUAL_MODEL_VERSION).append("; ");
         notes.append(visual).append("; phase=").append(sample.phase.name());
         String mold = reviewedMoldDesign(sample);
         if (!mold.isEmpty()) notes.append("; xio_mold_design=").append(mold);

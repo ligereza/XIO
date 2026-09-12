@@ -79,7 +79,7 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     /** Creates only an empty field draft when an installation has no local data. */
     public void ensureFieldDraft() {
         SQLiteDatabase db = getWritableDatabase();
-        if (count(db, "samples") > 0) return;
+        if (countFieldSamples(db) > 0) return;
         long now = System.currentTimeMillis();
         ContentValues event = new ContentValues();
         event.put("id", "pending-event"); event.put("code", "PENDING-EVENT"); event.put("name", "Evento no seleccionado"); event.put("venue", ""); event.put("scheduled_at", now); event.put("status", "draft"); event.put("synthetic", 0); db.insertOrThrow("events", null, event);
@@ -88,7 +88,10 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     }
 
     public SampleRow latestSample() {
-        Cursor cursor = getReadableDatabase().query("samples", null, null, null, null, null, "updated_at DESC", "1");
+        Cursor cursor = getReadableDatabase().query("samples", null,
+                "id<>? AND event_id<>? AND code NOT LIKE ?",
+                new String[]{"demo-sample", "demo-event", "XIO-DEMO-%"}, null, null,
+                "updated_at DESC", "1");
         try {
             if (!cursor.moveToFirst()) return null;
             return sampleRow(cursor);
@@ -97,7 +100,10 @@ public final class RdFieldDb extends SQLiteOpenHelper {
 
     public List<SampleRow> recentSamples() {
         List<SampleRow> result = new ArrayList<>();
-        Cursor cursor = getReadableDatabase().query("samples", null, null, null, null, null, "created_at DESC", "40");
+        Cursor cursor = getReadableDatabase().query("samples", null,
+                "id<>? AND event_id<>? AND code NOT LIKE ?",
+                new String[]{"demo-sample", "demo-event", "XIO-DEMO-%"}, null, null,
+                "created_at DESC", "40");
         try { while (cursor.moveToNext()) result.add(sampleRow(cursor)); } finally { cursor.close(); }
         return result;
     }
@@ -239,7 +245,7 @@ public final class RdFieldDb extends SQLiteOpenHelper {
 
     public List<EventRow> recentEvents() {
         List<EventRow> result = new ArrayList<>();
-        Cursor cursor = getReadableDatabase().query("events", null, "id<>?", new String[]{"pending-event"}, null, null, "scheduled_at DESC", "60");
+        Cursor cursor = getReadableDatabase().query("events", null, "id<>? AND synthetic=0", new String[]{"pending-event"}, null, null, "scheduled_at DESC", "60");
         try { while (cursor.moveToNext()) result.add(eventRow(cursor)); } finally { cursor.close(); }
         return result;
     }
@@ -254,6 +260,13 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         VisualFeatures f = capture.features;
         ContentValues values = new ContentValues();
         values.put("id", capture.id); values.put("sample_id", sampleId); values.put("kind", capture.kind); values.put("path", capture.path); values.put("silhouette_svg_path", capture.silhouettePath); values.put("silhouette_preview_path", capture.silhouettePreviewPath); values.put("relief_svg_path", capture.reliefPath); values.put("geometry_signature", f.geometrySignature); values.put("relief_signature", f.reliefSignature); values.put("silhouette_confidence", f.silhouetteConfidence); values.put("relief_confidence", f.reliefConfidence); values.put("circularity", f.circularity); values.put("solidity", f.solidity); values.put("symmetry", f.symmetry); values.put("contour_point_count", f.contourPointCount); values.put("sha256", capture.sha256); values.put("captured_at", capture.capturedAt); values.put("silhouette", f.silhouetteLabel); values.put("aspect_ratio", f.aspectRatio); values.put("foreground_ratio", f.foregroundRatio); values.put("color_label", f.colorLabel); values.put("brightness", f.brightness); values.put("saturation", f.saturation); values.put("texture_score", f.textureScore); values.put("mean_red", f.meanRed); values.put("mean_green", f.meanGreen); values.put("mean_blue", f.meanBlue); values.put("perceptual_hash", f.perceptualHash); values.put("marking_candidate", f.markingCandidate); values.put("marking_score", f.markingScore); values.put("model_version", SampleSessionEngineVersion.VALUE); db.insertWithOnConflict("captures", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    public String captureModelVersion(String sampleId, String captureId) {
+        Cursor cursor = getReadableDatabase().query("captures", new String[]{"model_version"},
+                "sample_id=? AND id=?", new String[]{sampleId, captureId}, null, null, null, "1");
+        try { return cursor.moveToFirst() ? cursor.getString(cursor.getColumnIndexOrThrow("model_version")) : ""; }
+        finally { cursor.close(); }
     }
 
     public void deleteCapture(String sampleId, String captureId) {
@@ -279,23 +292,25 @@ public final class RdFieldDb extends SQLiteOpenHelper {
                 + "COALESCE((SELECT cr.field FROM corrections cr WHERE cr.sample_id=t.sample_id AND cr.capture_id=t.capture_id "
                 + "ORDER BY cr.reviewed_at DESC LIMIT 1), '') AS review_field, c.* "
                 + "FROM training_examples t JOIN samples s ON s.id=t.sample_id JOIN captures c ON c.id=t.capture_id "
-                + "WHERE t.review_status='reviewed' ORDER BY c.captured_at DESC";
-        Cursor cursor = getReadableDatabase().rawQuery(sql, null);
+                + "WHERE t.review_status='reviewed' AND s.event_id<>? AND s.code NOT LIKE ? ORDER BY c.captured_at DESC";
+        Cursor cursor = getReadableDatabase().rawQuery(sql, new String[]{"demo-event", "XIO-DEMO-%"});
         try { while (cursor.moveToNext()) result.add(new VisualMemory.Entry(cursor.getString(cursor.getColumnIndexOrThrow("capture_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getLong(cursor.getColumnIndexOrThrow("captured_at")), cursor.getString(cursor.getColumnIndexOrThrow("label")), cursor.getString(cursor.getColumnIndexOrThrow("declared_substance")), cursor.getString(cursor.getColumnIndexOrThrow("review_field")), featuresFrom(cursor))); } finally { cursor.close(); }
         return result;
     }
 
     public List<BatchPatternDetector.Observation> sampleVisualObservations(String eventId) {
         List<BatchPatternDetector.Observation> result = new ArrayList<>();
-        String sql = "SELECT s.event_id, s.code, c.captured_at, c.* FROM samples s JOIN captures c ON c.sample_id=s.id WHERE s.event_id=? ORDER BY c.captured_at ASC";
-        Cursor cursor = getReadableDatabase().rawQuery(sql, new String[]{eventId});
+        String sql = "SELECT s.event_id, s.code, c.captured_at, c.* FROM samples s JOIN captures c ON c.sample_id=s.id WHERE s.event_id=? AND s.event_id<>? AND s.code NOT LIKE ? ORDER BY c.captured_at ASC";
+        Cursor cursor = getReadableDatabase().rawQuery(sql, new String[]{eventId, "demo-event", "XIO-DEMO-%"});
         try { while (cursor.moveToNext()) result.add(new BatchPatternDetector.Observation(cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getLong(cursor.getColumnIndexOrThrow("captured_at")), featuresFrom(cursor))); } finally { cursor.close(); }
         return result;
     }
 
     public List<SampleRow> reviewedSamples() {
         List<SampleRow> result = new ArrayList<>();
-        Cursor cursor = getReadableDatabase().query("samples", null, "status=?", new String[]{"reviewed"}, null, null, "updated_at DESC");
+        Cursor cursor = getReadableDatabase().query("samples", null,
+                "status=? AND event_id<>? AND code NOT LIKE ?",
+                new String[]{"reviewed", "demo-event", "XIO-DEMO-%"}, null, null, "updated_at DESC");
         try { while (cursor.moveToNext()) result.add(sampleRow(cursor)); } finally { cursor.close(); }
         return result;
     }
@@ -325,7 +340,10 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         return new VisualFeatures(cursor.getString(cursor.getColumnIndexOrThrow("color_label")), cursor.getString(cursor.getColumnIndexOrThrow("silhouette")), cursor.getFloat(cursor.getColumnIndexOrThrow("aspect_ratio")), cursor.getFloat(cursor.getColumnIndexOrThrow("foreground_ratio")), cursor.getFloat(cursor.getColumnIndexOrThrow("brightness")), cursor.getFloat(cursor.getColumnIndexOrThrow("saturation")), cursor.getFloat(cursor.getColumnIndexOrThrow("texture_score")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_red")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_green")), cursor.getInt(cursor.getColumnIndexOrThrow("mean_blue")), cursor.getLong(cursor.getColumnIndexOrThrow("perceptual_hash")), marking == null ? "sin señal clara de marca" : marking, cursor.getFloat(cursor.getColumnIndexOrThrow("marking_score")), cursor.getFloat(cursor.getColumnIndexOrThrow("relief_confidence")), cursor.getString(cursor.getColumnIndexOrThrow("relief_signature")), cursor.getFloat(cursor.getColumnIndexOrThrow("silhouette_confidence")), cursor.getFloat(cursor.getColumnIndexOrThrow("circularity")), cursor.getFloat(cursor.getColumnIndexOrThrow("solidity")), cursor.getFloat(cursor.getColumnIndexOrThrow("symmetry")), cursor.getInt(cursor.getColumnIndexOrThrow("contour_point_count")), cursor.getString(cursor.getColumnIndexOrThrow("geometry_signature")));
     }
 
-    private static int count(SQLiteDatabase db, String table) { Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null); try { cursor.moveToFirst(); return cursor.getInt(0); } finally { cursor.close(); } }
+    private static int countFieldSamples(SQLiteDatabase db) {
+        Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM samples WHERE id<>? AND event_id<>? AND code NOT LIKE ?", new String[]{"demo-sample", "demo-event", "XIO-DEMO-%"});
+        try { cursor.moveToFirst(); return cursor.getInt(0); } finally { cursor.close(); }
+    }
 
     public static final class SampleRow {
         public final String id, eventId, code, declaredSubstance, presentation, observedColor, status, phase, syncStatus, syncError, syncReceiptsJson;
@@ -351,5 +369,5 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         }
     }
 
-    private static final class SampleSessionEngineVersion { private static final String VALUE = "visual-contour-v0.3"; }
+    private static final class SampleSessionEngineVersion { private static final String VALUE = "visual-contour-v0.4"; }
 }
