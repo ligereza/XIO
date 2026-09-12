@@ -111,6 +111,7 @@ public final class MainActivity extends AppCompatActivity {
         super.onCreate(state);
         database = new RdFieldDb(this);
         database.ensureFieldDraft();
+        database.recoverInterruptedSampleSyncs();
         photoStore = new PhotoStore(this);
         flujo = new FlujoGateway(this);
         memory = new VisualMemory();
@@ -553,6 +554,9 @@ public final class MainActivity extends AppCompatActivity {
         info.addView(text(substance + "  ·  " + format, 13, TEXT));
         info.addView(body(observedColorLabel));
         info.addView(body(formatTime(capture == null ? row.createdAt : capture.capturedAt) + "  ·  " + row.code));
+        String sync = "synced".equalsIgnoreCase(row.syncStatus) ? "✓ recibido por host" : "sending".equalsIgnoreCase(row.syncStatus) ? "enviando al host…" : "pendiente de sincronizar";
+        if (row.syncError != null && !row.syncError.trim().isEmpty() && !"synced".equalsIgnoreCase(row.syncStatus)) sync += " · reintento disponible";
+        info.addView(body(sync));
         item.addView(info, new LinearLayout.LayoutParams(0, -1, 1f));
         content.addView(item, new LinearLayout.LayoutParams(-1, dp(82)));
     }
@@ -1610,16 +1614,23 @@ public final class MainActivity extends AppCompatActivity {
 
     private void sendCurrentSample() {
         SampleSession sample = engine.snapshot();
+        database.recordSampleSync(sample.id, "sending", "", "[]");
+        render();
         Toast.makeText(this, "⇧  enviando a XIO-RD…", Toast.LENGTH_SHORT).show();
         flujo.syncSample(sample, rdEndpoint(), "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
+                JSONArray receipts = result.response.optJSONArray("captureReceipts");
+                database.recordSampleSync(sample.id, "synced", "", receipts == null ? "[]" : receipts.toString());
                 Toast.makeText(this, "XIO-RD ✓  " + sample.code + " · "
                         + result.response.optInt("captureCount", 0) + " captura(s)"
                         + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
             } else {
+                String message = result.error == null || result.error.getMessage() == null ? "sin conexión" : result.error.getMessage();
+                database.recordSampleSync(sample.id, "pending", message, "[]");
                 Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
             }
+            render();
         });
     }
 

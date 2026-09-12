@@ -17,13 +17,13 @@ import java.util.List;
 /** Local append-friendly projection for the sample workflow. It never writes to RD's imported databases. */
 public final class RdFieldDb extends SQLiteOpenHelper {
     private static final String DB_NAME = "rd_field_local.db";
-    private static final int DB_VERSION = 7;
+    private static final int DB_VERSION = 8;
 
     public RdFieldDb(Context context) { super(context.getApplicationContext(), DB_NAME, null, DB_VERSION); }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE events (id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, venue TEXT, scheduled_at INTEGER, started_at INTEGER, status TEXT NOT NULL, synthetic INTEGER NOT NULL DEFAULT 0, start_date TEXT, end_date TEXT, producer TEXT, djs_json TEXT NOT NULL DEFAULT '[]', triangulation_json TEXT NOT NULL DEFAULT '{}', flyer_ref TEXT, flyer_sha256 TEXT, sync_status TEXT NOT NULL DEFAULT 'pending', review_status TEXT NOT NULL DEFAULT 'pendiente_revision_humana')");
-        db.execSQL("CREATE TABLE samples (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, declared_substance TEXT, presentation TEXT, observed_color TEXT, status TEXT NOT NULL, phase TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0, FOREIGN KEY(event_id) REFERENCES events(id))");
+        db.execSQL("CREATE TABLE samples (id TEXT PRIMARY KEY, event_id TEXT NOT NULL, code TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, declared_substance TEXT, presentation TEXT, observed_color TEXT, status TEXT NOT NULL, phase TEXT NOT NULL, paused INTEGER NOT NULL DEFAULT 0, sync_status TEXT NOT NULL DEFAULT 'pending', sync_error TEXT, sync_at INTEGER, sync_receipts_json TEXT NOT NULL DEFAULT '[]', FOREIGN KEY(event_id) REFERENCES events(id))");
         db.execSQL("CREATE TABLE captures (id TEXT PRIMARY KEY, sample_id TEXT NOT NULL, kind TEXT NOT NULL, path TEXT NOT NULL, silhouette_svg_path TEXT, silhouette_preview_path TEXT, relief_svg_path TEXT, geometry_signature TEXT, relief_signature TEXT, silhouette_confidence REAL, relief_confidence REAL, circularity REAL, solidity REAL, symmetry REAL, contour_point_count INTEGER, sha256 TEXT, captured_at INTEGER NOT NULL, width INTEGER, height INTEGER, silhouette TEXT, aspect_ratio REAL, foreground_ratio REAL, color_label TEXT, brightness REAL, saturation REAL, texture_score REAL, mean_red INTEGER, mean_green INTEGER, mean_blue INTEGER, perceptual_hash INTEGER, marking_candidate TEXT, marking_score REAL, model_version TEXT, FOREIGN KEY(sample_id) REFERENCES samples(id))");
         db.execSQL("CREATE TABLE tests (id TEXT PRIMARY KEY, sample_id TEXT NOT NULL, ordinal INTEGER NOT NULL, method TEXT, reagent TEXT, started_at INTEGER, ended_at INTEGER, elapsed_ms INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, operator_result TEXT, interpretation TEXT, FOREIGN KEY(sample_id) REFERENCES samples(id))");
         db.execSQL("CREATE TABLE test_observations (id TEXT PRIMARY KEY, test_id TEXT NOT NULL, observed_at INTEGER NOT NULL, color_text TEXT, description TEXT, capture_id TEXT, FOREIGN KEY(test_id) REFERENCES tests(id))");
@@ -67,6 +67,12 @@ public final class RdFieldDb extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE events ADD COLUMN flyer_sha256 TEXT");
             db.execSQL("ALTER TABLE events ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
             db.execSQL("ALTER TABLE events ADD COLUMN review_status TEXT NOT NULL DEFAULT 'pendiente_revision_humana'");
+        }
+        if (oldVersion < 8) {
+            db.execSQL("ALTER TABLE samples ADD COLUMN sync_status TEXT NOT NULL DEFAULT 'pending'");
+            db.execSQL("ALTER TABLE samples ADD COLUMN sync_error TEXT");
+            db.execSQL("ALTER TABLE samples ADD COLUMN sync_at INTEGER");
+            db.execSQL("ALTER TABLE samples ADD COLUMN sync_receipts_json TEXT NOT NULL DEFAULT '[]'");
         }
     }
 
@@ -153,6 +159,9 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
         values.put("id", session.id); values.put("event_id", session.eventId); values.put("code", session.code); values.put("created_at", session.createdAt); values.put("updated_at", session.updatedAt); values.put("declared_substance", session.declaredSubstance); values.put("presentation", session.presentation); values.put("observed_color", session.observedColor); values.put("status", session.status); values.put("phase", session.phase.name()); values.put("paused", session.paused ? 1 : 0);
+        // Any local mutation invalidates the previous host receipt. Evidence
+        // remains intact, but the sample must be sent again.
+        values.put("sync_status", "pending"); values.put("sync_error", ""); values.putNull("sync_at"); values.put("sync_receipts_json", "[]");
         if (db.update("samples", values, "id=?", new String[]{session.id}) == 0) db.insertOrThrow("samples", null, values);
         db.delete("test_observations", "test_id IN (SELECT id FROM tests WHERE sample_id=?)", new String[]{session.id});
         db.delete("tests", "sample_id=?", new String[]{session.id});
@@ -198,6 +207,24 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         values.put("sync_status", "synced");
         values.put("review_status", reviewStatus == null || reviewStatus.trim().isEmpty() ? "pendiente_revision_humana" : reviewStatus);
         getWritableDatabase().update("events", values, "id=?", new String[]{id});
+    }
+
+    /** Records the durable local state of the sample-to-host projection. */
+    public void recordSampleSync(String sampleId, String status, String error, String receiptsJson) {
+        ContentValues values = new ContentValues();
+        values.put("sync_status", status == null || status.trim().isEmpty() ? "pending" : status);
+        values.put("sync_error", error == null ? "" : error);
+        values.put("sync_at", System.currentTimeMillis());
+        values.put("sync_receipts_json", receiptsJson == null || receiptsJson.trim().isEmpty() ? "[]" : receiptsJson);
+        getWritableDatabase().update("samples", values, "id=?", new String[]{sampleId});
+    }
+
+    /** A process killed while uploading must become retryable on next launch. */
+    public void recoverInterruptedSampleSyncs() {
+        ContentValues values = new ContentValues();
+        values.put("sync_status", "pending");
+        values.put("sync_error", "envío interrumpido; listo para reintentar");
+        getWritableDatabase().update("samples", values, "sync_status=?", new String[]{"sending"});
     }
 
     public List<EventRow> recentEvents() {
@@ -264,7 +291,7 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     }
 
     private static SampleRow sampleRow(Cursor cursor) {
-        return new SampleRow(cursor.getString(cursor.getColumnIndexOrThrow("id")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getLong(cursor.getColumnIndexOrThrow("created_at")), cursor.getString(cursor.getColumnIndexOrThrow("declared_substance")), cursor.getString(cursor.getColumnIndexOrThrow("presentation")), cursor.getString(cursor.getColumnIndexOrThrow("observed_color")), cursor.getString(cursor.getColumnIndexOrThrow("status")), cursor.getString(cursor.getColumnIndexOrThrow("phase")), cursor.getInt(cursor.getColumnIndexOrThrow("paused")) == 1);
+        return new SampleRow(cursor.getString(cursor.getColumnIndexOrThrow("id")), cursor.getString(cursor.getColumnIndexOrThrow("event_id")), cursor.getString(cursor.getColumnIndexOrThrow("code")), cursor.getLong(cursor.getColumnIndexOrThrow("created_at")), cursor.getString(cursor.getColumnIndexOrThrow("declared_substance")), cursor.getString(cursor.getColumnIndexOrThrow("presentation")), cursor.getString(cursor.getColumnIndexOrThrow("observed_color")), cursor.getString(cursor.getColumnIndexOrThrow("status")), cursor.getString(cursor.getColumnIndexOrThrow("phase")), cursor.getInt(cursor.getColumnIndexOrThrow("paused")) == 1, cursor.getString(cursor.getColumnIndexOrThrow("sync_status")), cursor.getString(cursor.getColumnIndexOrThrow("sync_error")), cursor.isNull(cursor.getColumnIndexOrThrow("sync_at")) ? 0L : cursor.getLong(cursor.getColumnIndexOrThrow("sync_at")), cursor.getString(cursor.getColumnIndexOrThrow("sync_receipts_json")));
     }
 
     private static EventRow eventRow(Cursor cursor) {
@@ -291,10 +318,11 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     private static int count(SQLiteDatabase db, String table) { Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM " + table, null); try { cursor.moveToFirst(); return cursor.getInt(0); } finally { cursor.close(); } }
 
     public static final class SampleRow {
-        public final String id, eventId, code, declaredSubstance, presentation, observedColor, status, phase;
+        public final String id, eventId, code, declaredSubstance, presentation, observedColor, status, phase, syncStatus, syncError, syncReceiptsJson;
         public final long createdAt;
+        public final long syncAt;
         public final boolean paused;
-        public SampleRow(String id, String eventId, String code, long createdAt, String declaredSubstance, String presentation, String observedColor, String status, String phase, boolean paused) { this.id = id; this.eventId = eventId; this.code = code; this.createdAt = createdAt; this.declaredSubstance = declaredSubstance; this.presentation = presentation; this.observedColor = observedColor; this.status = status; this.phase = phase; this.paused = paused; }
+        public SampleRow(String id, String eventId, String code, long createdAt, String declaredSubstance, String presentation, String observedColor, String status, String phase, boolean paused, String syncStatus, String syncError, long syncAt, String syncReceiptsJson) { this.id = id; this.eventId = eventId; this.code = code; this.createdAt = createdAt; this.declaredSubstance = declaredSubstance; this.presentation = presentation; this.observedColor = observedColor; this.status = status; this.phase = phase; this.paused = paused; this.syncStatus = syncStatus; this.syncError = syncError; this.syncAt = syncAt; this.syncReceiptsJson = syncReceiptsJson; }
     }
 
     public static final class EventRow {
