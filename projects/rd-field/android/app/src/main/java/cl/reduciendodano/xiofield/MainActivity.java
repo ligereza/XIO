@@ -813,6 +813,7 @@ public final class MainActivity extends AppCompatActivity {
         card.addView(sectionLabel("RECONOCIMIENTO DE MOLDE / DISEÑO"));
         card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
         card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(queryViews)));
+        card.addView(body("Vocabulario histórico RD  ·  " + suggestedMoldDesignsText()));
         List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), queryViews, 3);
         if (matches.isEmpty()) {
             card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
@@ -1110,6 +1111,7 @@ public final class MainActivity extends AppCompatActivity {
                 JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
+                render();
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
                 else syncCurrentEventThenSample();
             } catch (Exception error) {
