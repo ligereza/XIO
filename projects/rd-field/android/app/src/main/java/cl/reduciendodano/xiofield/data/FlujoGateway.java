@@ -15,6 +15,8 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -147,6 +149,10 @@ public final class FlujoGateway {
                             encodedBytes += bytes.length;
                         }
                     }
+                    encodedBytes = putDerivedAsset(view, "silhouetteBase64", "silhouetteSha256",
+                            capture.silhouettePreviewPath, "png", encodedBytes);
+                    encodedBytes = putDerivedAsset(view, "reliefSvgBase64", "reliefSha256",
+                            capture.reliefPath, "svg", encodedBytes);
                     views.put(view);
                 }
                 payload.put("views", views);
@@ -293,6 +299,32 @@ public final class FlujoGateway {
                 output.write(buffer, 0, count);
             }
             return output.toByteArray();
+        }
+    }
+
+    private static int putDerivedAsset(JSONObject target, String dataKey, String shaKey,
+                                       String path, String extension, int encodedBytes)
+            throws IOException, JSONException {
+        if (path == null || path.isEmpty()) return encodedBytes;
+        File file = new File(path);
+        long length = file.isFile() ? file.length() : 0L;
+        if (length <= 0 || length > MAX_PHOTO_BYTES || encodedBytes + length > MAX_PAYLOAD_BYTES) return encodedBytes;
+        byte[] bytes = readBytes(file, MAX_PHOTO_BYTES);
+        if (encodedBytes + bytes.length > MAX_PAYLOAD_BYTES) return encodedBytes;
+        target.put(dataKey, Base64.encodeToString(bytes, Base64.NO_WRAP));
+        target.put(shaKey, sha256Bytes(bytes));
+        target.put(dataKey + "Extension", extension);
+        return encodedBytes + bytes.length;
+    }
+
+    private static String sha256Bytes(byte[] bytes) throws IOException {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
+            StringBuilder result = new StringBuilder();
+            for (byte value : digest) result.append(String.format(Locale.US, "%02x", value));
+            return result.toString();
+        } catch (NoSuchAlgorithmException error) {
+            throw new IOException("SHA-256 no disponible", error);
         }
     }
 

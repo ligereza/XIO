@@ -52,6 +52,7 @@ class RdFieldPlugin(PluginBase):
         self.register_route("/catalog", self._catalog, methods=["GET"])
         self.register_route("/catalog/candidates", self._catalog_candidate, methods=["POST"])
         self.register_route("/catalog/<reference_id>/review", self._catalog_review, methods=["POST"])
+        self.register_route("/catalog/evidence/<path:filename>", self._catalog_evidence, methods=["GET"])
         self.register_route("/events/sync", self._sync_event, methods=["POST"])
         self.register_route("/sync", self._sync, methods=["POST"])
         self.register_route("/manifest.webmanifest", self._manifest, methods=["GET"])
@@ -239,6 +240,18 @@ class RdFieldPlugin(PluginBase):
         except Exception as exc:
             self.logger.error("RD visual review failed: %s", exc)
             return self._json_error("no se pudo revisar la referencia visual", 500)
+
+    def _catalog_evidence(self, filename: str):
+        root = self._evidence_root().resolve()
+        relative = filename.removeprefix("xio_evidence/")
+        candidate = (root / relative).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return self._json_error("ruta de evidencia no permitida", 400)
+        if not candidate.is_file() or candidate.suffix.lower() not in {".jpg", ".jpeg", ".png", ".svg"}:
+            return self._json_error("evidencia visual no encontrada", 404)
+        return send_file(candidate)
 
     def _sync_event(self):
         """Persist an XIO-RD event draft before accepting its samples.

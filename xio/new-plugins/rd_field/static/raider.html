@@ -13,6 +13,7 @@
     .muted{color:#92a099;font-size:.85rem}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
     select,button{background:#1e282a;color:#edf1ea;border:1px solid #52615f;border-radius:8px;padding:9px}button{cursor:pointer}
     .sample{border-top:1px solid #354342;padding:12px 0}.key{font-family:monospace;color:#e6c96b}.bad{color:#f28c7c}
+    .evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-top:9px}.evidence-grid figure{margin:0}.evidence-grid img{width:100%;max-height:180px;object-fit:contain;background:#0d1215;border:1px solid #354342;border-radius:7px}.evidence-grid figcaption{font-size:.72rem;color:#92a099;margin-top:3px}
   </style>
 </head>
 <body>
@@ -36,6 +37,8 @@
     const get = (url, options) => fetch(url, options).then(async r => { const body = await r.json().catch(() => ({})); if (!r.ok) throw Error(body.error || `HTTP ${r.status}`); return body; });
     function eventRef(event) { return event.event_id || event.client_event_id || ''; }
     function eventLabel(event) { return event.event_label_candidate || event.event_name || eventRef(event); }
+    function evidenceUrl(ref) { if (!ref) return ''; const clean = String(ref).replace(/^xio_evidence\//, ''); return `/api/plugins/rd_field/catalog/evidence/${encodeURIComponent(clean)}`; }
+    function renderEvidence(views) { return (views || []).map((view, index) => { const assets = [['foto', view.photoRef], ['silueta', view.silhouetteRef], ['relieve', view.reliefRef]].filter(item => item[1]); return assets.length ? `<div><span class="muted">Vista ${index + 1} · ${esc(view.faceOrView || 'unknown')}</span><div class="evidence-grid">${assets.map(item => `<figure><img src="${esc(evidenceUrl(item[1]))}" alt="${esc(item[0])} de vista ${index + 1}"><figcaption>${esc(item[0])}</figcaption></figure>`).join('')}</div></div>` : ''; }).join(''); }
     async function loadCatalog() {
       try {
         const data = await get('/api/plugins/rd_field/bootstrap');
@@ -56,7 +59,7 @@
           const pending = ref.status === 'pending_review';
           const views = ref.views || [];
           const quality = views.map(view => `relieve ${Number(view.reliefConfidence || 0).toFixed(2)}`).join(' · ');
-          return `<article class="sample"><b>${esc(ref.canonicalLabel)}</b> · <span class="key">${esc(ref.referenceId)}</span><br><span class="muted">estado ${esc(ref.status)} · ${views.length} vista(s) · ${esc(quality || 'sin señal de relieve')} · muestra ${esc(ref.sourceSampleCode)}</span>${pending ? `<br><button data-review="approve" data-reference="${esc(ref.referenceId)}">Aprobar referencia</button> <button data-review="reject" data-reference="${esc(ref.referenceId)}">Rechazar</button>` : ''}</article>`;
+          return `<article class="sample"><b>${esc(ref.canonicalLabel)}</b> · <span class="key">${esc(ref.referenceId)}</span><br><span class="muted">estado ${esc(ref.status)} · ${views.length} vista(s) · ${esc(quality || 'sin señal de relieve')} · muestra ${esc(ref.sourceSampleCode)}</span>${renderEvidence(views)}${pending ? `<br><button data-review="approve" data-reference="${esc(ref.referenceId)}">Aprobar referencia</button> <button data-review="reject" data-reference="${esc(ref.referenceId)}">Rechazar</button>` : ''}</article>`;
         }).join('') : '<span class="muted">No hay referencias ni candidatos.</span>';
       } catch (error) { document.getElementById('visualCatalog').innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
     }

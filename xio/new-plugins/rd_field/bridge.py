@@ -214,6 +214,10 @@ CREATE TABLE IF NOT EXISTS xio_visual_reference_views (
     face_or_view TEXT NOT NULL DEFAULT 'unknown',
     photo_ref TEXT,
     photo_sha256 TEXT,
+    silhouette_ref TEXT,
+    silhouette_sha256 TEXT,
+    relief_ref TEXT,
+    relief_sha256 TEXT,
     geometry_signature TEXT,
     relief_signature TEXT,
     silhouette_confidence REAL,
@@ -267,6 +271,10 @@ def ensure_capture_schema(conn: sqlite3.Connection) -> None:
 def ensure_visual_catalog_schema(conn: sqlite3.Connection) -> None:
     """Create the reviewed visual-catalog projection additively."""
     conn.executescript(XIO_VISUAL_CATALOG_SCHEMA)
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(xio_visual_reference_views)")}
+    for name in ("silhouette_ref", "silhouette_sha256", "relief_ref", "relief_sha256"):
+        if name not in columns:
+            conn.execute("ALTER TABLE xio_visual_reference_views ADD COLUMN " + name + " TEXT")
 
 
 def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -309,6 +317,7 @@ def visual_catalog(
             views: list[dict[str, Any]] = []
             for view in conn.execute(
                 "SELECT capture_key, face_or_view, photo_ref, photo_sha256, "
+                "silhouette_ref, silhouette_sha256, relief_ref, relief_sha256, "
                 "geometry_signature, relief_signature, silhouette_confidence, "
                 "relief_confidence, circularity, solidity, symmetry, "
                 "contour_point_count, features_json, feature_model_version "
@@ -325,6 +334,10 @@ def visual_catalog(
                     "faceOrView": view["face_or_view"],
                     "photoRef": view["photo_ref"],
                     "photoSha256": view["photo_sha256"],
+                    "silhouetteRef": view["silhouette_ref"],
+                    "silhouetteSha256": view["silhouette_sha256"],
+                    "reliefRef": view["relief_ref"],
+                    "reliefSha256": view["relief_sha256"],
                     "geometrySignature": view["geometry_signature"],
                     "reliefSignature": view["relief_signature"],
                     "silhouetteConfidence": view["silhouette_confidence"],
@@ -403,11 +416,23 @@ def submit_visual_candidate(
         photo_ref = _store_photo(photo_payload, evidence_root)
         if not photo_ref or not sha:
             raise ValueError("cada referencia visual debe conservar foto y SHA-256")
+        silhouette_sha = _bounded_text(raw.get("silhouetteSha256"), 128).lower()
+        relief_sha = _bounded_text(raw.get("reliefSha256"), 128).lower()
+        silhouette_ref = _store_binary_asset(
+            raw.get("silhouetteBase64"), evidence_root, silhouette_sha, "png"
+        )
+        relief_ref = _store_binary_asset(
+            raw.get("reliefSvgBase64"), evidence_root, relief_sha, "svg"
+        )
         view_rows.append({
             "capture_key": capture_key,
             "face_or_view": _bounded_text(raw.get("faceOrView") or "unknown", 40),
             "photo_ref": _bounded_text(photo_ref, 500),
             "photo_sha256": sha,
+            "silhouette_ref": _bounded_text(silhouette_ref, 500),
+            "silhouette_sha256": silhouette_sha,
+            "relief_ref": _bounded_text(relief_ref, 500),
+            "relief_sha256": relief_sha,
             "geometry_signature": _bounded_text(raw.get("geometrySignature"), 240),
             "relief_signature": _bounded_text(raw.get("reliefSignature"), 240),
             "silhouette_confidence": _optional_float(raw.get("silhouetteConfidence")),
@@ -456,11 +481,13 @@ def submit_visual_candidate(
         for view in view_rows:
             conn.execute(
                 "INSERT INTO xio_visual_reference_views(reference_id,capture_key,face_or_view,"
-                "photo_ref,photo_sha256,geometry_signature,relief_signature,silhouette_confidence,"
+                "photo_ref,photo_sha256,silhouette_ref,silhouette_sha256,relief_ref,relief_sha256,"
+                "geometry_signature,relief_signature,silhouette_confidence,"
                 "relief_confidence,circularity,solidity,symmetry,contour_point_count,features_json,"
-                "feature_model_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "feature_model_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (reference_id, view["capture_key"], view["face_or_view"], view["photo_ref"],
-                 view["photo_sha256"], view["geometry_signature"], view["relief_signature"],
+                 view["photo_sha256"], view["silhouette_ref"], view["silhouette_sha256"],
+                 view["relief_ref"], view["relief_sha256"], view["geometry_signature"], view["relief_signature"],
                  view["silhouette_confidence"], view["relief_confidence"], view["circularity"],
                  view["solidity"], view["symmetry"], view["contour_point_count"],
                  view["features_json"], view["feature_model_version"]),
@@ -1181,6 +1208,34 @@ def _store_photo(capture: dict[str, Any], evidence_root: str | Path) -> str | No
     folder = Path(evidence_root)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / (digest + ".jpg")
+    if not path.exists():
+        path.write_bytes(data)
+    return "xio_evidence/" + path.name
+
+
+def _store_binary_asset(encoded: Any, evidence_root: str | Path,
+                        expected_sha: str, extension: str) -> str | None:
+    """Store a bounded derived asset and verify its optional content hash."""
+    if not encoded:
+        return None
+    if not isinstance(encoded, str):
+        raise ValueError("assetBase64 invalido")
+    raw = encoded.split(",", 1)[1] if "," in encoded[:80] else encoded
+    try:
+        data = base64.b64decode(raw, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("assetBase64 no es válido") from exc
+    if len(data) > MAX_PHOTO_BYTES:
+        raise ValueError("asset supera 5 MB")
+    digest = hashlib.sha256(data).hexdigest()
+    if expected_sha and expected_sha != digest:
+        raise ValueError("sha256 de asset no coincide")
+    suffix = extension.strip().lower()
+    if suffix not in {"png", "svg"}:
+        raise ValueError("extension de asset invalida")
+    folder = Path(evidence_root)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / (digest + "." + suffix)
     if not path.exists():
         path.write_bytes(data)
     return "xio_evidence/" + path.name
