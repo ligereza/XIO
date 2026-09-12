@@ -81,6 +81,11 @@ def main():
         assert "Conecta el host RD para cargar un evento preparado" in index_html
         assert 'href="/api/plugins/rd_field/raider"' in index_html
         assert (PLUGIN.parent / "static" / "raider.html").is_file()
+        raider = (PLUGIN.parent / "static" / "raider.html").read_text(encoding="utf-8")
+        assert 'request_more_evidence' in raider
+        assert 'data-review="retire"' in raider
+        assert 'sourceEventRef' in raider
+        assert 'silhouetteConfidence' in raider and 'reliefConfidence' in raider
 
         _Request.payload = _payload("NO-EXISTE")
         unknown = plugin._sync()

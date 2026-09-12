@@ -57,14 +57,20 @@
         const refs = data.references || [];
         document.getElementById('visualCatalog').innerHTML = refs.length ? refs.map(ref => {
           const pending = ref.status === 'pending_review';
+          const approved = ref.status === 'approved';
           const views = ref.views || [];
-          const quality = views.map(view => `relieve ${Number(view.reliefConfidence || 0).toFixed(2)}`).join(' · ');
-          return `<article class="sample"><b>${esc(ref.canonicalLabel)}</b> · <span class="key">${esc(ref.referenceId)}</span><br><span class="muted">estado ${esc(ref.status)} · ${views.length} vista(s) · ${esc(quality || 'sin señal de relieve')} · muestra ${esc(ref.sourceSampleCode)}</span>${renderEvidence(views)}${pending ? `<br><button data-review="approve" data-reference="${esc(ref.referenceId)}">Aprobar referencia</button> <button data-review="reject" data-reference="${esc(ref.referenceId)}">Rechazar</button>` : ''}</article>`;
+          const quality = views.map((view, index) => `vista ${index + 1}: silueta ${Number(view.silhouetteConfidence || 0).toFixed(2)} · relieve ${Number(view.reliefConfidence || 0).toFixed(2)}`).join(' · ');
+          const decisionButtons = pending
+            ? `<br><button data-review="approve" data-reference="${esc(ref.referenceId)}">Aprobar referencia</button> <button data-review="request_more_evidence" data-reference="${esc(ref.referenceId)}">Solicitar otra vista</button> <button data-review="reject" data-reference="${esc(ref.referenceId)}">Rechazar</button>`
+            : approved
+            ? `<br><button data-review="retire" data-reference="${esc(ref.referenceId)}">Retirar referencia</button>`
+            : '';
+          return `<article class="sample"><b>${esc(ref.canonicalLabel)}</b> · <span class="key">${esc(ref.referenceId)}</span><br><span class="muted">estado ${esc(ref.status)} · ${views.length} vista(s) · ${esc(quality || 'sin señal visual')} · evento ${esc(ref.sourceEventRef || 'sin evento')} · muestra ${esc(ref.sourceSampleCode || 'sin muestra')}</span>${renderEvidence(views)}${decisionButtons}</article>`;
         }).join('') : '<span class="muted">No hay referencias ni candidatos.</span>';
       } catch (error) { document.getElementById('visualCatalog').innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
     }
     async function reviewReference(referenceId, decision) {
-      const reason = decision === 'approve' ? 'Revisión humana de evidencia visual en RAIDER' : 'Referencia visual rechazada en RAIDER';
+      const reason = decision === 'approve' ? 'Revisión humana de evidencia visual en RAIDER' : decision === 'retire' ? 'Referencia visual retirada en RAIDER' : decision === 'request_more_evidence' ? 'Se solicita otra vista o evidencia en RAIDER' : 'Referencia visual rechazada en RAIDER';
       try {
         await get(`/api/plugins/rd_field/catalog/${encodeURIComponent(referenceId)}/review`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ decision, reviewerId: document.getElementById('reviewer').value.trim() || 'raider-operator', reason }) });
         await loadVisualCatalog();
