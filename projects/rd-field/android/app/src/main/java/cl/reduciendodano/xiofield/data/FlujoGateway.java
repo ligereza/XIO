@@ -221,6 +221,10 @@ public final class FlujoGateway {
                     encodedBytes += bytes.length;
                 }
             }
+            encodedBytes = putDerivedAsset(item, "silhouetteBase64", "silhouetteSha256",
+                    capture.silhouettePreviewPath, "png", encodedBytes);
+            encodedBytes = putDerivedAsset(item, "reliefSvgBase64", "reliefSha256",
+                    capture.reliefPath, "svg", encodedBytes);
             captures.put(item);
         }
         payload.put("captures", captures);

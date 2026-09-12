@@ -62,6 +62,9 @@ def main() -> None:
     assert 'RECONOCIMIENTO DE MOLDE / DISEÑO' in source
     assert 'moldDesign' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'moldFingerprint' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
+    gateway = (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
+    assert 'silhouetteBase64' in gateway
+    assert 'reliefSvgBase64' in gateway
     assert 'suggestedMoldDesigns' in source
     assert 'OTRA VISTA' in source
     assert 'moldDesigns' in (ROOT / "xio" / "new-plugins" / "rd_field" / "bridge.py").read_text(encoding="utf-8")
