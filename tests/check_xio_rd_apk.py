@@ -46,6 +46,8 @@ def main() -> None:
     assert 'memory.addApproved' in source
     assert 'submitVisualCandidate' in source
     assert 'pending_review' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "MainActivity.java").read_text(encoding="utf-8")
+    assert 'ensureFieldDraft' in source
+    assert 'ensureDemo()' not in source
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 
 

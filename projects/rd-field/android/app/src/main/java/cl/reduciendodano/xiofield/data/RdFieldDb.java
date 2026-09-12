@@ -70,14 +70,15 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         }
     }
 
-    public void ensureDemo() {
+    /** Creates only an empty field draft when an installation has no local data. */
+    public void ensureFieldDraft() {
         SQLiteDatabase db = getWritableDatabase();
-        if (count(db, "events") > 0) return;
+        if (count(db, "samples") > 0) return;
         long now = System.currentTimeMillis();
         ContentValues event = new ContentValues();
-        event.put("id", "demo-event"); event.put("code", "RD-DEMO"); event.put("name", "Turno de demostración"); event.put("venue", "Mesa local"); event.put("scheduled_at", now); event.put("started_at", now); event.put("status", "active"); event.put("synthetic", 1); db.insertOrThrow("events", null, event);
+        event.put("id", "pending-event"); event.put("code", "PENDING-EVENT"); event.put("name", "Evento no seleccionado"); event.put("venue", ""); event.put("scheduled_at", now); event.put("status", "draft"); event.put("synthetic", 0); db.insertOrThrow("events", null, event);
         ContentValues sample = new ContentValues();
-        sample.put("id", "demo-sample"); sample.put("event_id", "demo-event"); sample.put("code", "XIO-DEMO-001"); sample.put("created_at", now); sample.put("updated_at", now); sample.put("declared_substance", "MDMA"); sample.put("presentation", "comprimido_prensado"); sample.put("status", "draft"); sample.put("phase", "OBSERVE"); sample.put("paused", 0); db.insertOrThrow("samples", null, sample);
+        sample.put("id", "draft-sample-" + now); sample.put("event_id", "pending-event"); sample.put("code", "XIO-DRAFT-" + now); sample.put("created_at", now); sample.put("updated_at", now); sample.put("declared_substance", ""); sample.put("presentation", ""); sample.put("status", "draft"); sample.put("phase", "OBSERVE"); sample.put("paused", 0); db.insertOrThrow("samples", null, sample);
     }
 
     public SampleRow latestSample() {
@@ -201,7 +202,7 @@ public final class RdFieldDb extends SQLiteOpenHelper {
 
     public List<EventRow> recentEvents() {
         List<EventRow> result = new ArrayList<>();
-        Cursor cursor = getReadableDatabase().query("events", null, null, null, null, null, "scheduled_at DESC", "60");
+        Cursor cursor = getReadableDatabase().query("events", null, "id<>?", new String[]{"pending-event"}, null, null, "scheduled_at DESC", "60");
         try { while (cursor.moveToNext()) result.add(eventRow(cursor)); } finally { cursor.close(); }
         return result;
     }

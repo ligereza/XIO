@@ -30,6 +30,7 @@ def main():
         db = root / "rd.db"
         evidence = root / "evidence"
         _schema(db)
+        bridge.prepare_schema(db)
 
         boot = bridge.bootstrap(db)
         assert boot["events"][0]["event_id"] == "EVT-001"
@@ -38,6 +39,7 @@ def main():
         second = bridge.ingest(_payload(), db, evidence)
         assert first["ok"] is True
         assert second["duplicate"] is True
+        assert "captureReceipts" in first
         assert bridge.load_samples(db, "EVT-001")["samples"]
         raw = b"visual-candidate-fixture"
         digest = hashlib.sha256(raw).hexdigest()

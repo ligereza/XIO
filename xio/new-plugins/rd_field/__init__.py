@@ -57,6 +57,12 @@ class RdFieldPlugin(PluginBase):
         self.register_route("/sync", self._sync, methods=["POST"])
         self.register_route("/manifest.webmanifest", self._manifest, methods=["GET"])
         self.register_route("/<path:filename>", self._static_file, methods=["GET"])
+        if self._db_path().is_file():
+            try:
+                self._bridge().prepare_schema(self._db_path())
+            except Exception as exc:
+                self.logger.error("RD schema preparation failed: %s", exc)
+                raise
         self.logger.info(
             "XIO-RD loaded (field_root=%s db=%s ready=%s)",
             self._field_root,

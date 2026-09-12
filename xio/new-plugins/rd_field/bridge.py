@@ -277,6 +277,27 @@ def ensure_visual_catalog_schema(conn: sqlite3.Connection) -> None:
             conn.execute("ALTER TABLE xio_visual_reference_views ADD COLUMN " + name + " TEXT")
 
 
+def prepare_schema(db_path: str | Path) -> None:
+    """Run additive migrations at explicit runtime startup, never in a GET."""
+    with _connection(db_path) as conn:
+        ensure_event_schema(conn)
+        ensure_capture_schema(conn)
+        conn.commit()
+
+
+def assert_read_schema(conn: sqlite3.Connection) -> None:
+    """Fail closed if the explicit startup migration was not executed."""
+    tables = {
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+    }
+    required = {"muestras", "xio_eventos", "xio_visual_references", "xio_visual_reference_views"}
+    missing = sorted(required - tables)
+    if missing:
+        raise RuntimeError("esquema RD no preparado; falta migración explícita: " + ", ".join(missing))
+
+
 def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     """Return text labels seen in RD history, not visual matches."""
     table = conn.execute(
@@ -300,7 +321,7 @@ def visual_catalog(
 ) -> dict[str, Any]:
     """Read approved catalogue references, optionally including review queue."""
     with _connection(db_path) as conn:
-        ensure_event_schema(conn)
+        assert_read_schema(conn)
         statuses = ("approved", "pending_review") if include_pending else ("approved",)
         placeholders = ",".join("?" for _ in statuses)
         rows = conn.execute(
@@ -563,7 +584,7 @@ def review_visual_reference(
 def bootstrap(db_path: str | Path) -> dict[str, Any]:
     """Return the controlled vocabulary and event/mesa context for XIO."""
     with _connection(db_path) as conn:
-        ensure_event_schema(conn)
+        assert_read_schema(conn)
         reagents = [dict(row) for row in conn.execute(
             "SELECT reactivo, familia, reaccion, hex FROM reactivos ORDER BY reactivo, familia"
         )]
@@ -641,7 +662,7 @@ def load_samples(
     event_ref = _required_text({"eventRef": event_ref}, "eventRef", 160)
     code_filter = _bounded_text(sample_code, 100)
     with _connection(db_path) as conn:
-        ensure_event_schema(conn)
+        assert_read_schema(conn)
         query = (
             "SELECT id, fecha, mesa_id, evento_ref, evento_origen, "
             "codigo_muestra, sustancia_declarada, tipo_muestra, color, "
@@ -1048,6 +1069,7 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             duplicate = False
 
         capture_ids = []
+        capture_receipts = []
         for capture in capture_rows:
             values = (
                 sample_id,
@@ -1095,6 +1117,13 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
                     values,
                 )
             capture_ids.append(capture["capture_key"])
+            capture_receipts.append({
+                "captureId": capture["capture_key"],
+                "status": "accepted",
+                "duplicate": existing_capture is not None,
+                "photoRef": capture["photo_ref"],
+                "sha256": capture["sha256"],
+            })
 
         result_ids = []
         tests = payload.get("tests") if isinstance(payload.get("tests"), list) else []
@@ -1138,6 +1167,7 @@ def ingest(payload: dict[str, Any], db_path: str | Path, evidence_root: str | Pa
             "photoRefs": photo_refs,
             "captureIds": capture_ids,
             "captureCount": len(capture_ids),
+            "captureReceipts": capture_receipts,
         }
 
 

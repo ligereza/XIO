@@ -110,7 +110,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override protected void onCreate(@Nullable Bundle state) {
         super.onCreate(state);
         database = new RdFieldDb(this);
-        database.ensureDemo();
+        database.ensureFieldDraft();
         photoStore = new PhotoStore(this);
         flujo = new FlujoGateway(this);
         memory = new VisualMemory();
@@ -1594,6 +1594,7 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private String eventContextText(SampleSession sample) {
+        if ("pending-event".equals(sample.eventId)) return "evento no seleccionado";
         String base = eventLabel.isEmpty() ? sample.eventId : eventProducer.isEmpty() ? eventLabel : eventProducer + " > " + eventLabel;
         return eventContextPending && !eventLabel.isEmpty() ? base + "  ·  ⏳" : base;
     }
@@ -1613,7 +1614,9 @@ public final class MainActivity extends AppCompatActivity {
         flujo.syncSample(sample, rdEndpoint(), "", result -> {
             if (result.isSuccess()) {
                 boolean duplicate = result.response.optBoolean("duplicate", false);
-                Toast.makeText(this, "XIO-RD ✓  " + sample.code + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "XIO-RD ✓  " + sample.code + " · "
+                        + result.response.optInt("captureCount", 0) + " captura(s)"
+                        + (duplicate ? " · actualizado" : " · recibido"), Toast.LENGTH_LONG).show();
             } else {
                 Toast.makeText(this, "XIO-RD · sin conexión", Toast.LENGTH_LONG).show();
             }
