@@ -5,6 +5,8 @@ import cl.reduciendodano.xiofield.core.VisualFeatures;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 
 /** Local nearest-neighbour memory. Reviewed examples become searchable without pretending to be a chemical classifier. */
@@ -18,6 +20,9 @@ public final class VisualMemory {
         public final String declaredSubstance;
         public final String reviewedField;
         public final VisualFeatures features;
+        public final String referenceId;
+        public final int catalogRevision;
+        public final boolean approved;
 
         public Entry(String captureId, String sampleCode, String reviewedLabel, VisualFeatures features) {
             this(captureId, sampleCode, "", 0L, reviewedLabel, features);
@@ -29,6 +34,13 @@ public final class VisualMemory {
 
         public Entry(String captureId, String sampleCode, String eventId, long capturedAt, String reviewedLabel,
                      String declaredSubstance, String reviewedField, VisualFeatures features) {
+            this(captureId, sampleCode, eventId, capturedAt, reviewedLabel, declaredSubstance,
+                    reviewedField, features, "", 0, false);
+        }
+
+        public Entry(String captureId, String sampleCode, String eventId, long capturedAt, String reviewedLabel,
+                     String declaredSubstance, String reviewedField, VisualFeatures features,
+                     String referenceId, int catalogRevision, boolean approved) {
             this.captureId = captureId;
             this.sampleCode = sampleCode;
             this.eventId = eventId;
@@ -37,6 +49,9 @@ public final class VisualMemory {
             this.declaredSubstance = declaredSubstance == null ? "" : declaredSubstance;
             this.reviewedField = reviewedField == null ? "" : reviewedField;
             this.features = features;
+            this.referenceId = referenceId == null ? "" : referenceId;
+            this.catalogRevision = catalogRevision;
+            this.approved = approved;
         }
     }
 
@@ -54,6 +69,21 @@ public final class VisualMemory {
     private final List<Entry> entries = new ArrayList<>();
 
     public void addReviewed(Entry entry) { entries.removeIf(item -> item.captureId.equals(entry.captureId)); entries.add(entry); }
+
+    public void addApproved(Entry entry) {
+        entries.removeIf(item -> !entry.referenceId.isEmpty()
+                && entry.referenceId.equals(item.referenceId)
+                && entry.captureId.equals(item.captureId));
+        entries.add(entry);
+    }
+
+    public void clearApproved() { entries.removeIf(item -> item.approved); }
+
+    public int approvedCount() {
+        int count = 0;
+        for (Entry entry : entries) if (entry.approved) count++;
+        return count;
+    }
 
     public List<Match> findSimilar(VisualFeatures query, int limit) {
         List<Match> matches = new ArrayList<>();
@@ -84,21 +114,45 @@ public final class VisualMemory {
     public List<Match> findMoldMatches(String substance, String eventId, long now, List<VisualFeatures> queryViews, int limit) {
         List<Match> matches = new ArrayList<>();
         if (!isEcstasy(substance) || queryViews == null || queryViews.isEmpty()) return matches;
+        Map<String, List<Entry>> references = new HashMap<>();
         for (Entry entry : entries) {
-            if (!isMoldEntry(entry) || (!entry.declaredSubstance.isEmpty() && !isEcstasy(entry.declaredSubstance))) continue;
-            float score = 0f;
+            if (!entry.approved || !isMoldEntry(entry)
+                    || (!entry.declaredSubstance.isEmpty() && !isEcstasy(entry.declaredSubstance))) continue;
+            if (entry.features == null || entry.features.reliefConfidence < .45f) continue;
+            String reference = entry.referenceId.isEmpty() ? entry.captureId : entry.referenceId;
+            references.computeIfAbsent(reference, ignored -> new ArrayList<>()).add(entry);
+        }
+        boolean multiView = queryViews.size() >= 2;
+        float threshold = multiView ? .82f : .90f;
+        int requiredSupport = multiView ? 2 : 1;
+        for (Map.Entry<String, List<Entry>> reference : references.entrySet()) {
+            float scoreTotal = 0f;
+            int support = 0;
             String explanation = "parecido visual";
             for (VisualFeatures query : queryViews) {
-                float candidate = MoldPatternMatcher.similarity(query, entry.features);
-                if (candidate > score) { score = candidate; explanation = MoldPatternMatcher.explanation(query, entry.features); }
+                if (query == null || query.reliefConfidence < .45f || query.silhouetteConfidence < .55f) continue;
+                float best = 0f;
+                Entry bestEntry = null;
+                for (Entry candidateEntry : reference.getValue()) {
+                    float candidate = MoldPatternMatcher.similarity(query, candidateEntry.features);
+                    if (candidate > best) { best = candidate; bestEntry = candidateEntry; }
+                }
+                if (best >= threshold) {
+                    support++;
+                    scoreTotal += best;
+                    if (bestEntry != null) explanation = MoldPatternMatcher.explanation(query, bestEntry.features);
+                }
             }
-            if (score < .68f) continue;
-            long ageDays = entry.capturedAt <= 0L ? 0L : Math.max(0L, (now - entry.capturedAt) / 86_400_000L);
+            if (support < requiredSupport) continue;
+            float score = scoreTotal / Math.max(1, support);
+            Entry representative = reference.getValue().get(0);
+            long ageDays = representative.capturedAt <= 0L ? 0L : Math.max(0L, (now - representative.capturedAt) / 86_400_000L);
             float recency = ageDays <= 365 ? 1f : Math.max(.88f, 1f - (Math.min(ageDays, 3650L) / 3650f) * .12f);
-            float sameEvent = !eventId.isEmpty() && eventId.equals(entry.eventId) ? 1.04f : 1f;
-            matches.add(new Match(entry, Math.min(1f, score * recency * sameEvent), explanation));
+            float sameEvent = !eventId.isEmpty() && eventId.equals(representative.eventId) ? 1.04f : 1f;
+            matches.add(new Match(representative, Math.min(1f, score * recency * sameEvent), explanation));
         }
         matches.sort(Comparator.comparingDouble((Match match) -> match.similarity).reversed());
+        if (matches.size() > 1 && matches.get(0).similarity - matches.get(1).similarity < .12f) return Collections.emptyList();
         return matches.subList(0, Math.min(limit, matches.size()));
     }
 

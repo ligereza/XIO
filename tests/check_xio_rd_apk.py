@@ -42,6 +42,10 @@ def main() -> None:
     assert 'HISTORIA HOST RD' in source
     assert 'addRemoteSampleRow' in source
     assert 'loadSamples(rdEndpoint()' in source
+    assert 'loadVisualCatalog' in source
+    assert 'memory.addApproved' in source
+    assert 'submitVisualCandidate' in source
+    assert 'pending_review' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "MainActivity.java").read_text(encoding="utf-8")
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 
 

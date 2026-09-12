@@ -49,6 +49,9 @@ class RdFieldPlugin(PluginBase):
         self.register_route("/info", self._info, methods=["GET"])
         self.register_route("/bootstrap", self._bootstrap, methods=["GET"])
         self.register_route("/samples", self._samples, methods=["GET"])
+        self.register_route("/catalog", self._catalog, methods=["GET"])
+        self.register_route("/catalog/candidates", self._catalog_candidate, methods=["POST"])
+        self.register_route("/catalog/<reference_id>/review", self._catalog_review, methods=["POST"])
         self.register_route("/events/sync", self._sync_event, methods=["POST"])
         self.register_route("/sync", self._sync, methods=["POST"])
         self.register_route("/manifest.webmanifest", self._manifest, methods=["GET"])
@@ -188,6 +191,54 @@ class RdFieldPlugin(PluginBase):
         except Exception as exc:
             self.logger.error("RD samples failed: %s", exc)
             return self._json_error("no se pudieron leer las muestras del evento", 503)
+
+    def _catalog(self):
+        if not self._db_path().is_file():
+            return self._json_error("base RD del host no disponible", 503)
+        try:
+            include_pending = str(request.args.get("includePending") or "").lower() == "true"
+            result = self._bridge().visual_catalog(self._db_path(), include_pending)
+            result.update({"ok": True, "domain": "rd", "canonical_host": "xio"})
+            return jsonify(result)
+        except Exception as exc:
+            self.logger.error("RD visual catalog failed: %s", exc)
+            return self._json_error("no se pudo leer el catálogo visual RD", 503)
+
+    def _catalog_candidate(self):
+        if not self._db_path().is_file():
+            return self._json_error("base RD del host no disponible; no se acepta escritura", 503)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return self._json_error("payload JSON invalido", 400)
+        try:
+            result = self._bridge().submit_visual_candidate(
+                payload, self._db_path(), self._evidence_root()
+            )
+            result.update({"domain": "rd", "canonical_host": "xio"})
+            return jsonify(result)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            return self._json_error(str(exc), 422)
+        except Exception as exc:
+            self.logger.error("RD visual candidate failed: %s", exc)
+            return self._json_error("no se pudo guardar el candidato visual", 500)
+
+    def _catalog_review(self, reference_id: str):
+        if not self._db_path().is_file():
+            return self._json_error("base RD del host no disponible; no se acepta escritura", 503)
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return self._json_error("payload JSON invalido", 400)
+        try:
+            result = self._bridge().review_visual_reference(
+                reference_id, payload, self._db_path()
+            )
+            result.update({"domain": "rd", "canonical_host": "xio"})
+            return jsonify(result)
+        except (ValueError, TypeError, json.JSONDecodeError) as exc:
+            return self._json_error(str(exc), 422)
+        except Exception as exc:
+            self.logger.error("RD visual review failed: %s", exc)
+            return self._json_error("no se pudo revisar la referencia visual", 500)
 
     def _sync_event(self):
         """Persist an XIO-RD event draft before accepting its samples.

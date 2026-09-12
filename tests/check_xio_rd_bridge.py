@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import tempfile
 from pathlib import Path
 
@@ -37,6 +39,34 @@ def main():
         assert first["ok"] is True
         assert second["duplicate"] is True
         assert bridge.load_samples(db, "EVT-001")["samples"]
+        raw = b"visual-candidate-fixture"
+        digest = hashlib.sha256(raw).hexdigest()
+        candidate = bridge.submit_visual_candidate({
+            "referenceId": "ref-smoke",
+            "canonicalLabel": "diseño smoke",
+            "sourceEventRef": "EVT-001",
+            "sourceSampleCode": "XIO-SMOKE-001",
+            "createdBy": "smoke-operator",
+            "featureModelVersion": "visual-contour-v0.3",
+            "views": [{
+                "captureId": "capture-smoke",
+                "faceOrView": "front",
+                "photoSha256": digest,
+                "photoBase64": base64.b64encode(raw).decode("ascii"),
+                "silhouetteConfidence": 0.9,
+                "reliefConfidence": 0.8,
+                "features": {"reliefConfidence": 0.8, "silhouetteConfidence": 0.9},
+            }],
+        }, db, evidence)
+        assert candidate["status"] == "pending_review"
+        assert bridge.visual_catalog(db)["references"] == []
+        review = bridge.review_visual_reference(
+            "ref-smoke",
+            {"decision": "approve", "reviewerId": "smoke-reviewer", "reason": "evidencia revisada"},
+            db,
+        )
+        assert review["status"] == "approved"
+        assert bridge.visual_catalog(db)["references"][0]["referenceId"] == "ref-smoke"
     print("OK: XIO-RD bridge bootstrap/ingest/read/idempotence")
 
 

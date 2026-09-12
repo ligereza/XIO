@@ -22,10 +22,12 @@
     <p class="muted">Sólo eventos RD, muestras y evidencia de campo. Esta vista no carga ISKVW ni registros FOH.</p>
     <label>Evento RD <select id="events"><option>Cargando…</option></select></label>
     <button id="refresh">Actualizar</button>
+    <label>Revisor <input id="reviewer" value="raider-operator" maxlength="120"></label>
     <p id="state" class="muted"></p>
   </header>
   <section id="summary" class="card"><h2>Resumen</h2><div class="muted">Selecciona un evento preparado en el host RD.</div></section>
   <section class="card"><h2>Muestras</h2><div id="samples" class="muted">Sin evento seleccionado.</div></section>
+  <section class="card"><h2>Catálogo visual de moldes</h2><p class="muted">Los nombres históricos no son referencias visuales. Sólo una aprobación humana habilita una referencia para el APK.</p><div id="visualCatalog" class="muted">Cargando candidatos…</div></section>
   <script>
     const q = new URLSearchParams(location.search), select = document.getElementById('events');
     const state = document.getElementById('state');
@@ -43,6 +45,26 @@
         select.innerHTML = '<option value="">Seleccionar…</option>' + catalog.map(e => `<option value="${esc(eventRef(e))}">${esc(eventLabel(e))}</option>`).join('');
         const wanted = q.get('eventRef') || eventRef(catalog[0] || {}); select.value = wanted;
         state.textContent = `${catalog.length} eventos RD disponibles · fuente host`; if (wanted) await loadSamples(wanted);
+        await loadVisualCatalog();
+      } catch (error) { state.innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
+    }
+    async function loadVisualCatalog() {
+      try {
+        const data = await get('/api/plugins/rd_field/catalog?includePending=true');
+        const refs = data.references || [];
+        document.getElementById('visualCatalog').innerHTML = refs.length ? refs.map(ref => {
+          const pending = ref.status === 'pending_review';
+          const views = ref.views || [];
+          const quality = views.map(view => `relieve ${Number(view.reliefConfidence || 0).toFixed(2)}`).join(' · ');
+          return `<article class="sample"><b>${esc(ref.canonicalLabel)}</b> · <span class="key">${esc(ref.referenceId)}</span><br><span class="muted">estado ${esc(ref.status)} · ${views.length} vista(s) · ${esc(quality || 'sin señal de relieve')} · muestra ${esc(ref.sourceSampleCode)}</span>${pending ? `<br><button data-review="approve" data-reference="${esc(ref.referenceId)}">Aprobar referencia</button> <button data-review="reject" data-reference="${esc(ref.referenceId)}">Rechazar</button>` : ''}</article>`;
+        }).join('') : '<span class="muted">No hay referencias ni candidatos.</span>';
+      } catch (error) { document.getElementById('visualCatalog').innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
+    }
+    async function reviewReference(referenceId, decision) {
+      const reason = decision === 'approve' ? 'Revisión humana de evidencia visual en RAIDER' : 'Referencia visual rechazada en RAIDER';
+      try {
+        await get(`/api/plugins/rd_field/catalog/${encodeURIComponent(referenceId)}/review`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ decision, reviewerId: document.getElementById('reviewer').value.trim() || 'raider-operator', reason }) });
+        await loadVisualCatalog();
       } catch (error) { state.innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
     }
     async function loadSamples(ref) {
@@ -53,7 +75,10 @@
         document.getElementById('samples').innerHTML = (data.samples || []).map(sample => `<article class="sample"><b>${esc(sample.sampleCode)}</b> · ${esc(sample.substanceDeclared)} · ${esc(sample.sampleType)}<br><span class="muted">${esc(sample.color)} · ${esc(sample.texture)} · capturas ${(sample.captures || []).length} · tests ${(sample.tests || []).length}</span><br><span class="muted">${esc(sample.notes)}</span></article>`).join('') || '<span class="muted">Sin muestras.</span>';
       } catch (error) { document.getElementById('samples').innerHTML = `<span class="bad">${esc(error.message)}</span>`; }
     }
-    select.addEventListener('change', () => loadSamples(select.value)); document.getElementById('refresh').addEventListener('click', loadCatalog); loadCatalog();
+    select.addEventListener('change', () => loadSamples(select.value));
+    document.getElementById('refresh').addEventListener('click', loadCatalog);
+    document.getElementById('visualCatalog').addEventListener('click', event => { const button = event.target.closest('[data-review]'); if (button) reviewReference(button.dataset.reference, button.dataset.review); });
+    loadCatalog();
   </script>
 </body>
 </html>

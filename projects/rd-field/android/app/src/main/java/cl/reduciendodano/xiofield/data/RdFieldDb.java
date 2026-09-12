@@ -223,11 +223,16 @@ public final class RdFieldDb extends SQLiteOpenHelper {
     }
 
     public void saveCorrectionAndTrainingExample(String sampleId, SampleSession.Correction correction, String label) {
+        saveCorrectionAndTrainingExample(sampleId, correction, label, "reviewed");
+    }
+
+    public void saveCorrectionAndTrainingExample(String sampleId, SampleSession.Correction correction,
+                                                  String label, String reviewStatus) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues correctionValues = new ContentValues();
         correctionValues.put("id", correction.id); correctionValues.put("sample_id", sampleId); correctionValues.put("capture_id", correction.captureId); correctionValues.put("field", correction.field); correctionValues.put("proposed_value", correction.proposedValue); correctionValues.put("corrected_value", correction.correctedValue); correctionValues.put("model_version", correction.modelVersion); correctionValues.put("reviewed_at", correction.reviewedAt); db.insertOrThrow("corrections", null, correctionValues);
         ContentValues example = new ContentValues();
-        example.put("id", "training-" + correction.captureId); example.put("sample_id", sampleId); example.put("capture_id", correction.captureId); example.put("label", label); example.put("review_status", "reviewed"); example.put("model_version", correction.modelVersion); example.put("split", "local-review"); db.insertWithOnConflict("training_examples", null, example, SQLiteDatabase.CONFLICT_REPLACE);
+        example.put("id", "training-" + correction.captureId + "-" + correction.field); example.put("sample_id", sampleId); example.put("capture_id", correction.captureId); example.put("label", label); example.put("review_status", reviewStatus == null || reviewStatus.trim().isEmpty() ? "pending_review" : reviewStatus); example.put("model_version", correction.modelVersion); example.put("split", "local-review"); db.insertWithOnConflict("training_examples", null, example, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     public List<VisualMemory.Entry> reviewedMemory() {

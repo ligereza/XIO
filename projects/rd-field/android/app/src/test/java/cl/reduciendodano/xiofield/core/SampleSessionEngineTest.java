@@ -86,18 +86,25 @@ public final class SampleSessionEngineTest {
         VisualFeatures query = new VisualFeatures("rosado", "compacta", 1f, .4f, .7f, .3f, .2f, 200, 140, 140, 12L, "marca", .7f, .8f, relief, .9f, .8f, .95f, .9f, 48, contour);
         VisualFeatures sameDesign = new VisualFeatures("beige", "compacta", 1.02f, .4f, .7f, .3f, .2f, 190, 135, 130, 12L, "marca", .7f, .8f, relief, .9f, .8f, .95f, .9f, 48, ".8,.5,.8,1,.8,.5,.8,1");
         VisualMemory memory = new VisualMemory();
-        memory.addReviewed(new VisualMemory.Entry("mold-1", "XIO-EXT-001", "event-1", 1L, "molde: corona", "ÉXTASIS", "mold_design", sameDesign));
-        memory.addReviewed(new VisualMemory.Entry("other-1", "XIO-MDMA-002", "event-1", 2L, "marca: otra", "COCAÍNA", "mold_design", sameDesign));
+        memory.addApproved(new VisualMemory.Entry("mold-1", "XIO-EXT-001", "event-1", 1L, "molde: corona", "ÉXTASIS", "mold_design", sameDesign, "ref-corona", 1, true));
+        memory.addApproved(new VisualMemory.Entry("other-1", "XIO-MDMA-002", "event-1", 2L, "marca: otra", "COCAÍNA", "mold_design", sameDesign, "ref-other", 1, true));
         java.util.List<VisualMemory.Match> matches = memory.findMoldMatches("ÉXTASIS", "event-1", 3L, query, 5);
         assertEquals(1, matches.size());
         assertEquals("molde: corona", matches.get(0).entry.reviewedLabel);
         assertTrue(matches.get(0).similarity > .75f);
         assertTrue(MoldPatternMatcher.explanation(query, sameDesign).contains("contorno") || MoldPatternMatcher.explanation(query, sameDesign).contains("relieve"));
         assertTrue(MoldPatternMatcher.fingerprint(query).startsWith("MOLD-"));
-        java.util.List<VisualFeatures> frontAndBack = java.util.List.of(new VisualFeatures("azul", "alargada", 2f, .3f, .4f, .7f, .8f, 30, 70, 210, 1L), query);
+        java.util.List<VisualFeatures> frontAndBack = java.util.List.of(sameDesign, query);
         java.util.List<VisualMemory.Match> multiView = memory.findMoldMatches("ÉXTASIS", "event-1", 3L, frontAndBack, 5);
         assertEquals(1, multiView.size());
         assertTrue(multiView.get(0).similarity > .75f);
         assertTrue(!MoldPatternMatcher.fingerprint(frontAndBack).equals(MoldPatternMatcher.fingerprint(query)));
+    }
+
+    @Test public void pendingMouldCandidateNeverEntersAutomaticMatching() {
+        VisualFeatures feature = new VisualFeatures("rosado", "compacta", 1f, .4f, .7f, .3f, .2f, 200, 140, 140, 12L, "marca", .7f, .8f, "0,1,0,1", .9f, .8f, .95f, .9f, 48, "1,.8,1,.8");
+        VisualMemory memory = new VisualMemory();
+        memory.addReviewed(new VisualMemory.Entry("pending", "XIO-PENDING", "event-1", 1L, "molde: sin aprobar", "ÉXTASIS", "mold_design_candidate", feature));
+        assertTrue(memory.findMoldMatches("ÉXTASIS", "event-1", 2L, feature, 3).isEmpty());
     }
 }

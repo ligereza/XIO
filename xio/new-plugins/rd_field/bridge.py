@@ -185,6 +185,66 @@ CREATE INDEX IF NOT EXISTS idx_muestra_capturas_muestra
     ON muestra_capturas(muestra_id);
 """
 
+# A visual reference is not a sample label.  It is an auditable catalogue
+# object with explicit review state; only approved rows may feed an APK
+# matcher.  The feature JSON is a portable snapshot of the extractor output,
+# while the original photos remain content-addressed in the evidence root.
+XIO_VISUAL_CATALOG_SCHEMA = """
+CREATE TABLE IF NOT EXISTS xio_visual_references (
+    reference_id TEXT PRIMARY KEY,
+    canonical_label TEXT NOT NULL,
+    domain TEXT NOT NULL DEFAULT 'tablet_mould',
+    status TEXT NOT NULL CHECK(status IN ('pending_review','approved','rejected','retired')),
+    source_event_ref TEXT NOT NULL,
+    source_sample_code TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    approved_by TEXT,
+    approved_at TEXT,
+    catalog_revision INTEGER NOT NULL DEFAULT 0,
+    feature_model_version TEXT NOT NULL,
+    evidence_set_hash TEXT NOT NULL,
+    identity_claim INTEGER NOT NULL DEFAULT 0 CHECK(identity_claim=0)
+);
+
+CREATE TABLE IF NOT EXISTS xio_visual_reference_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_id TEXT NOT NULL REFERENCES xio_visual_references(reference_id),
+    capture_key TEXT NOT NULL,
+    face_or_view TEXT NOT NULL DEFAULT 'unknown',
+    photo_ref TEXT,
+    photo_sha256 TEXT,
+    geometry_signature TEXT,
+    relief_signature TEXT,
+    silhouette_confidence REAL,
+    relief_confidence REAL,
+    circularity REAL,
+    solidity REAL,
+    symmetry REAL,
+    contour_point_count INTEGER,
+    features_json TEXT NOT NULL,
+    feature_model_version TEXT NOT NULL,
+    UNIQUE(reference_id, capture_key)
+);
+
+CREATE TABLE IF NOT EXISTS xio_visual_reference_reviews (
+    review_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reference_id TEXT NOT NULL REFERENCES xio_visual_references(reference_id),
+    decision TEXT NOT NULL CHECK(decision IN ('approve','reject','retire','request_more_evidence')),
+    reviewer_id TEXT NOT NULL,
+    reviewed_at TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    previous_status TEXT NOT NULL,
+    new_status TEXT NOT NULL,
+    evidence_set_hash TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_xio_visual_references_status
+    ON xio_visual_references(status, catalog_revision);
+CREATE INDEX IF NOT EXISTS idx_xio_visual_reference_views_reference
+    ON xio_visual_reference_views(reference_id);
+"""
+
 
 def ensure_event_schema(conn: sqlite3.Connection) -> None:
     """Create XIO context and canonical signal tables safely."""
@@ -196,11 +256,17 @@ def ensure_event_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE muestras ADD COLUMN molde_huella TEXT")
     conn.executescript(XIO_EVENT_SCHEMA)
     conn.executescript(XIO_SIGNAL_SCHEMA)
+    ensure_visual_catalog_schema(conn)
 
 
 def ensure_capture_schema(conn: sqlite3.Connection) -> None:
     """Create the additive per-capture evidence table on first sync."""
     conn.executescript(XIO_CAPTURE_SCHEMA)
+
+
+def ensure_visual_catalog_schema(conn: sqlite3.Connection) -> None:
+    """Create the reviewed visual-catalog projection additively."""
+    conn.executescript(XIO_VISUAL_CATALOG_SCHEMA)
 
 
 def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
@@ -219,6 +285,252 @@ def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
         "GROUP BY LOWER(TRIM(format_raw)) ORDER BY observations DESC, label LIMIT 80"
     ).fetchall()
     return [{"label": row["label"], "observations": int(row["observations"]), "visualReference": False} for row in rows]
+
+
+def visual_catalog(
+    db_path: str | Path, include_pending: bool = False
+) -> dict[str, Any]:
+    """Read approved catalogue references, optionally including review queue."""
+    with _connection(db_path) as conn:
+        ensure_event_schema(conn)
+        statuses = ("approved", "pending_review") if include_pending else ("approved",)
+        placeholders = ",".join("?" for _ in statuses)
+        rows = conn.execute(
+            "SELECT * FROM xio_visual_references WHERE status IN (" + placeholders + ") "
+            "ORDER BY canonical_label, reference_id",
+            statuses,
+        ).fetchall()
+        revision_row = conn.execute(
+            "SELECT COALESCE(MAX(catalog_revision), 0) AS revision "
+            "FROM xio_visual_references WHERE status='approved'"
+        ).fetchone()
+        references: list[dict[str, Any]] = []
+        for row in rows:
+            views: list[dict[str, Any]] = []
+            for view in conn.execute(
+                "SELECT capture_key, face_or_view, photo_ref, photo_sha256, "
+                "geometry_signature, relief_signature, silhouette_confidence, "
+                "relief_confidence, circularity, solidity, symmetry, "
+                "contour_point_count, features_json, feature_model_version "
+                "FROM xio_visual_reference_views WHERE reference_id=? "
+                "ORDER BY id",
+                (row["reference_id"],),
+            ):
+                try:
+                    features = json.loads(view["features_json"] or "{}")
+                except (TypeError, ValueError):
+                    features = {}
+                views.append({
+                    "captureId": view["capture_key"],
+                    "faceOrView": view["face_or_view"],
+                    "photoRef": view["photo_ref"],
+                    "photoSha256": view["photo_sha256"],
+                    "geometrySignature": view["geometry_signature"],
+                    "reliefSignature": view["relief_signature"],
+                    "silhouetteConfidence": view["silhouette_confidence"],
+                    "reliefConfidence": view["relief_confidence"],
+                    "circularity": view["circularity"],
+                    "solidity": view["solidity"],
+                    "symmetry": view["symmetry"],
+                    "contourPointCount": view["contour_point_count"],
+                    "features": features,
+                    "featureModelVersion": view["feature_model_version"],
+                })
+            references.append({
+                "referenceId": row["reference_id"],
+                "canonicalLabel": row["canonical_label"],
+                "domain": row["domain"],
+                "status": row["status"],
+                "sourceEventRef": row["source_event_ref"],
+                "sourceSampleCode": row["source_sample_code"],
+                "createdBy": row["created_by"],
+                "createdAt": row["created_at"],
+                "approvedBy": row["approved_by"],
+                "approvedAt": row["approved_at"],
+                "catalogRevision": row["catalog_revision"],
+                "featureModelVersion": row["feature_model_version"],
+                "evidenceSetHash": row["evidence_set_hash"],
+                "identityClaim": bool(row["identity_claim"]),
+                "views": views,
+            })
+    return {
+        "schema": "xio-rd-visual-catalog-v1",
+        "catalogRevision": int(revision_row["revision"] if revision_row else 0),
+        "references": references,
+    }
+
+
+def submit_visual_candidate(
+    payload: dict[str, Any], db_path: str | Path, evidence_root: str | Path
+) -> dict[str, Any]:
+    """Persist one idempotent, non-searchable visual reference candidate."""
+    if not isinstance(payload, dict):
+        raise TypeError("payload debe ser un objeto JSON")
+    reference_id = _technical_required(payload, "referenceId", 160, TECHNICAL_ID_RE)
+    label = _required_text(payload, "canonicalLabel", 240)
+    event_ref = _required_text(payload, "sourceEventRef", 160)
+    sample_code = _required_text(payload, "sourceSampleCode", 100)
+    created_by = _required_text(payload, "createdBy", 120)
+    feature_model = _required_text(payload, "featureModelVersion", 80)
+    raw_views = payload.get("views")
+    if not isinstance(raw_views, list) or not raw_views:
+        raise ValueError("views debe contener al menos una captura")
+
+    view_rows: list[dict[str, Any]] = []
+    evidence_material: list[dict[str, Any]] = []
+    for raw in raw_views:
+        if not isinstance(raw, dict):
+            continue
+        capture_key = _required_text(raw, "captureId", 160)
+        features = raw.get("features")
+        if not isinstance(features, dict):
+            feature_keys = {
+                "colorLabel", "silhouetteLabel", "aspectRatio", "foregroundRatio",
+                "brightness", "saturation", "textureScore", "meanRed", "meanGreen",
+                "meanBlue", "perceptualHash", "markingCandidate", "markingScore",
+                "reliefConfidence", "reliefSignature", "silhouetteConfidence",
+                "circularity", "solidity", "symmetry", "contourPointCount",
+                "geometrySignature",
+            }
+            features = {key: raw[key] for key in feature_keys if key in raw}
+        if not isinstance(features, dict) or not features:
+            raise ValueError("cada vista debe incluir features visuales")
+        sha = _bounded_text(raw.get("photoSha256"), 128).lower()
+        if sha and not SHA256_RE.fullmatch(sha):
+            raise ValueError("photoSha256 invalido")
+        photo_payload = dict(raw)
+        photo_payload["sha256"] = sha
+        photo_ref = _store_photo(photo_payload, evidence_root)
+        if not photo_ref or not sha:
+            raise ValueError("cada referencia visual debe conservar foto y SHA-256")
+        view_rows.append({
+            "capture_key": capture_key,
+            "face_or_view": _bounded_text(raw.get("faceOrView") or "unknown", 40),
+            "photo_ref": _bounded_text(photo_ref, 500),
+            "photo_sha256": sha,
+            "geometry_signature": _bounded_text(raw.get("geometrySignature"), 240),
+            "relief_signature": _bounded_text(raw.get("reliefSignature"), 240),
+            "silhouette_confidence": _optional_float(raw.get("silhouetteConfidence")),
+            "relief_confidence": _optional_float(raw.get("reliefConfidence")),
+            "circularity": _optional_float(raw.get("circularity")),
+            "solidity": _optional_float(raw.get("solidity")),
+            "symmetry": _optional_float(raw.get("symmetry")),
+            "contour_point_count": _optional_int(raw.get("contourPointCount")),
+            "features_json": json.dumps(features, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+            "feature_model_version": feature_model,
+        })
+        evidence_material.append({"captureId": capture_key, "sha256": sha, "features": features})
+    if not view_rows:
+        raise ValueError("views no contiene capturas validas")
+    evidence_hash = hashlib.sha256(
+        json.dumps(evidence_material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    with _connection(db_path) as conn:
+        ensure_event_schema(conn)
+        existing = conn.execute(
+            "SELECT status, canonical_label, evidence_set_hash FROM xio_visual_references WHERE reference_id=?",
+            (reference_id,),
+        ).fetchone()
+        if existing and existing["status"] in ("approved", "retired"):
+            if existing["evidence_set_hash"] != evidence_hash or existing["canonical_label"] != label:
+                raise ValueError("referenceId ya existe con otra evidencia")
+            return {"ok": True, "referenceId": reference_id, "status": existing["status"], "duplicate": True}
+        if existing:
+            conn.execute(
+                "UPDATE xio_visual_references SET canonical_label=?, source_event_ref=?, "
+                "source_sample_code=?, created_by=?, feature_model_version=?, "
+                "evidence_set_hash=? WHERE reference_id=?",
+                (label, event_ref, sample_code, created_by, feature_model, evidence_hash, reference_id),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO xio_visual_references(reference_id,canonical_label,domain,status,"
+                "source_event_ref,source_sample_code,created_by,created_at,feature_model_version,"
+                "evidence_set_hash,identity_claim) VALUES (?,?,?,?,?,?,?,?,?,?,0)",
+                (reference_id, label, "tablet_mould", "pending_review", event_ref, sample_code,
+                 created_by, now, feature_model, evidence_hash),
+            )
+        conn.execute("DELETE FROM xio_visual_reference_views WHERE reference_id=?", (reference_id,))
+        for view in view_rows:
+            conn.execute(
+                "INSERT INTO xio_visual_reference_views(reference_id,capture_key,face_or_view,"
+                "photo_ref,photo_sha256,geometry_signature,relief_signature,silhouette_confidence,"
+                "relief_confidence,circularity,solidity,symmetry,contour_point_count,features_json,"
+                "feature_model_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (reference_id, view["capture_key"], view["face_or_view"], view["photo_ref"],
+                 view["photo_sha256"], view["geometry_signature"], view["relief_signature"],
+                 view["silhouette_confidence"], view["relief_confidence"], view["circularity"],
+                 view["solidity"], view["symmetry"], view["contour_point_count"],
+                 view["features_json"], view["feature_model_version"]),
+            )
+        conn.commit()
+    return {"ok": True, "referenceId": reference_id, "status": "pending_review", "duplicate": bool(existing)}
+
+
+def review_visual_reference(
+    reference_id: str, payload: dict[str, Any], db_path: str | Path
+) -> dict[str, Any]:
+    """Apply an append-only human review and update catalogue revision."""
+    if not isinstance(payload, dict):
+        raise TypeError("payload debe ser un objeto JSON")
+    decision = _required_text(payload, "decision", 40).lower()
+    if decision not in {"approve", "reject", "retire", "request_more_evidence"}:
+        raise ValueError("decision de catálogo invalida")
+    reviewer = _technical_required(payload, "reviewerId", 120, TECHNICAL_ID_RE)
+    reason = _required_text(payload, "reason", 1000)
+    reference_id = _technical_required({"referenceId": reference_id}, "referenceId", 160, TECHNICAL_ID_RE)
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    with _connection(db_path) as conn:
+        ensure_event_schema(conn)
+        row = conn.execute(
+            "SELECT status, evidence_set_hash FROM xio_visual_references WHERE reference_id=?",
+            (reference_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("referencia visual no existe")
+        view_count = conn.execute(
+            "SELECT COUNT(*) AS count FROM xio_visual_reference_views WHERE reference_id=?",
+            (reference_id,),
+        ).fetchone()["count"]
+        if decision == "approve":
+            if int(view_count) < 1:
+                raise ValueError("no se puede aprobar una referencia sin vistas")
+            quality = conn.execute(
+                "SELECT COUNT(*) AS count FROM xio_visual_reference_views "
+                "WHERE reference_id=? AND COALESCE(silhouette_confidence,0) >= 0.55 "
+                "AND COALESCE(relief_confidence,0) >= 0.45",
+                (reference_id,),
+            ).fetchone()["count"]
+            if int(quality) < 1:
+                raise ValueError(
+                    "evidencia insuficiente para aprobar: requiere silueta >= 0.55 "
+                    "y relieve >= 0.45; solicite otra vista"
+                )
+        status = {
+            "approve": "approved",
+            "reject": "rejected",
+            "retire": "retired",
+            "request_more_evidence": "pending_review",
+        }[decision]
+        previous = row["status"]
+        revision = conn.execute(
+            "SELECT COALESCE(MAX(catalog_revision),0) AS revision FROM xio_visual_references"
+        ).fetchone()["revision"] + 1
+        conn.execute(
+            "UPDATE xio_visual_references SET status=?, approved_by=?, approved_at=?, "
+            "catalog_revision=? WHERE reference_id=?",
+            (status, reviewer if decision == "approve" else None, now if decision == "approve" else None,
+             revision, reference_id),
+        )
+        conn.execute(
+            "INSERT INTO xio_visual_reference_reviews(reference_id,decision,reviewer_id,reviewed_at,"
+            "reason,previous_status,new_status,evidence_set_hash) VALUES (?,?,?,?,?,?,?,?)",
+            (reference_id, decision, reviewer, now, reason, previous, status, row["evidence_set_hash"]),
+        )
+        conn.commit()
+    return {"ok": True, "referenceId": reference_id, "status": status, "catalogRevision": revision}
 
 
 def bootstrap(db_path: str | Path) -> dict[str, Any]:

@@ -98,6 +98,66 @@ public final class FlujoGateway {
         });
     }
 
+    public void loadVisualCatalog(String endpoint, Callback callback) {
+        executor.execute(() -> {
+            try {
+                JSONObject response = requestWithUsbFallback("GET", endpoint + "/catalog", null, "");
+                deliver(callback, Result.success(response));
+            } catch (Exception error) {
+                deliver(callback, Result.failure(error));
+            }
+        });
+    }
+
+    public void submitVisualCandidate(SampleSession sample, String label, String referenceId,
+                                      String createdBy, String endpoint, Callback callback) {
+        executor.execute(() -> {
+            try {
+                JSONObject payload = new JSONObject();
+                payload.put("referenceId", referenceId);
+                payload.put("canonicalLabel", label);
+                payload.put("sourceEventRef", safe(sample.eventId, ""));
+                payload.put("sourceSampleCode", safe(sample.code, ""));
+                payload.put("createdBy", safe(createdBy, "operator"));
+                payload.put("featureModelVersion", "visual-contour-v0.3");
+                JSONArray views = new JSONArray();
+                int encodedBytes = 0;
+                for (SampleSession.Capture capture : sample.captures) {
+                    if (capture == null || capture.features == null) continue;
+                    JSONObject view = new JSONObject();
+                    view.put("captureId", capture.id);
+                    view.put("faceOrView", "unknown");
+                    view.put("photoSha256", safe(capture.sha256, ""));
+                    view.put("geometrySignature", safe(capture.features.geometrySignature, ""));
+                    view.put("reliefSignature", safe(capture.features.reliefSignature, ""));
+                    view.put("silhouetteConfidence", capture.features.silhouetteConfidence);
+                    view.put("reliefConfidence", capture.features.reliefConfidence);
+                    view.put("circularity", capture.features.circularity);
+                    view.put("solidity", capture.features.solidity);
+                    view.put("symmetry", capture.features.symmetry);
+                    view.put("contourPointCount", capture.features.contourPointCount);
+                    putVisualFeatures(view, capture.features);
+                    File file = new File(capture.path);
+                    long fileLength = file.isFile() ? file.length() : 0L;
+                    if (fileLength > 0 && fileLength <= MAX_PHOTO_BYTES
+                            && encodedBytes + fileLength <= MAX_PAYLOAD_BYTES) {
+                        byte[] bytes = readBytes(file, MAX_PHOTO_BYTES);
+                        if (encodedBytes + bytes.length <= MAX_PAYLOAD_BYTES) {
+                            view.put("photoBase64", Base64.encodeToString(bytes, Base64.NO_WRAP));
+                            encodedBytes += bytes.length;
+                        }
+                    }
+                    views.put(view);
+                }
+                payload.put("views", views);
+                JSONObject response = requestWithUsbFallback("POST", endpoint + "/catalog/candidates", payload, "");
+                deliver(callback, Result.success(response));
+            } catch (Exception error) {
+                deliver(callback, Result.failure(error));
+            }
+        });
+    }
+
     public void shutdown() {
         executor.shutdownNow();
     }
@@ -117,8 +177,10 @@ public final class FlujoGateway {
         payload.put("color", sample.observedColor == null || sample.observedColor.isEmpty() ? (features == null ? "" : features.colorLabel) : sample.observedColor);
         payload.put("texture", textureText(features));
         payload.put("logoOrMark", reviewedMark(sample, features));
-        payload.put("moldDesign", reviewedMoldDesign(sample));
-        payload.put("moldFingerprint", MoldPatternMatcher.fingerprint(designViews(sample)));
+        String approvedMoldDesign = reviewedMoldDesign(sample);
+        payload.put("moldDesign", approvedMoldDesign);
+        payload.put("moldFingerprint", approvedMoldDesign.isEmpty() ? "" : MoldPatternMatcher.fingerprint(designViews(sample)));
+        payload.put("observationFingerprint", MoldPatternMatcher.fingerprint(designViews(sample)));
         payload.put("mesa", new JSONObject().put("label", "XIO / mesa móvil").put("number", 1));
         payload.put("notes", notes(sample, features));
 
@@ -142,6 +204,7 @@ public final class FlujoGateway {
             item.put("solidity", capture.features.solidity);
             item.put("symmetry", capture.features.symmetry);
             item.put("contourPointCount", capture.features.contourPointCount);
+            putVisualFeatures(item, capture.features);
             File file = new File(capture.path);
             long fileLength = file.isFile() ? file.length() : 0L;
             if (fileLength > 0 && fileLength <= MAX_PHOTO_BYTES && encodedBytes + fileLength <= MAX_PAYLOAD_BYTES) {
@@ -168,6 +231,22 @@ public final class FlujoGateway {
         }
         payload.put("tests", tests);
         return payload;
+    }
+
+    private static void putVisualFeatures(JSONObject item, VisualFeatures features) throws JSONException {
+        item.put("colorLabel", safe(features.colorLabel, ""));
+        item.put("silhouetteLabel", safe(features.silhouetteLabel, ""));
+        item.put("aspectRatio", features.aspectRatio);
+        item.put("foregroundRatio", features.foregroundRatio);
+        item.put("brightness", features.brightness);
+        item.put("saturation", features.saturation);
+        item.put("textureScore", features.textureScore);
+        item.put("meanRed", features.meanRed);
+        item.put("meanGreen", features.meanGreen);
+        item.put("meanBlue", features.meanBlue);
+        item.put("perceptualHash", features.perceptualHash);
+        item.put("markingCandidate", safe(features.markingCandidate, ""));
+        item.put("markingScore", features.markingScore);
     }
 
     private JSONObject request(String method, String target, JSONObject body, String token) throws IOException, JSONException {
@@ -250,7 +329,7 @@ public final class FlujoGateway {
     private static String reviewedMoldDesign(SampleSession sample) {
         for (int i = sample.corrections.size() - 1; i >= 0; i--) {
             SampleSession.Correction correction = sample.corrections.get(i);
-            if (!"mold_design".equals(correction.field)) continue;
+            if (!"mold_design_approved".equals(correction.field)) continue;
             String value = correction.correctedValue == null ? "" : correction.correctedValue.trim();
             if (value.toLowerCase(Locale.ROOT).startsWith("molde:")) return value.substring("molde:".length()).trim();
             return value;
@@ -265,7 +344,7 @@ public final class FlujoGateway {
         notes.append(visual).append("; phase=").append(sample.phase.name());
         String mold = reviewedMoldDesign(sample);
         if (!mold.isEmpty()) notes.append("; xio_mold_design=").append(mold);
-        if (features != null) notes.append("; xio_mold_fingerprint=").append(MoldPatternMatcher.fingerprint(designViews(sample)));
+        if (features != null) notes.append("; xio_observation_fingerprint=").append(MoldPatternMatcher.fingerprint(designViews(sample)));
         if (features != null) {
             notes.append(String.format(Locale.US, "; geometry_confidence=%.3f; circularity=%.3f; solidity=%.3f; symmetry=%.3f; contour_points=%d; geometry_signature=%s; relief_confidence=%.3f; relief_signature=%s", features.silhouetteConfidence, features.circularity, features.solidity, features.symmetry, features.contourPointCount, features.geometrySignature, features.reliefConfidence, features.reliefSignature));
         }

@@ -100,6 +100,7 @@ public final class MainActivity extends AppCompatActivity {
     private String remoteSamplesEventRef = "";
     private boolean remoteSamplesLoading;
     private boolean remoteSamplesFailed;
+    private int loadedCatalogRevision;
     private String manualReagent = "";
     private static final String[] SUBSTANCE_OPTIONS = {"MDMA", "ÉXTASIS", "COCAÍNA", "LSD", "KETAMINA", "CANNABIS", "OPIOIDE", "BENZODIACEPINA", "ANFETAMINA", "OTRA"};
     private static final String[] COLOR_OPTIONS = {"blanco", "amarillo", "verde", "azul", "morado", "rosado", "rojo", "transparente", "otro"};
@@ -139,6 +140,7 @@ public final class MainActivity extends AppCompatActivity {
         // The host RD catalog is the source of truth for prior events. Load it
         // on startup so the field screen does not look like an empty/demo DB.
         loadBootstrapAndMaybeChoose(false, false);
+        loadApprovedVisualCatalog();
     }
 
     private void buildShell() {
@@ -882,18 +884,28 @@ public final class MainActivity extends AppCompatActivity {
         card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
         card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(queryViews)));
         card.addView(body("Vocabulario histórico RD  ·  " + suggestedMoldDesignsText()));
+        card.addView(body("Catálogo visual aprobado  ·  " + memory.approvedCount() + " referencia(s) · revisión " + loadedCatalogRevision));
+        boolean referenceQuality = hasMoldReferenceQuality(queryViews);
+        if (!referenceQuality) {
+            card.addView(body("Calidad insuficiente para referencia automática: requiere silueta ≥ 0.55 y relieve ≥ 0.45. Captura una cara frontal cercana y nítida; no se etiqueta este objeto."));
+        }
         List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), queryViews, 3);
         if (matches.isEmpty()) {
-            card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
+            card.addView(body(memory.approvedCount() == 0
+                    ? "— sin referencia visual aprobada; el vocabulario histórico no participa en matching"
+                    : "— sin coincidencia visual confiable (unknown); no supera calidad, relieve, consenso o margen"));
         } else {
             for (VisualMemory.Match match : matches) {
                 String label = match.entry.reviewedLabel;
                 if (label.toLowerCase(Locale.ROOT).startsWith("molde:")) label = label.substring("molde:".length()).trim();
-                card.addView(text("✦  " + label + "  ·  " + Math.round(match.similarity * 100f) + "%", 16, TEXT));
-                card.addView(body(match.entry.sampleCode + "  ·  " + match.explanation));
+                card.addView(text("✦  CANDIDATO VISUAL  ·  " + label, 16, TEXT));
+                card.addView(body(match.entry.sampleCode + "  ·  " + match.explanation
+                        + "  ·  score " + String.format(Locale.US, "%.2f", match.similarity)
+                        + "  ·  ref " + match.entry.referenceId + "  ·  catálogo " + match.entry.catalogRevision));
             }
         }
-        Button register = actionButton("✦  REGISTRAR DISEÑO DEL MOLDE", SURFACE, AMBER);
+        Button register = actionButton(referenceQuality ? "✦  PROPONER REFERENCIA PARA REVISIÓN RD" : "✦  REFERENCIA BLOQUEADA POR CALIDAD", SURFACE, referenceQuality ? AMBER : MUTED);
+        register.setEnabled(referenceQuality);
         card.addView(register, new LinearLayout.LayoutParams(-1, dp(42)));
         register.setOnClickListener(view -> askForMoldDesignLabel(sample.captures.get(sample.captures.size() - 1), query));
         content.addView(card, new LinearLayout.LayoutParams(-1, -2));
@@ -1064,9 +1076,45 @@ public final class MainActivity extends AppCompatActivity {
                 .setPositiveButton("GUARDAR MOLDE", (dialog, which) -> {
                     String label = input.getText().toString().trim();
                     if (label.isEmpty()) label = "diseño visible sin nombre";
-                    saveReviewedExample(capture, "molde: " + label, "mold_design");
+                    submitMoldDesignCandidate(capture, label);
                 })
                 .show();
+    }
+
+    private void submitMoldDesignCandidate(SampleSession.Capture capture, String label) {
+        SampleSession sample = engine.snapshot();
+        List<VisualFeatures> allViews = new ArrayList<>();
+        for (SampleSession.Capture view : sample.captures) if (view.features != null) allViews.add(view.features);
+        if (!hasMoldReferenceQuality(allViews)) {
+            Toast.makeText(this, "Referencia bloqueada: captura frontal nítida con relieve visible", Toast.LENGTH_LONG).show();
+            return;
+        }
+        StringBuilder material = new StringBuilder(sample.code);
+        for (SampleSession.Capture view : sample.captures) material.append('|').append(view.id);
+        String referenceId = "ref-" + UUID.nameUUIDFromBytes(material.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String storedLabel = "molde: " + label;
+        engine.addCorrection(capture.id, "mold_design_candidate", capture.features.compactDescription(), storedLabel + " · reference_id=" + referenceId);
+        SampleSession.Correction correction = sample.corrections.get(sample.corrections.size() - 1);
+        database.saveCorrectionAndTrainingExample(sample.id, correction, storedLabel, "pending_review");
+        persist();
+        Toast.makeText(this, "Candidato visual guardado · pendiente de aprobación RD", Toast.LENGTH_LONG).show();
+        flujo.submitVisualCandidate(sample, label, referenceId, "xio-rd-operator", rdEndpoint(), result -> {
+            if (result.isSuccess()) {
+                Toast.makeText(this, "Candidato enviado al host RD · pendiente de revisión", Toast.LENGTH_LONG).show();
+            } else {
+                Toast.makeText(this, "Candidato local pendiente · host RD no disponible", Toast.LENGTH_LONG).show();
+            }
+            render();
+        });
+        render();
+    }
+
+    private boolean hasMoldReferenceQuality(List<VisualFeatures> views) {
+        if (views == null) return false;
+        for (VisualFeatures features : views) {
+            if (features != null && features.silhouetteConfidence >= .55f && features.reliefConfidence >= .45f) return true;
+        }
+        return false;
     }
 
     private boolean isEcstasy(String value) {
@@ -1179,6 +1227,7 @@ public final class MainActivity extends AppCompatActivity {
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
                 loadRemoteSamples(engine.snapshot().eventId);
+                loadApprovedVisualCatalog();
                 render();
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
                 else syncCurrentEventThenSample();
@@ -1218,6 +1267,54 @@ public final class MainActivity extends AppCompatActivity {
             remoteSamplesFailed = false;
             render();
         });
+    }
+
+    private void loadApprovedVisualCatalog() {
+        flujo.loadVisualCatalog(rdEndpoint(), result -> {
+            if (!result.isSuccess()) return;
+            JSONArray references = result.response.optJSONArray("references");
+            if (references == null) return;
+            memory.clearApproved();
+            loadedCatalogRevision = result.response.optInt("catalogRevision", 0);
+            for (int i = 0; i < references.length(); i++) {
+                JSONObject reference = references.optJSONObject(i);
+                if (reference == null || !"approved".equalsIgnoreCase(reference.optString("status", ""))) continue;
+                JSONArray views = reference.optJSONArray("views");
+                if (views == null) continue;
+                for (int j = 0; j < views.length(); j++) {
+                    JSONObject view = views.optJSONObject(j);
+                    if (view == null) continue;
+                    JSONObject rawFeatures = view.optJSONObject("features");
+                    VisualFeatures features = featuresFromCatalog(rawFeatures);
+                    if (features == null) continue;
+                    String referenceId = reference.optString("referenceId", "");
+                    String captureId = view.optString("captureId", "view-" + j);
+                    memory.addApproved(new VisualMemory.Entry(
+                            referenceId + ":" + captureId,
+                            reference.optString("sourceSampleCode", referenceId),
+                            reference.optString("sourceEventRef", ""), 0L,
+                            "molde: " + reference.optString("canonicalLabel", "diseño visual"),
+                            "ÉXTASIS", "mold_design_catalog", features,
+                            referenceId, reference.optInt("catalogRevision", loadedCatalogRevision), true));
+                }
+            }
+            render();
+        });
+    }
+
+    private VisualFeatures featuresFromCatalog(JSONObject raw) {
+        if (raw == null || raw.length() == 0) return null;
+        return new VisualFeatures(
+                raw.optString("colorLabel", ""), raw.optString("silhouetteLabel", ""),
+                (float) raw.optDouble("aspectRatio", 0d), (float) raw.optDouble("foregroundRatio", 0d),
+                (float) raw.optDouble("brightness", 0d), (float) raw.optDouble("saturation", 0d),
+                (float) raw.optDouble("textureScore", 0d), raw.optInt("meanRed", 0),
+                raw.optInt("meanGreen", 0), raw.optInt("meanBlue", 0), raw.optLong("perceptualHash", 0L),
+                raw.optString("markingCandidate", "sin señal clara"), (float) raw.optDouble("markingScore", 0d),
+                (float) raw.optDouble("reliefConfidence", 0d), raw.optString("reliefSignature", ""),
+                (float) raw.optDouble("silhouetteConfidence", 0d), (float) raw.optDouble("circularity", 0d),
+                (float) raw.optDouble("solidity", 0d), (float) raw.optDouble("symmetry", 0d),
+                raw.optInt("contourPointCount", 0), raw.optString("geometrySignature", ""));
     }
 
     private JSONArray mergeLocalEvents(JSONArray remoteEvents, JSONArray remoteXioEvents) {
