@@ -49,7 +49,7 @@ def main():
             "sourceEventRef": "EVT-001",
             "sourceSampleCode": "XIO-SMOKE-001",
             "createdBy": "smoke-operator",
-            "featureModelVersion": "visual-contour-v0.3",
+            "featureModelVersion": "visual-contour-v0.4",
             "views": [{
                 "captureId": "capture-smoke",
                 "faceOrView": "front",
@@ -62,6 +62,12 @@ def main():
         }, db, evidence)
         assert candidate["status"] == "pending_review"
         assert bridge.visual_catalog(db)["references"] == []
+        more_evidence = bridge.review_visual_reference(
+            "ref-smoke",
+            {"decision": "request_more_evidence", "reviewerId": "smoke-reviewer", "reason": "comparar otra vista"},
+            db,
+        )
+        assert more_evidence["status"] == "pending_review"
         review = bridge.review_visual_reference(
             "ref-smoke",
             {"decision": "approve", "reviewerId": "smoke-reviewer", "reason": "evidencia revisada"},
@@ -69,6 +75,15 @@ def main():
         )
         assert review["status"] == "approved"
         assert bridge.visual_catalog(db)["references"][0]["referenceId"] == "ref-smoke"
+        retired = bridge.review_visual_reference(
+            "ref-smoke",
+            {"decision": "retire", "reviewerId": "smoke-reviewer", "reason": "retiro de prueba"},
+            db,
+        )
+        assert retired["status"] == "retired"
+        assert bridge.visual_catalog(db)["references"] == []
+        with __import__("sqlite3").connect(db) as conn:
+            assert conn.execute("SELECT COUNT(*) FROM xio_visual_reference_reviews WHERE reference_id='ref-smoke'").fetchone()[0] == 3
     print("OK: XIO-RD bridge bootstrap/ingest/read/idempotence")
 
 
