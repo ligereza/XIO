@@ -92,6 +92,7 @@ public final class VisualMemory {
                 float candidate = MoldPatternMatcher.similarity(query, entry.features);
                 if (candidate > score) { score = candidate; explanation = MoldPatternMatcher.explanation(query, entry.features); }
             }
+            if (score < .68f) continue;
             long ageDays = entry.capturedAt <= 0L ? 0L : Math.max(0L, (now - entry.capturedAt) / 86_400_000L);
             float recency = ageDays <= 365 ? 1f : Math.max(.88f, 1f - (Math.min(ageDays, 3650L) / 3650f) * .12f);
             float sameEvent = !eventId.isEmpty() && eventId.equals(entry.eventId) ? 1.04f : 1f;
@@ -102,7 +103,7 @@ public final class VisualMemory {
     }
 
     private static boolean isMoldEntry(Entry entry) {
-        return "mold_design".equalsIgnoreCase(entry.reviewedField)
+        return entry.reviewedField.toLowerCase().startsWith("mold_design")
                 || entry.reviewedLabel.toLowerCase().startsWith("molde:");
     }
 

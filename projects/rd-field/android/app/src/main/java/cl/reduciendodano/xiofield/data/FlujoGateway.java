@@ -13,6 +13,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -74,6 +75,22 @@ public final class FlujoGateway {
         executor.execute(() -> {
             try {
                 JSONObject response = requestWithUsbFallback("GET", endpoint + "/bootstrap", null, token);
+                deliver(callback, Result.success(response));
+            } catch (Exception error) {
+                deliver(callback, Result.failure(error));
+            }
+        });
+    }
+
+    public void loadSamples(String endpoint, String eventRef, String sampleCode, Callback callback) {
+        executor.execute(() -> {
+            try {
+                String encodedEvent = URLEncoder.encode(eventRef == null ? "" : eventRef, "UTF-8");
+                String target = endpoint + "/samples?eventRef=" + encodedEvent;
+                if (sampleCode != null && !sampleCode.trim().isEmpty()) {
+                    target += "&sampleCode=" + URLEncoder.encode(sampleCode.trim(), "UTF-8");
+                }
+                JSONObject response = requestWithUsbFallback("GET", target, null, "");
                 deliver(callback, Result.success(response));
             } catch (Exception error) {
                 deliver(callback, Result.failure(error));

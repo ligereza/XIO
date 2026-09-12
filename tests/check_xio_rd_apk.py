@@ -38,6 +38,10 @@ def main() -> None:
     assert 'suggestedMoldDesigns' in source
     assert 'OTRA VISTA DEL MOLDE' in source
     assert 'moldDesigns' in (ROOT / "xio" / "new-plugins" / "rd_field" / "bridge.py").read_text(encoding="utf-8")
+    assert 'loadSamples' in source
+    assert 'HISTORIA HOST RD' in source
+    assert 'addRemoteSampleRow' in source
+    assert 'loadSamples(rdEndpoint()' in source
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 
 

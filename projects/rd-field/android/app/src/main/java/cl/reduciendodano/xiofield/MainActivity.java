@@ -96,6 +96,10 @@ public final class MainActivity extends AppCompatActivity {
     private SampleSession.Capture pendingCapture;
     private final Map<String, String> testColors = new HashMap<>();
     private final List<String> suggestedMoldDesigns = new ArrayList<>();
+    private final List<JSONObject> remoteSamples = new ArrayList<>();
+    private String remoteSamplesEventRef = "";
+    private boolean remoteSamplesLoading;
+    private boolean remoteSamplesFailed;
     private String manualReagent = "";
     private static final String[] SUBSTANCE_OPTIONS = {"MDMA", "ÉXTASIS", "COCAÍNA", "LSD", "KETAMINA", "CANNABIS", "OPIOIDE", "BENZODIACEPINA", "ANFETAMINA", "OTRA"};
     private static final String[] COLOR_OPTIONS = {"blanco", "amarillo", "verde", "azul", "morado", "rosado", "rojo", "transparente", "otro"};
@@ -325,7 +329,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private void renderEntriesTab() {
         content.addView(sectionLabel("3  ·  REGISTRO"));
-        content.addView(heading("Eventos locales"));
+        content.addView(heading("Eventos y memoria RD"));
         List<RdFieldDb.EventRow> eventRows = database.recentEvents();
         for (RdFieldDb.EventRow row : eventRows) {
             String label = row.name == null || row.name.trim().isEmpty() ? row.id : row.name;
@@ -336,6 +340,27 @@ public final class MainActivity extends AppCompatActivity {
         Button changeEvent = actionButton("＋  CREAR / CAMBIAR EVENTO", SURFACE_RAISED, AMBER);
         content.addView(changeEvent, new LinearLayout.LayoutParams(-1, dp(46)));
         changeEvent.setOnClickListener(view -> loadBootstrapAndMaybeChoose(true, false));
+        String remoteHistoryLabel = remoteSamplesEventRef.isEmpty()
+                ? "HISTORIA HOST RD · NO CARGADA"
+                : remoteSamplesLoading
+                ? "HISTORIA HOST RD · CONSULTANDO…"
+                : remoteSamplesFailed
+                ? "HISTORIA HOST RD · NO DISPONIBLE"
+                : "HISTORIA HOST RD · " + remoteSamples.size() + " MUESTRA(S)";
+        content.addView(sectionLabel(remoteHistoryLabel));
+        if (remoteSamples.isEmpty()) {
+            String historyMessage = remoteSamplesEventRef.isEmpty()
+                    ? "Selecciona un evento para consultar la base RD."
+                    : remoteSamplesLoading
+                    ? "Consultando la base RD del host…"
+                    : remoteSamplesFailed
+                    ? "No se pudo leer la base RD del host."
+                    : "El host no tiene muestras para este evento.";
+            content.addView(body(historyMessage));
+        } else {
+            for (JSONObject row : remoteSamples) addRemoteSampleRow(row);
+        }
+        content.addView(sectionLabel("PROYECCIÓN LOCAL DEL TELÉFONO"));
         content.addView(heading("Ingresos"));
         List<RdFieldDb.SampleRow> rows = database.recentSamples();
         if (rows.isEmpty()) { content.addView(body("sin ingresos")); return; }
@@ -344,6 +369,32 @@ public final class MainActivity extends AppCompatActivity {
             SampleSession.Capture latest = captures.isEmpty() ? null : captures.get(captures.size() - 1);
             addEntryRow(row, latest);
         }
+    }
+
+    private void addRemoteSampleRow(JSONObject row) {
+        LinearLayout item = card();
+        String code = row.optString("sampleCode", "sin código");
+        String substance = row.optString("substanceDeclared", "sin declarar");
+        String format = row.optString("sampleType", "sin formato");
+        String color = row.optString("color", "sin color");
+        String mold = remoteText(row, "moldDesign");
+        String mark = remoteText(row, "logoOrMark");
+        JSONArray captures = row.optJSONArray("captures");
+        JSONArray tests = row.optJSONArray("tests");
+        item.addView(text("○  " + code + "  ·  " + substance, 15, TEXT));
+        item.addView(body(format + "  ·  color " + (color.isEmpty() ? "sin registro" : color)));
+        if (!mold.isEmpty()) item.addView(body("molde/diseño: " + mold));
+        if (!mark.isEmpty()) item.addView(body("marca: " + mark));
+        item.addView(body("capturas " + (captures == null ? 0 : captures.length())
+                + "  ·  tests " + (tests == null ? 0 : tests.length())
+                + "  ·  " + row.optString("date", "fecha sin registro")));
+        content.addView(item, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private String remoteText(JSONObject row, String key) {
+        if (row == null || row.isNull(key)) return "";
+        String value = row.optString(key, "").trim();
+        return "null".equalsIgnoreCase(value) ? "" : value;
     }
 
     private void addEvidencePair(String photoPath, String silhouettePath, String format, String declaredColor, VisualFeatures features) {
@@ -817,7 +868,6 @@ public final class MainActivity extends AppCompatActivity {
         List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), queryViews, 3);
         if (matches.isEmpty()) {
             card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
-            if (!suggestedMoldDesigns.isEmpty()) card.addView(body("Vocabulario histórico RD (no es coincidencia visual): " + suggestedMoldDesignsText()));
         } else {
             for (VisualMemory.Match match : matches) {
                 String label = match.entry.reviewedLabel;
@@ -1111,12 +1161,45 @@ public final class MainActivity extends AppCompatActivity {
                 JSONArray events = mergeLocalEvents(result.response.optJSONArray("events"), result.response.optJSONArray("xioEvents"));
                 int current = indexOfEvent(events, engine.snapshot().eventId);
                 if (current >= 0) applyEventContext(events.optJSONObject(current));
+                loadRemoteSamples(engine.snapshot().eventId);
                 render();
                 if (forcePicker || current < 0) showEventPicker(events, current, syncAfter);
                 else syncCurrentEventThenSample();
             } catch (Exception error) {
                 Toast.makeText(this, "XIO-RD · catálogo inválido", Toast.LENGTH_LONG).show();
             }
+        });
+    }
+
+    private void loadRemoteSamples(String eventRef) {
+        if (eventRef == null || eventRef.trim().isEmpty()) {
+            remoteSamples.clear();
+            remoteSamplesEventRef = "";
+            remoteSamplesLoading = false;
+            remoteSamplesFailed = false;
+            return;
+        }
+        remoteSamples.clear();
+        remoteSamplesEventRef = eventRef;
+        remoteSamplesLoading = true;
+        remoteSamplesFailed = false;
+        flujo.loadSamples(rdEndpoint(), eventRef, "", result -> {
+            if (!result.isSuccess()) {
+                remoteSamplesLoading = false;
+                remoteSamplesFailed = true;
+                render();
+                return;
+            }
+            JSONArray rows = result.response.optJSONArray("samples");
+            remoteSamples.clear();
+            if (rows != null) for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.optJSONObject(i);
+                if (row != null) remoteSamples.add(row);
+            }
+            remoteSamplesEventRef = eventRef;
+            remoteSamplesLoading = false;
+            remoteSamplesFailed = false;
+            render();
         });
     }
 
@@ -1361,6 +1444,7 @@ public final class MainActivity extends AppCompatActivity {
                     try { applyEventContext(events.getJSONObject(index)); } catch (Exception ignored) { }
                     engine.setEventId(eventId);
                     persist();
+                    loadRemoteSamples(eventId);
                     dialog.dismiss();
                     render();
                     if (syncAfter) sendCurrentSample();
