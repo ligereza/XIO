@@ -240,10 +240,12 @@ public final class MainActivity extends AppCompatActivity {
         if (!sample.declaredSubstance.isEmpty()) {
             addOptionStrip("formato", formatsFor(sample.declaredSubstance), sample.presentation, value -> { engine.setPresentation(value); render(); });
         }
-        if (!sample.declaredSubstance.isEmpty() && !sample.presentation.isEmpty()) {
-            addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
-                    value -> engine.setObservedColor(value));
-        }
+        // The observed colour belongs to the capture context, not only to a
+        // completed declaration. Keep the ramp visible while a photo is
+        // reviewed/repeated and persist each choice so camera Activity
+        // recreation cannot erase it.
+        addColorRampControl(content, "COLOR", sample.observedColor, "Rampa cromática del color observado",
+                value -> { engine.setObservedColor(value); persist(); });
 
         if (pendingCapture != null) {
             LinearLayout actions = new LinearLayout(this);
@@ -450,7 +452,10 @@ public final class MainActivity extends AppCompatActivity {
         LinearLayout info = new LinearLayout(this); info.setOrientation(LinearLayout.VERTICAL); info.setGravity(Gravity.CENTER_VERTICAL);
         String substance = row.declaredSubstance == null || row.declaredSubstance.isEmpty() ? "sin declarar" : row.declaredSubstance;
         String format = row.presentation == null || row.presentation.isEmpty() ? "sin formato" : row.presentation;
+        String observedColorLabel = row.observedColor == null || row.observedColor.trim().isEmpty()
+                ? "sin color" : "color " + row.observedColor.trim();
         info.addView(text(substance + "  ·  " + format, 13, TEXT));
+        info.addView(body(observedColorLabel));
         info.addView(body(formatTime(capture == null ? row.createdAt : capture.capturedAt) + "  ·  " + row.code));
         item.addView(info, new LinearLayout.LayoutParams(0, -1, 1f));
         content.addView(item, new LinearLayout.LayoutParams(-1, dp(82)));
@@ -566,7 +571,7 @@ public final class MainActivity extends AppCompatActivity {
             pendingCapture = null;
             pendingCameraFile = null;
         } else {
-            sample.status = "saved_without_photo";
+            if (sample.captures.isEmpty()) sample.status = "saved_without_photo";
         }
         engine.transitionTo(SampleSession.Phase.OBSERVE);
         persist();
@@ -577,6 +582,7 @@ public final class MainActivity extends AppCompatActivity {
 
     private void discardPendingCapture(boolean rerender) {
         if (pendingCapture != null) {
+            database.deleteCapture(engine.snapshot().id, pendingCapture.id);
             deleteEvidence(pendingCapture.path);
             deleteEvidence(pendingCapture.silhouettePath);
             deleteEvidence(pendingCapture.silhouettePreviewPath);
@@ -805,6 +811,11 @@ public final class MainActivity extends AppCompatActivity {
             if (analysis.silhouettePreview != null) analysis.silhouettePreview.recycle();
             String viewKind = "vista-" + (engine.snapshot().captures.size() + 1);
             pendingCapture = new SampleSession.Capture(captureId, viewKind, stored.file.getAbsolutePath(), silhouetteFile == null ? "" : silhouetteFile.getAbsolutePath(), silhouettePreviewFile == null ? "" : silhouettePreviewFile.getAbsolutePath(), reliefFile == null ? "" : reliefFile.getAbsolutePath(), stored.sha256, System.currentTimeMillis(), features);
+            // The camera can recreate this Activity before the operator taps
+            // GUARDAR. Persist the evidence row immediately so the photo,
+            // silhouette and metadata survive that lifecycle boundary.
+            database.insertCapture(engine.snapshot().id, pendingCapture);
+            persist();
             pendingCameraFile = null;
             Toast.makeText(this, "Revisa la foto y guarda el ingreso", Toast.LENGTH_SHORT).show(); render();
         } catch (IOException error) { Toast.makeText(this, "No se pudo guardar la evidencia", Toast.LENGTH_LONG).show(); }

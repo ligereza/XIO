@@ -218,6 +218,10 @@ public final class RdFieldDb extends SQLiteOpenHelper {
         values.put("id", capture.id); values.put("sample_id", sampleId); values.put("kind", capture.kind); values.put("path", capture.path); values.put("silhouette_svg_path", capture.silhouettePath); values.put("silhouette_preview_path", capture.silhouettePreviewPath); values.put("relief_svg_path", capture.reliefPath); values.put("geometry_signature", f.geometrySignature); values.put("relief_signature", f.reliefSignature); values.put("silhouette_confidence", f.silhouetteConfidence); values.put("relief_confidence", f.reliefConfidence); values.put("circularity", f.circularity); values.put("solidity", f.solidity); values.put("symmetry", f.symmetry); values.put("contour_point_count", f.contourPointCount); values.put("sha256", capture.sha256); values.put("captured_at", capture.capturedAt); values.put("silhouette", f.silhouetteLabel); values.put("aspect_ratio", f.aspectRatio); values.put("foreground_ratio", f.foregroundRatio); values.put("color_label", f.colorLabel); values.put("brightness", f.brightness); values.put("saturation", f.saturation); values.put("texture_score", f.textureScore); values.put("mean_red", f.meanRed); values.put("mean_green", f.meanGreen); values.put("mean_blue", f.meanBlue); values.put("perceptual_hash", f.perceptualHash); values.put("marking_candidate", f.markingCandidate); values.put("marking_score", f.markingScore); values.put("model_version", SampleSessionEngineVersion.VALUE); db.insertWithOnConflict("captures", null, values, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
+    public void deleteCapture(String sampleId, String captureId) {
+        getWritableDatabase().delete("captures", "sample_id=? AND id=?", new String[]{sampleId, captureId});
+    }
+
     public void saveCorrectionAndTrainingExample(String sampleId, SampleSession.Correction correction, String label) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues correctionValues = new ContentValues();
