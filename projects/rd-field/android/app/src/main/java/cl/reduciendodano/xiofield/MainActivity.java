@@ -240,6 +240,11 @@ public final class MainActivity extends AppCompatActivity {
         }
 
         addMoldRecognitionCard(sample);
+        if (pendingCapture == null && !sample.captures.isEmpty()) {
+            Button another = actionButton("⊕  OTRA VISTA DEL MOLDE", SURFACE, TEAL);
+            content.addView(another, new LinearLayout.LayoutParams(-1, dp(42)));
+            another.setOnClickListener(view -> openCamera());
+        }
 
         content.addView(sectionLabel("DECLARACIÓN"));
         addOptionStrip("sustancia", SUBSTANCE_OPTIONS, sample.declaredSubstance, value -> {
@@ -801,12 +806,14 @@ public final class MainActivity extends AppCompatActivity {
 
     private void addMoldRecognitionCard(SampleSession sample) {
         if (!isEcstasy(sample.declaredSubstance) || sample.captures.isEmpty()) return;
-        VisualFeatures query = sample.captures.get(sample.captures.size() - 1).features;
+        List<VisualFeatures> queryViews = new ArrayList<>();
+        for (SampleSession.Capture capture : sample.captures) if (capture.features != null) queryViews.add(capture.features);
+        VisualFeatures query = queryViews.isEmpty() ? null : queryViews.get(queryViews.size() - 1);
         LinearLayout card = card();
         card.addView(sectionLabel("RECONOCIMIENTO DE MOLDE / DISEÑO"));
         card.addView(body("Comparación visual de contorno, relieve y marca; no identifica composición química."));
-        card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(query)));
-        List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), query, 3);
+        card.addView(body("Huella visual  ·  " + MoldPatternMatcher.fingerprint(queryViews)));
+        List<VisualMemory.Match> matches = memory.findMoldMatches(sample.declaredSubstance, sample.eventId, System.currentTimeMillis(), queryViews, 3);
         if (matches.isEmpty()) {
             card.addView(body("— sin molde de referencia revisado; usa CORREGIR para registrar el diseño observado"));
             if (!suggestedMoldDesigns.isEmpty()) card.addView(body("Vocabulario histórico RD (no es coincidencia visual): " + suggestedMoldDesignsText()));

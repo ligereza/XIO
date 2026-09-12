@@ -5,6 +5,7 @@ import cl.reduciendodano.xiofield.core.VisualFeatures;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
 /** Visual-only comparison for tablet mould/design recurrence. */
 public final class MoldPatternMatcher {
@@ -35,16 +36,25 @@ public final class MoldPatternMatcher {
 
     /** Stable evidence key for recurrence when no human name exists yet. */
     public static String fingerprint(VisualFeatures features) {
-        if (features == null) return "MOLD-UNKNOWN";
-        String material = features.geometrySignature + "|" + features.reliefSignature + "|"
-                + String.format(java.util.Locale.US, "%.3f|%.3f|%.3f", features.aspectRatio, features.circularity, features.solidity);
+        return fingerprint(features == null ? java.util.Collections.emptyList() : java.util.Collections.singletonList(features));
+    }
+
+    public static String fingerprint(List<VisualFeatures> views) {
+        if (views == null || views.isEmpty()) return "MOLD-UNKNOWN";
+        StringBuilder material = new StringBuilder();
+        for (VisualFeatures features : views) {
+            if (features == null) continue;
+            material.append(features.geometrySignature).append('|').append(features.reliefSignature).append('|')
+                    .append(String.format(java.util.Locale.US, "%.3f|%.3f|%.3f", features.aspectRatio, features.circularity, features.solidity)).append("||");
+        }
+        if (material.length() == 0) return "MOLD-UNKNOWN";
         try {
-            byte[] digest = MessageDigest.getInstance("SHA-256").digest(material.getBytes(StandardCharsets.UTF_8));
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(material.toString().getBytes(StandardCharsets.UTF_8));
             StringBuilder value = new StringBuilder("MOLD-");
             for (int i = 0; i < 6; i++) value.append(String.format(java.util.Locale.US, "%02X", digest[i]));
             return value.toString();
         } catch (NoSuchAlgorithmException error) {
-            return "MOLD-" + Integer.toHexString(material.hashCode()).toUpperCase(java.util.Locale.ROOT);
+            return "MOLD-" + Integer.toHexString(material.toString().hashCode()).toUpperCase(java.util.Locale.ROOT);
         }
     }
 }

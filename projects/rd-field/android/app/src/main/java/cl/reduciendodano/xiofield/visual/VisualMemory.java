@@ -4,6 +4,7 @@ import cl.reduciendodano.xiofield.core.VisualFeatures;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Collections;
 import java.util.List;
 
 /** Local nearest-neighbour memory. Reviewed examples become searchable without pretending to be a chemical classifier. */
@@ -77,15 +78,24 @@ public final class VisualMemory {
     public int reviewedCount() { return entries.size(); }
 
     public List<Match> findMoldMatches(String substance, String eventId, long now, VisualFeatures query, int limit) {
+        return findMoldMatches(substance, eventId, now, query == null ? Collections.emptyList() : Collections.singletonList(query), limit);
+    }
+
+    public List<Match> findMoldMatches(String substance, String eventId, long now, List<VisualFeatures> queryViews, int limit) {
         List<Match> matches = new ArrayList<>();
-        if (!isEcstasy(substance) || query == null) return matches;
+        if (!isEcstasy(substance) || queryViews == null || queryViews.isEmpty()) return matches;
         for (Entry entry : entries) {
             if (!isMoldEntry(entry) || (!entry.declaredSubstance.isEmpty() && !isEcstasy(entry.declaredSubstance))) continue;
-            float score = MoldPatternMatcher.similarity(query, entry.features);
+            float score = 0f;
+            String explanation = "parecido visual";
+            for (VisualFeatures query : queryViews) {
+                float candidate = MoldPatternMatcher.similarity(query, entry.features);
+                if (candidate > score) { score = candidate; explanation = MoldPatternMatcher.explanation(query, entry.features); }
+            }
             long ageDays = entry.capturedAt <= 0L ? 0L : Math.max(0L, (now - entry.capturedAt) / 86_400_000L);
             float recency = ageDays <= 365 ? 1f : Math.max(.88f, 1f - (Math.min(ageDays, 3650L) / 3650f) * .12f);
             float sameEvent = !eventId.isEmpty() && eventId.equals(entry.eventId) ? 1.04f : 1f;
-            matches.add(new Match(entry, Math.min(1f, score * recency * sameEvent), MoldPatternMatcher.explanation(query, entry.features)));
+            matches.add(new Match(entry, Math.min(1f, score * recency * sameEvent), explanation));
         }
         matches.sort(Comparator.comparingDouble((Match match) -> match.similarity).reversed());
         return matches.subList(0, Math.min(limit, matches.size()));

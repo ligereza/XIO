@@ -36,6 +36,7 @@ def main() -> None:
     assert 'moldDesign' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'moldFingerprint' in (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "FlujoGateway.java").read_text(encoding="utf-8")
     assert 'suggestedMoldDesigns' in source
+    assert 'OTRA VISTA DEL MOLDE' in source
     assert 'moldDesigns' in (ROOT / "xio" / "new-plugins" / "rd_field" / "bridge.py").read_text(encoding="utf-8")
     print("OK: XIO-RD native APK ramp persistence/capture registry contract")
 

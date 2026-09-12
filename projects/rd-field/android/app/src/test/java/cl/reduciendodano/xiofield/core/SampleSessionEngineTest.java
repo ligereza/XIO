@@ -94,5 +94,10 @@ public final class SampleSessionEngineTest {
         assertTrue(matches.get(0).similarity > .75f);
         assertTrue(MoldPatternMatcher.explanation(query, sameDesign).contains("contorno") || MoldPatternMatcher.explanation(query, sameDesign).contains("relieve"));
         assertTrue(MoldPatternMatcher.fingerprint(query).startsWith("MOLD-"));
+        java.util.List<VisualFeatures> frontAndBack = java.util.List.of(new VisualFeatures("azul", "alargada", 2f, .3f, .4f, .7f, .8f, 30, 70, 210, 1L), query);
+        java.util.List<VisualMemory.Match> multiView = memory.findMoldMatches("ÉXTASIS", "event-1", 3L, frontAndBack, 5);
+        assertEquals(1, multiView.size());
+        assertTrue(multiView.get(0).similarity > .75f);
+        assertTrue(!MoldPatternMatcher.fingerprint(frontAndBack).equals(MoldPatternMatcher.fingerprint(query)));
     }
 }
