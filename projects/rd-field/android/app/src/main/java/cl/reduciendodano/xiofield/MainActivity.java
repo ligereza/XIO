@@ -47,9 +47,11 @@ import java.util.Date;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -1684,13 +1686,16 @@ public final class MainActivity extends AppCompatActivity {
     }
 
     private void reconcileRemoteSampleReceipt(String eventRef) {
-        SampleSession sample = engine.snapshot();
-        if (sample == null || !eventRef.equals(sample.eventId)) return;
-        if (!"synced".equalsIgnoreCase(database.sampleSyncStatus(sample.id))) return;
+        Set<String> remoteCodes = new HashSet<>();
         for (JSONObject row : remoteSamples) {
-            if (sample.code.equals(row.optString("sampleCode", ""))) return;
+            String code = row.optString("sampleCode", "").trim();
+            if (!code.isEmpty()) remoteCodes.add(code);
         }
-        database.recordSampleSync(sample.id, "pending", "el host no reconoce el recibo local", "[]");
+        for (RdFieldDb.SampleRow local : database.recentSamples()) {
+            if (!eventRef.equals(local.eventId) || !"synced".equalsIgnoreCase(local.syncStatus)) continue;
+            if (remoteCodes.contains(local.code)) continue;
+            database.recordSampleSync(local.id, "pending", "el host no reconoce el recibo local", "[]");
+        }
     }
 
     private void loadApprovedVisualCatalog() {

@@ -45,6 +45,7 @@ def main() -> None:
     assert 'database.upsertEvent(eventId' in source
     assert 'database.findEvent(row.eventId)' in source
     assert 'reconcileRemoteSampleReceipt(eventRef)' in source
+    assert 'database.recentSamples()' in source
     assert 'if (!sampleCanSync(sample)) return;' in source
     db_source = (ROOT / "projects" / "rd-field" / "android" / "app" / "src" / "main" / "java" / "cl" / "reduciendodano" / "xiofield" / "data" / "RdFieldDb.java").read_text(encoding="utf-8")
     assert 'sampleSyncStatus' in db_source
