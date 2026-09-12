@@ -47,7 +47,7 @@ public final class VisualFeatureExtractor {
         boolean[] rawMask = new boolean[separation.length];
         for (int i = 0; i < separation.length; i++) rawMask[i] = separation[i] >= threshold;
         boolean[] mask = underexposed ? new boolean[separation.length]
-                : bestComponent(close(rawMask, width, height), width, height);
+                : bestComponent(rawMask, width, height);
         int objectPixels = count(mask);
         boolean separated = objectPixels >= width * height * .008f && objectPixels <= width * height * .86f;
         boolean fallbackUsed = false;
@@ -60,7 +60,7 @@ public final class VisualFeatureExtractor {
             for (float relaxed : new float[]{threshold * .80f, threshold * .65f, threshold * .50f, Math.max(8f, threshold * .35f)}) {
                 boolean[] relaxedRaw = new boolean[separation.length];
                 for (int i = 0; i < separation.length; i++) relaxedRaw[i] = separation[i] >= relaxed;
-                boolean[] relaxedMask = bestComponent(close(relaxedRaw, width, height), width, height);
+                boolean[] relaxedMask = bestComponent(relaxedRaw, width, height);
                 int relaxedPixels = count(relaxedMask);
                 if (relaxedPixels >= width * height * .003f && relaxedPixels <= width * height * .92f) {
                     mask = relaxedMask;
