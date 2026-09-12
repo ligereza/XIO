@@ -1,5 +1,6 @@
 package cl.reduciendodano.xiofield.data;
 
+import android.database.sqlite.SQLiteDatabase;
 import android.content.Context;
 
 import java.io.BufferedWriter;
@@ -43,6 +44,50 @@ public final class RdFieldExporter {
             }
         }
         return archive;
+    }
+
+    /**
+     * Creates a recoverable pre-update backup of the complete RD field store.
+     * It intentionally contains only the RD SQLite projection and RD evidence;
+     * FOH/ISKVW state lives in its own application and is never copied here.
+     */
+    public static File exportLocalBackup(Context context) throws IOException {
+        File folder = new File(context.getCacheDir(), "rd-exports");
+        if (!folder.exists() && !folder.mkdirs()) throw new IOException("No se pudo crear la carpeta de exportación");
+        File archive = new File(folder, "xio-rd-backup-" + System.currentTimeMillis() + ".zip");
+        RdFieldDb database = new RdFieldDb(context);
+        SQLiteDatabase local = database.getWritableDatabase();
+        android.database.Cursor checkpoint = local.rawQuery("PRAGMA wal_checkpoint(FULL)", null);
+        checkpoint.close();
+        database.close();
+        File dbFile = context.getDatabasePath("rd_field_local.db");
+        File evidenceRoot = new File(context.getFilesDir(), "evidence");
+        try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(archive))) {
+            putText(zip, "backup-manifest.json", "{\n"
+                    + "  \"schema\":\"xio-rd-local-backup-v1\",\n"
+                    + "  \"createdAt\":" + System.currentTimeMillis() + ",\n"
+                    + "  \"domains\":[\"rd\"],\n"
+                    + "  \"database\":\"rd_field_local.db\",\n"
+                    + "  \"evidenceRoot\":\"evidence/\"\n"
+                    + "}\n");
+            if (!dbFile.isFile()) throw new IOException("No existe la base local RD");
+            putFile(zip, "rd_field_local.db", dbFile);
+            addTree(zip, evidenceRoot, evidenceRoot);
+        }
+        return archive;
+    }
+
+    private static void addTree(ZipOutputStream zip, File root, File current) throws IOException {
+        if (!current.isDirectory()) return;
+        File[] files = current.listFiles();
+        if (files == null) return;
+        for (File file : files) {
+            if (file.isDirectory()) addTree(zip, root, file);
+            else if (file.isFile()) {
+                String relative = root.toURI().relativize(file.toURI()).getPath();
+                if (!relative.isEmpty()) putFile(zip, "evidence/" + relative, file);
+            }
+        }
     }
 
     private static String eventJson(RdFieldDb.EventRow event, String fallbackId) {

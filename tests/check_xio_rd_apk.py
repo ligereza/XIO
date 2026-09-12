@@ -22,6 +22,8 @@ def main() -> None:
     assert 'Color.parseColor(value.trim())' in source
     assert 'database.insertCapture(sample.id, capture);' in source
     assert 'database.insertCapture(engine.snapshot().id, pendingCapture);' in source
+    assert 'RdFieldExporter.exportLocalBackup(this)' in source
+    assert 'RESPALDAR RD ANTES DE ACTUALIZAR' in source
     assert 'database.deleteCapture(engine.snapshot().id, pendingCapture.id);' in source
     assert 'reconcileOrphanCaptureFiles();' in source
     assert 'for (RdFieldDb.SampleRow local : database.recentSamples())' in source

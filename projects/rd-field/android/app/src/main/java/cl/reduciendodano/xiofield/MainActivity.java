@@ -876,6 +876,7 @@ public final class MainActivity extends AppCompatActivity {
         }
         Button back = actionButton("←  CORREGIR", SURFACE, TEAL); content.addView(back, new LinearLayout.LayoutParams(-1, dp(42))); back.setOnClickListener(view -> { engine.transitionTo(SampleSession.Phase.REVIEW); render(); });
         Button export = actionButton("⇩  EXPORTAR", TEAL, BG); content.addView(export, new LinearLayout.LayoutParams(-1, dp(46))); export.setOnClickListener(view -> exportSample());
+        Button backup = actionButton("⇩  RESPALDAR RD ANTES DE ACTUALIZAR", SURFACE_RAISED, AMBER); content.addView(backup, new LinearLayout.LayoutParams(-1, dp(46))); backup.setOnClickListener(view -> backupLocalData());
     }
 
     private void addMoldRecognitionCard(SampleSession sample) {
@@ -1172,6 +1173,20 @@ public final class MainActivity extends AppCompatActivity {
             startActivity(Intent.createChooser(share, "Compartir registro XIO"));
         } catch (IOException error) {
             Toast.makeText(this, "No se pudo preparar la exportación", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void backupLocalData() {
+        try {
+            File archive = RdFieldExporter.exportLocalBackup(this);
+            Uri uri = FileProvider.getUriForFile(this, "cl.reduciendodano.xiofield.files", archive);
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType("application/zip");
+            share.putExtra(Intent.EXTRA_STREAM, uri);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(share, "Guardar respaldo completo XIO-RD"));
+        } catch (IOException error) {
+            Toast.makeText(this, "No se pudo preparar el respaldo RD", Toast.LENGTH_LONG).show();
         }
     }
 
