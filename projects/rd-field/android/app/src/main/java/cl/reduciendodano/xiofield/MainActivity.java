@@ -346,7 +346,8 @@ public final class MainActivity extends AppCompatActivity {
                 ? "HISTORIA HOST RD · CONSULTANDO…"
                 : remoteSamplesFailed
                 ? "HISTORIA HOST RD · NO DISPONIBLE"
-                : "HISTORIA HOST RD · " + remoteSamples.size() + " MUESTRA(S)";
+                : "HISTORIA HOST RD · " + remoteSamples.size() + " MUESTRA(S)"
+                + (remoteDemoCount() == 0 ? "" : " · " + remoteDemoCount() + " DEMO");
         content.addView(sectionLabel(remoteHistoryLabel));
         if (remoteSamples.isEmpty()) {
             String historyMessage = remoteSamplesEventRef.isEmpty()
@@ -381,7 +382,9 @@ public final class MainActivity extends AppCompatActivity {
         String mark = remoteText(row, "logoOrMark");
         JSONArray captures = row.optJSONArray("captures");
         JSONArray tests = row.optJSONArray("tests");
-        item.addView(text("○  " + code + "  ·  " + substance, 15, TEXT));
+        boolean demo = isRemoteDemo(row);
+        item.addView(text((demo ? "◇ DEMO  " : "○  ") + code + "  ·  " + substance, 15, TEXT));
+        if (demo) item.addView(body("registro sintético de demostración; no evidencia de terreno"));
         item.addView(body(format + "  ·  color " + (color.isEmpty() ? "sin registro" : color)));
         if (!mold.isEmpty()) item.addView(body("molde/diseño: " + mold));
         if (!mark.isEmpty()) item.addView(body("marca: " + mark));
@@ -389,6 +392,20 @@ public final class MainActivity extends AppCompatActivity {
                 + "  ·  tests " + (tests == null ? 0 : tests.length())
                 + "  ·  " + row.optString("date", "fecha sin registro")));
         content.addView(item, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    private int remoteDemoCount() {
+        int count = 0;
+        for (JSONObject row : remoteSamples) if (isRemoteDemo(row)) count++;
+        return count;
+    }
+
+    private boolean isRemoteDemo(JSONObject row) {
+        String code = row == null ? "" : row.optString("sampleCode", "");
+        String origin = row == null ? "" : row.optString("eventOrigin", "");
+        return code.toUpperCase(Locale.ROOT).startsWith("XIO-DEMO")
+                || "demo".equalsIgnoreCase(origin)
+                || "synthetic".equalsIgnoreCase(origin);
     }
 
     private String remoteText(JSONObject row, String key) {
