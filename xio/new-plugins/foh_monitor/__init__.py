@@ -431,7 +431,7 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/raider", self._api_raider, methods=["GET"])
         self.register_route("/panel", self._api_panel, methods=["GET"])
         self.register_route("/registro", self._api_registro, methods=["GET"])
-        self.register_route("/resumen", self._api_resumen, methods=["GET"])
+        self.register_route("/resumen", self._api_summary, methods=["GET"])
         self.register_route("/context", self._api_context_page, methods=["GET"])
         self.register_route("/context/data", self._api_context_get, methods=["GET"])
         self.register_route("/context", self._api_context_post, methods=["POST"])
@@ -1251,7 +1251,7 @@ class FohMonitorPlugin(PluginBase):
         return jsonify({"ok": True, "domain": "vj_foh", "source": "xio_foh_apk",
                         "eventKey": event_key or (self._foh_context_current or {}).get("eventKey")})
 
-    def _api_resumen(self):
+    def _api_summary(self):
         """Return a read-only summary of persisted FOH evidence for one event."""
         from flask import jsonify, request, send_file
         event_key = str(request.args.get("eventKey") or "").strip()
