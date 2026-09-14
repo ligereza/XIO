@@ -4,7 +4,11 @@ set -euo pipefail
 # MAK/host launcher. The phone launcher is run_server.sh; this one makes the
 # host relationship explicit instead of silently creating an empty RD DB.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-FLUJO_ROOT="${FLUJO_ROOT:-/home/mak/flujo}"
+# The standalone FLUJO checkout does not carry local SQLite files.  On the
+# MAK installation the single canonical projection is owned by the parent
+# host checkout, next to both repos.  Operators may override it explicitly.
+MAK_ROOT="${MAK_ROOT:-$(cd "$ROOT/.." && pwd)}"
+MAK_RD_DB="${MAK_RD_DB:-$MAK_ROOT/data/rd.db}"
 # The MAK host is the selectable RD endpoint for field phones. Bind the
 # private LAN by default; operators can still override this explicitly for a
 # loopback-only deployment.
@@ -13,7 +17,7 @@ export XIO_PORT="${XIO_PORT:-5000}"
 export XIO_HOST_DOMAIN="${XIO_HOST_DOMAIN:-rd}"
 export XIO_DATA_DIR="${XIO_DATA_DIR:-$ROOT/data}"
 export PLUGINS_DIR="${PLUGINS_DIR:-$ROOT/xio/new-plugins}"
-export XIO_RD_DB="${XIO_RD_DB:-$FLUJO_ROOT/data/rd.db}"
+export XIO_RD_DB="${XIO_RD_DB:-$MAK_RD_DB}"
 export XIO_RD_PERSIST="${XIO_RD_PERSIST:-$ROOT/data/rd_field}"
 export XIO_RD_EVIDENCE="${XIO_RD_EVIDENCE:-$ROOT/data/rd_evidence}"
 export XIO_FOH_LOG_DIR="${XIO_FOH_LOG_DIR:-$ROOT/data/foh_logs}"

@@ -26,20 +26,22 @@ submit a `pending_review` candidate with photo hashes, views and extractor
 features, but only a host-side approval exposes it through `/catalog` to an
 APK matcher. Low-quality candidates remain pending or are retired.
 
-Before a field runtime is started, stage a reviewed session snapshot of the
-canonical FLUJO RD database as `<XIO_RD_PERSIST>/rd.db`. The current authority
-is MAK `/home/mak/flujo/data/rd.db`; `C:\IA\flujo\data\rd.db` is only a
-Windows working copy and must not be used for field staging unless the
-read-only gate explicitly proves that it is current. Do not substitute the
-small `rd_datos.db` file or an empty database: this plugin fails closed when
-the host catalog/events are absent and never invents an event. The snapshot
-becomes the host-owned field database for that offline session; its samples
-must be reconciled back through the existing RD workflow after the event.
+Before a field runtime is started, point it at the reviewed canonical MAK host
+projection (or stage a reviewed session snapshot as `<XIO_RD_PERSIST>/rd.db`).
+In the current installation that authority is `/home/mak/data/rd.db`; the
+standalone FLUJO checkout intentionally does not contain a SQLite file. A
+Windows checkout such as `C:\IA\flujo\data\rd.db` is only a working copy and
+must not be used for field staging unless the read-only gate proves it current.
+Do not substitute the small `rd_datos.db` file or an empty database: this
+plugin fails closed when the host catalog/events are absent and never invents
+an event. The snapshot becomes the host-owned field database for that offline
+session; its samples must be reconciled back through the existing RD workflow
+after the event.
 
 Read-only preflight from the XIO repository root:
 
 ```text
-python tests/check_xio_field_staging.py --rd-db /home/mak/flujo/data/rd.db
+python tests/check_xio_field_staging.py --rd-db /home/mak/data/rd.db
 ```
 
 Runtime paths can be supplied with:
