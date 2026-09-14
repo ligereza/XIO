@@ -9,7 +9,10 @@ su inventario.
 
 - La rama de integración operativa es `integration/xio-field-20260911`.
 - RD y FOH/ISKVW son namespaces/plugins dentro de esa rama, no ramas Git
-  separadas: `rd_field` y `foh_monitor` comparten el listener HTTP de XIO.
+  separadas: `rd_field` y `foh_monitor` comparten el código y el listener base,
+  pero el launcher Termux selecciona un dominio activo por vez. `rd` carga
+  `rd_field` y mantiene FOH en cuarentena; `foh` hace lo inverso. La ruta
+  actual de show usa RD en `:5000` y la APK FOH en `:5100`.
 - `main` y las ramas `codex/*` son candidatos o snapshots hasta que una
   revisión demuestre un consumidor completo; no se mezclan automáticamente.
 - El repositorio tiene autoridad sobre el runtime móvil, sus plugins y sus

@@ -15,6 +15,13 @@ send or receive show-control traffic when installed, enabled and authorized.
 Repository code is not runtime proof. Use [CAPACIDADES.md](CAPACIDADES.md) as
 the status matrix before a show.
 
+The Termux launcher selects one host domain at a time. Its current default is
+`XIO_HOST_DOMAIN=rd`: the Python host loads `rd_field` and quarantines the
+Python `foh_monitor` plugin. A Python FOH host must be started explicitly with
+`XIO_HOST_DOMAIN=foh`; the current Xiaomi show path keeps RD on `:5000` and
+uses the native FOH APK on `:5100`. These are deployment modes, not Git
+branches, and they must not be reported as simultaneous plugin ownership.
+
 ## Index
 
 1. [Variables](#1-variables) -- IPs/ports, verify per show

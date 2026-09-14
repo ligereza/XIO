@@ -8,7 +8,7 @@ isolation) NEVER coexist on the same network. Code-execution services are archit
 
 ---
 
-## CURRENT FIELD SURFACE CONTRACT — 2026-09-11
+## CURRENT FIELD SURFACE CONTRACT — 2026-09-14
 
 This is the current contract for the two field surfaces. It takes precedence over old IP examples,
 old APK notes, and historical deployment notes elsewhere in the repository.
@@ -18,14 +18,17 @@ old APK notes, and historical deployment notes elsewhere in the repository.
 | Surface | Host and listener | Client form | Persistence and identity |
 |---|---|---|---|
 | FLUJO Hub | MAK `:8765` on the studio LAN | Browser / existing FLUJO UI | Existing FLUJO Hub state; no new tabs are added for XIO |
-| XIO field host | Xiaomi (currently Termux) `:5000` | One HTTP server with two namespaced web surfaces | State belongs to the device running XIO; the event key is supplied by the host catalog |
-| XIO-RD | `:5000` under `rd_field` | Browser/PWA from any hotspot client; the optional RD APK is only a client | Exact `eventRef`; host-owned RD field data; no implicit event creation |
-| XIO-FOH | `:5000` under `foh_monitor` | Browser/PWA from any hotspot client; no APK required | Exact `eventKey`; host-owned FOH/VJ context and evidence |
+| XIO field host | Xiaomi (currently Termux) `:5000` | One HTTP server with one selected host domain | State belongs to the device running XIO; the event key is supplied by the selected host catalog |
+| XIO-RD | `:5000` under `rd_field` when `XIO_HOST_DOMAIN=rd` (the current launcher default) | Browser/PWA from any hotspot client; the optional RD APK is only a client | Exact `eventRef`; host-owned RD field data; no implicit event creation |
+| XIO-FOH | Python `:5000` under `foh_monitor` when `XIO_HOST_DOMAIN=foh`, or native FOH APK `:5100` | Browser/PWA for the Python host; native APK for the current Termux show path | Exact `eventKey`; host-owned FOH/VJ context and evidence |
 
 There are therefore two separated XIO products, but not four APKs or four HTTP servers. RD and FOH
-share the XIO listener and host storage while remaining separate namespaces and workflows. FOH signal
-inputs such as Art-Net `:6454`, sACN `:5568`, OSC/timecode `:7000`, Chataigne/show-kit UDP, and the
-existing Mapping LED tool are tools or protocols, not extra XIO HTTP services.
+share the XIO repository and base runtime while remaining separate namespaces and workflows. The
+Termux launcher selects one Python host domain at a time: `rd` loads `rd_field` and quarantines the
+Python FOH plugin; `foh` does the inverse. The current show path keeps RD on the Python host and
+uses the native FOH APK on `:5100`. FOH signal inputs such as Art-Net `:6454`, sACN `:5568`,
+OSC/timecode `:7000`, Chataigne/show-kit UDP, and the existing Mapping LED tool are protocols or
+tools, not extra XIO HTTP services.
 
 `127.0.0.1:8765` is a local/FLUJO address only. It must never be used as the hotspot URL for RD or
 FOH. A hotspot client must use the Xiaomi's current `wlan1` address and port `5000`.
@@ -70,7 +73,8 @@ cable between them -- a two-machine private link, no third party on the wire.
 
 ### Services reachable
 - `plataforma:8900` (Hub humano, backups, resource guard, `/research/` and `/codex/`)
-- `research:8890` and `codex:8891` are loopback-only service ports
+- Research and Codex are private Unix-socket consumers behind the Hub; they
+  have no active TCP listener
 - `xio:5000` (phone server, with MAK on the LAN for testing)
 
 ### Trust model
