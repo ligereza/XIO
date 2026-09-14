@@ -18,6 +18,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import urllib.error
@@ -25,9 +26,7 @@ import urllib.request
 from pathlib import Path
 
 
-DEFAULT_ADB = os.environ.get(
-    "ADB_PATH", r"C:\XPEDR\XiaomiServer\platform-tools\adb.exe"
-)
+DEFAULT_ADB = os.environ.get("ADB_PATH") or shutil.which("adb") or r"C:\XPEDR\XiaomiServer\platform-tools\adb.exe"
 DEFAULT_SERIAL = os.environ.get("XIO_DEVICE_SERIAL", "8299e66f")
 PHONE_ROOT = "/sdcard/xio_termux"
 REQUIRED_FILES = (
