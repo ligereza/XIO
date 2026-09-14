@@ -17,6 +17,7 @@ xio/**/*.log
 xio/**/.pc_watch.pid
 xio/**/ntfy_topic.txt
 xio/**/.rish_out
+/data/
 
 # Redistribuibles y builds locales
 xio/actual/platform-tools/
@@ -44,3 +45,5 @@ projects/foh-monitor/android/local.properties
 projects/rd-field/bridge/*.log
 projects/rd-field/bridge/*.err
 projects/rd-field/bridge/xiaomi_sync.png
+xio/new-plugins/charge_control/config.json
+xio/new-plugins/foh_monitor/config.json

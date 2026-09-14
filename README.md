@@ -54,10 +54,10 @@ plana, y pytest las importa como parte del paquete `showcontrol`, cuyo
 for t in xio/new-plugins/showcontrol/test_*.py; do python3 "$t" || break; done
 ```
 
-Medido sobre Linux con `requirements-dev.txt` instalado: 82 pruebas, 82 pasan
-—4 en `tests/test_xio_superficie.py`, 9 en `tests/test_xio_puente_staged.py` y
-69 en las diez suites de `showcontrol`—. Ninguna toca el teléfono, la red ni
-`adb`.
+Medido sobre Linux con `requirements-dev.txt` instalado: `python -m pytest -q`
+ejecuta 37 pruebas y todas pasan; las diez suites directas de `showcontrol`
+ejecutan otras 69 y todas pasan. Son 106 pruebas locales en total. Ninguna
+toca el teléfono, la red ni `adb`.
 
 Este repositorio fija su propio `pytest.ini`. Sin él, pytest sube por encima
 del checkout, adopta la configuración de un directorio padre y deselecciona
@@ -77,8 +77,9 @@ antes de desplegar.
 
 ## Procedencia
 
-Snapshot tomado desde `ligereza/vibecodeine` en la revisión local
-`f588ecf8`. Los paths XIO seleccionados coincidían con `origin/main` al
-extraerlos; el resto del proyecto original no se copia aquí.
+Este checkout autónomo fue extraído desde VIBECODEINE y se trabaja en la rama
+`integration/xio-field-20260911`, que contiene las superficies actuales
+`rd_field` y `foh_monitor`. `main` y las ramas `codex/*` se conservan como
+referencias o candidatos; no representan automáticamente el runtime activo.
 
 Licencia: MIT, ver `LICENSE`.

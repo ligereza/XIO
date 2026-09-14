@@ -1,27 +1,45 @@
-# XIO agent contract
+# Contrato de entrada — XIO
 
-Aplica el contrato de `C:\IA\AGENTS.md`. Luna/Codex es el único director.
+XIO es un repositorio autónomo y externo a MAK: su checkout canónico local es
+`/home/mak/XIO`. No usar la carpeta `/home/mak/xio` para modificar XIO; esa
+carpeta pertenece a VIBECODEINE y queda congelada como legado hasta completar
+su inventario.
 
-Antes de cambiar XIO: revisar sesiones y handoffs por fecha descendente, verificar el estado real del Xiaomi/Windows y luego revisar Git. README, planes y documentación antigua sirven como evidencia histórica, no como autoridad si contradicen el código o el dispositivo actual.
+## Topología vigente
 
-Preservar fuentes y datos: no borrar, mover, resetear ni sobrescribir el repositorio; no instalar nada en el Xiaomi sin autorización explícita. Reutilizar primero herramientas y archivos existentes, especialmente `C:\XPEDR\XiaomiServer\platform-tools`.
+- La rama de integración operativa es `integration/xio-field-20260911`.
+- RD y FOH/ISKVW son namespaces/plugins dentro de esa rama, no ramas Git
+  separadas: `rd_field` y `foh_monitor` comparten el listener HTTP de XIO.
+- `main` y las ramas `codex/*` son candidatos o snapshots hasta que una
+  revisión demuestre un consumidor completo; no se mezclan automáticamente.
+- El repositorio tiene autoridad sobre el runtime móvil, sus plugins y sus
+  contratos de captura. MAK/FLUJO tienen autoridad sobre sus propios árboles.
 
-La app de campo separa propuesta visual de corrección humana y colorimetría presuntiva de cualquier afirmación química. Los agentes deben responder en español claro cuando entreguen resultados humanos y conservar los acentos de los datos.
+## Fronteras de datos
 
-## FOH y VJ (2026-09-11)
+- XIO-RD usa `eventRef` y la proyección RD canónica de FLUJO/MAK; no inventa
+  eventos por una referencia desconocida ni comparte datos de muestras con FOH.
+- XIO-FOH/ISKVW usa `eventKey` y el contexto VJ leído desde FLUJO; no acepta ni
+  escribe `eventRef` de RD.
+- La SQLite del host es `/home/mak/data/rd.db`. Los datos runtime del teléfono
+  y las configuraciones locales viven fuera de Git; no versionar snapshots,
+  logs, caches ni credenciales.
+- `foh_monitor` es un monitor pasivo; `showcontrol` es la superficie activa
+  separada y mantiene sus propios gates, token y rutas de riesgo.
 
-- La APK nativa de XIO-FOH se construye como package independiente
-  `cl.xio.foh`; mientras no se autorice su instalación, el Xiaomi solo tiene
-  `cl.reduciendodano.xiofield` (XIO RD · Mesa de campo) y
-  `com.xio.hotspotboot`. No confundir el tamaño del APK RD con el del FOH ni
-  con el almacenamiento local de cada app.
-- XIO RD y FOH son superficies web del mismo servidor `:5000`. RAIDER es una
-  herramienta compartida en `/raider`; la APK RD sólo la abre como cliente en
-  `127.0.0.1:5000`, no es el servidor ni una segunda APK.
-- FOH tiene dos piezas: `xio/new-plugins/foh_monitor` escucha en modo servidor
-  cuando corre en PC, y la APK `cl.xio.foh` escucha activamente en Android y
-  entrega registros por `/ingest`. En Termux el modo `auto` evita el conflicto
-  de puertos y deja al APK como dueño de Art-Net, sACN y OSC/timecode.
-  `showcontrol` es la superficie activa separada, con token y rutas de riesgo.
-- Si se modelan zonas, ubicar `xio-rd-01` en `RD_FIELD`, `xio-foh-01` en `FOH_VJ` y un router como `NETWORK_CORE` lógico. Un solo escritor activo por salida; varios monitores pueden observar y deduplicar por `event_id`/`raw_hash`.
-- No introducir señales RD identificables en VJ/LUCIDA: sólo estados operativos redactados. Usar el contrato fechado en `C:\IA\IA ORDENADA\PROYECTOS\90_HERRAMIENTAS_PUENTES\model-routing` como diseño, no como prueba de despliegue.
+## Antes de cambiar
+
+1. Leer `README.md`, `FACES.md` y `RUNBOOK.md`; el código y el dispositivo
+   actual tienen prioridad sobre planes históricos.
+2. Ejecutar `git status --short --branch` y conservar cambios locales. No usar
+   `reset --hard`, `checkout`, borrar archivos ni sobrescribir datos sin una
+   operación reversible y una autoridad explícita.
+3. Validar primero off-device; no instalar APKs, abrir controles de show ni
+   cambiar el hotspot por efecto de una prueba local.
+4. Ejecutar `python -m pytest -q` y las suites directas de `showcontrol` antes
+   de declarar una superficie lista. La prueba local no demuestra teléfono,
+   red, ADB ni reconciliación post-show.
+
+Responde en español claro y conserva `source_ref`, `eventRef`, `eventKey`,
+`raw_hash` y los estados de revisión sin convertir una observación en una
+afirmación química, artística o de aprendizaje.
