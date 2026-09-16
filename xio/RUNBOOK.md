@@ -424,14 +424,16 @@ the optional `XIO_DENY_IPS` (section 5), launches `server.py` (log:
 
 For XIO-RD, stage a reviewed copy of the existing canonical FLUJO database at
 `/sdcard/xio_termux/rd_field/rd.db` before the field session. The current MAK
-source is `/home/mak/flujo/data/rd.db`; the small `rd_datos.db` is not a valid
-bootstrap for this plugin. If the snapshot is absent, `/rd_field/info` reports
-not-ready and `/rd_field/bootstrap`/`sync` fail closed; no event is invented.
-The field database is the host-owned offline session copy and is reconciled
-through the existing RD workflow after the event. The launcher only reports
-this precondition; it never creates or overwrites the database.
+source is `/home/mak/data/rd.db` (the canonical projection lives outside the
+FLUJO checkout; see `FLUJO_RD_DB` in FLUJO's own docs); the small
+`rd_datos.db` is not a valid bootstrap for this plugin. If the snapshot is
+absent, `/rd_field/info` reports not-ready and `/rd_field/bootstrap`/`sync`
+fail closed; no event is invented. The field database is the host-owned
+offline session copy and is reconciled through the existing RD workflow after
+the event. The launcher only reports this precondition; it never creates or
+overwrites the database.
 Before any phone write, run the read-only gate from the repository root:
-`python tests/check_xio_field_staging.py --rd-db /home/mak/flujo/data/rd.db`.
+`python tests/check_xio_field_staging.py --rd-db /home/mak/data/rd.db`.
 It must report `FIELD_STAGING=PASS`; a merely existing but stale/incomplete
 `rd.db` is a NO-GO.
 
