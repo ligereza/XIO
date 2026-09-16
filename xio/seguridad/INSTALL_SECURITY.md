@@ -2,40 +2,29 @@
 
 # Instalación - Plugin Guardian Security System
 
-## Quick Start
+## Estado: ya integrado
+
+El sistema de seguridad NO se instala desde un ZIP: ya está integrado en el
+repositorio y se despliega con el runtime normal.
+
+- Plugin: `xio/new-plugins/plugin_guardian/` (`__init__.py`, `security_hook.py`,
+  `manifest.json`, `README.md`). Es la copia canónica y la que
+  `run_server.sh` lleva al teléfono por overlay a `$HOME/xioplugins/`.
+- Framework: los ganchos `safe_shell()`, `check_permission()`,
+  `set_security_hook()`, `set_audit_logger()` y `log_plugin_event()` viven en
+  `xio/new/plugins/base.py`, que es el `plugins.base` que importa `server.py`.
+
+No queda un payload de instalación aparte. La copia duplicada que vivía en
+`xio/seguridad/pluginseguridad/` se retiró: su `plugin_guardian/` ya había sido
+archivado el 2026-07-18 y el resto era una versión estancada del framework.
+
+Para desplegar, el procedimiento es el del runbook:
 
 ```bash
-# 1. Extraer el ZIP
-unzip plugin-guardian-security.zip
-
-# 2. Los archivos se extraen directamente a su ubicación correcta:
-#    plugins/plugin_guardian/__init__.py
-#    plugins/plugin_guardian/security_hook.py
-#    plugins/plugin_guardian/manifest.json
-#    plugins/plugin_guardian/README.md
-#    plugins/base.py              (modificado - reemplaza el existente)
-#    plugins/__init__.py          (modificado - reemplaza el existente)
-
-# 3. Reiniciar el servidor
-python server.py
-
-# 4. Verificar que está activo
-curl http://localhost:5000/api/plugins/plugin_guardian/status
+sh /sdcard/xio_termux/run_server.sh
 ```
 
-## Archivos modificados
-
-### plugins/base.py
-- Agregado `safe_shell()` al PluginContext - intercepta comandos ADB
-- Agregado `check_permission()` - verifica permisos de plugins
-- Agregado `set_security_hook()` - registration del guardian
-- Agregado `set_audit_logger()` - registration del logger
-- Agregado `log_plugin_event()` - logging de eventos
-
-### plugins/__init__.py (PluginRegistry)
-- Agregada validación de manifiestos al cargar plugins
-- Verifica que los permisos declarados sean válidos
-- Integración con PermissionEnforcer
+Este documento conserva la verificación, el testing y el troubleshooting.
 
 ## Verificación
 
@@ -96,22 +85,22 @@ curl -X POST http://localhost:5000/api/plugins/plugin_guardian/toggle-review-mod
 
 ### Plugin Guardian no aparece en /api/plugins
 
-**Causa**: El directorio plugins/plugin_guardian/ no existe o está mal ubicado
+**Causa**: el overlay no llegó al directorio que el registro escanea
+(`PLUGINS_DIR=$HOME/xioplugins`).
 
 **Solución**:
 ```bash
-ls -la plugins/plugin_guardian/
+ls -la $HOME/xioplugins/plugin_guardian/
 # Debe mostrar: __init__.py, security_hook.py, manifest.json, README.md
 ```
 
 ### Error al cargar el módulo
 
-**Causa**: Falta security_hook.py o está corrupto
+**Causa**: falta `security_hook.py` o quedó a medio copiar.
 
-**Solución**:
+**Solución**: volver a correr el overlay desde la fuente del repositorio.
 ```bash
-# Re-extraer del ZIP
-unzip -o plugin-guardian-security.zip plugins/plugin_guardian/security_hook.py
+sh /sdcard/xio_termux/run_server.sh
 ```
 
 ### Comandos legítimos bloqueados
@@ -179,11 +168,8 @@ done
 # Backup de logs existentes
 cp -r data/plugin_guardian/logs/ data/plugin_guardian/logs_backup_$(date +%Y%m%d)/
 
-# Extraer nueva versión
-unzip -o plugin-guardian-security.zip
-
-# Reiniciar servidor
-python server.py
+# Redesplegar desde el repositorio (reemplaza runtime, conserva estado durable)
+sh /sdcard/xio_termux/run_server.sh
 ```
 
 ## Soporte
@@ -195,6 +181,5 @@ Para problemas o preguntas:
 
 ---
 
-**Instalación completa**: ~2 minutos
-**Archivos**: 6 archivos (4 del plugin + 2 del framework modificados)
-**Tamaño**: ~17KB comprimido
+**Fuente canónica**: `xio/new-plugins/plugin_guardian/` + los ganchos en
+`xio/new/plugins/base.py`. API completa en el README del plugin.

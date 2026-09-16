@@ -2,7 +2,7 @@
 
 ## Activo disponible
 
-- Modelo: `models/efficientnet_lite0.tflite`
+- Modelo: `android/app/src/main/assets/efficientnet_lite0.tflite`
 - SHA-256: `6C7AB0A6E5DCBF38A8C33B960996A55A3B4300B36A018C4545801DE3A3C8BDE0`
 - Ejecución objetivo: Xiaomi Android, dentro de la aplicación local.
 - Red/API: no requerida durante la inferencia.
@@ -25,7 +25,7 @@ humana explícita.
 
 ## Código inicial
 
-El adaptador Android está en `android/src/main/java/com/xio/vision/`. Produce un
+El adaptador Android está en `android/app/src/main/java/com/xio/vision/`. Produce un
 `VisionProposal` con `eventId`, timestamp, etiquetas, puntuaciones y `proposalId`.
 La propuesta siempre queda marcada para revisión humana y no ejecuta acciones.
 
@@ -46,8 +46,9 @@ El proyecto Android está en `android/`. La demo hace lo siguiente:
 La primera pulsación solicita el permiso de cámara de Android de forma visible. XIO no
 lo concede por ADB ni captura imágenes en segundo plano.
 
-El modelo se copia a `android/app/src/main/assets/efficientnet_lite0.tflite`. La app no
-requiere red para inferir ni envía las imágenes. La persistencia local no debe tratarse
+El modelo viaja en los assets de la app, que es la única copia del archivo en el
+repositorio: el build lo empaqueta desde ahí y `deploy_vision.ps1` valida esa misma
+ruta. La app no requiere red para inferir ni envía las imágenes. La persistencia local no debe tratarse
 como base de datos oficial hasta definir retención, cifrado, exportación y revisión de
 privacidad con RD.
 

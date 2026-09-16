@@ -238,12 +238,11 @@ curl http://localhost:5000/api/plugins/plugin_guardian/blocked-commands
 curl -X POST http://localhost:5000/api/plugins/plugin_guardian/toggle-review-mode \
   -H "Content-Type: application/json" -d '{"enabled": true}'
 ```
-RESOLVED 2026-07-18: `plugin_guardian` used to exist as two byte-identical
-copies. Canonical copy = `xio/new-plugins/plugin_guardian/` (the path
-`run_server.sh` actually deploys: `PLUGINS_DIR=$HOME/xioplugins` <-
-`/sdcard/xio_termux/new-plugins`). The stale duplicate at
-`xio/seguridad/pluginseguridad/plugin_guardian/` was archived via git mv to
-`_archive/legacy_20260717_2015/xio_seguridad_plugin_guardian/`.
+Canonical copy = `xio/new-plugins/plugin_guardian/`, the path `run_server.sh`
+actually deploys (`PLUGINS_DIR=$HOME/xioplugins` <-
+`/sdcard/xio_termux/new-plugins`). There is no second copy: the duplicate
+package under `xio/seguridad/pluginseguridad/` was retired, and what remains
+there is `INSTALL_SECURITY.md` with the verify/troubleshoot steps.
 
 **Layer D -- showcontrol XIO_SHOWCONTROL_TOKEN (public-hotspot shows):** the
 showcontrol plugin (OSC/Art-Net/sACN sender, see
@@ -437,14 +436,13 @@ Before any phone write, run the read-only gate from the repository root:
 It must report `FIELD_STAGING=PASS`; a merely existing but stale/incomplete
 `rd.db` is a NO-GO.
 
-CONTRADICTION FLAGGED: `xio/new/README.md` documents a SINGLE `plugins/`
-directory (dashboard architecture diagram + "Estructura del Proyecto"), and
-`xio/new/plugins/` on disk only holds `_template`, `battery_care`,
-`example_tool` (3 dirs). The ACTUAL deploy path is split: server code from
-`xio/new/` and the live plugin library from the SEPARATE `xio/new-plugins/`
-directory, wired via `PLUGINS_DIR=$HOME/xioplugins` in `run_server.sh`. The
-runtime copy is updated by overlay, so a focused field package does not remove
-unrelated plugins. Treat `xio/new/plugins/` as stale/legacy, not what ships.
+The deploy path is split and `xio/new/README.md` now says so: server code and
+the plugin FRAMEWORK (`plugins/base.py`, `plugins/__init__.py`) come from
+`xio/new/`, while the live plugin LIBRARY comes from the separate
+`xio/new-plugins/`, wired via `PLUGINS_DIR=$HOME/xioplugins`. `xio/new/plugins/`
+also holds `_template`, `battery_care` and `example_tool` as legacy fallback;
+that is not what ships. The runtime copy is updated by overlay, so a focused
+field package does not remove unrelated plugins.
 
 **Quick local dev run (off-device, PC only, not the show path):**
 ```bash

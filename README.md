@@ -6,19 +6,25 @@ automatización, documentación, ideas y proyectos de instalación.
 
 ## Qué contiene
 
-- `xio/new/`: runtime activo del servidor Flask y su dashboard web.
-- `xio/new-plugins/`: plugins vivos, plantillas y pruebas off-device.
+- `xio/new/`: runtime activo del servidor Flask, su dashboard web y el plano
+  público RD NODO (`rd_nodo_*`).
+- `xio/new-plugins/`: los 33 plugins vivos, entre ellos las dos superficies de
+  campo `rd_field` (RD) y `foh_monitor` (FOH/ISKVW), más `_template`.
 - `xio/show_kit/`: control de cues, timecode, Art-Net/OSC y materiales de los
   shows DREF CHOCOLATE y Festival Sentir.
 - `xio/hotspot_boot_service/`: servicio Android de recuperación/arranque.
-- `xio/seguridad/`: guardianes y notas de seguridad.
+- `xio/seguridad/`: notas de instalación y verificación del plugin_guardian.
+- `xio/vision/`: demo Android de inferencia offline; propone, nunca decide.
 - `xio/actual/`: primera implementación del controlador ADB, conservada como
   referencia histórica.
+- `projects/rd-field/` y `projects/foh-monitor/`: las APK clientes de cada
+  superficie, con su propio paquete y menú.
 - `cultura/`: mapa conceptual XIO, handoff técnico y puente MAK↔XIO.
 - `projects/cultura/MAPA_GENERATIVO.md`: contexto del XIO dentro del mapa de
   proyectos e ideas de Cauce.
-- `tests/test_xio_superficie.py` y `tests/test_xio_puente_staged.py`:
-  regresiones sobre la superficie de seguridad y el puente staged.
+- `tests/`: 8 suites de pytest y 9 gates `check_xio_*.py` que se corren con el
+  intérprete y verifican contratos (staging de campo, runtime del teléfono,
+  puente RD, contexto FOH, host dinámico y las dos APK).
 
 ## Arranque rápido
 
@@ -81,5 +87,13 @@ Este checkout autónomo fue extraído desde VIBECODEINE y se trabaja en la rama
 `integration/xio-field-20260911`, que contiene las superficies actuales
 `rd_field` y `foh_monitor`. `main` y las ramas `codex/*` se conservan como
 referencias o candidatos; no representan automáticamente el runtime activo.
+
+Tres de esas ramas (`codex/xio-transport`, `codex/xio-interface-layer`,
+`codex/xio-lucida-input-contract`) traen un paquete `XIO_LAYER/` completo
+—transporte, sesiones peer, registro de fuentes, puente Lucida— con sus
+propias pruebas. Nada de eso está en la rama activa ni en `main`, y por eso
+tampoco aparece en `xio/CAPACIDADES.md`: medir sólo la rama activa mide una
+fracción del repositorio. Cuál de esas ramas es la fuente única de esa capa
+sigue sin decidirse.
 
 Licencia: MIT, ver `LICENSE`.

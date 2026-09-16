@@ -16,10 +16,25 @@ import time
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, "/home/mak/research")
-from research_lib import load_env, ntfy_publish  # noqa: E402
+_RESEARCH_DIR = os.environ.get("MAK_RESEARCH_DIR", "/home/mak/research")
+if os.path.isdir(_RESEARCH_DIR) and _RESEARCH_DIR not in sys.path:
+    sys.path.insert(0, _RESEARCH_DIR)
+try:
+    from research_lib import load_env, ntfy_publish  # noqa: E402
+except ImportError:
+    # research_lib lives on the MAK box.  In any other clone the monitor must
+    # still run read-only instead of failing at import: it degrades to no
+    # session env and no push notification, and says so once.
+    print("[xio_puente] research_lib no disponible (%s); sin .env de sesion "
+          "ni alertas ntfy." % _RESEARCH_DIR, file=sys.stderr, flush=True)
 
-BASE_DIR = "/home/mak/xio_puente"
+    def load_env():
+        return None
+
+    def ntfy_publish(*_args, **_kwargs):
+        return None
+
+BASE_DIR = os.environ.get("XIO_PUENTE_DIR", "/home/mak/xio_puente")
 XIO_BASE = os.environ.get("XIO_BASE", "").strip().rstrip("/")
 RUTAS_LECTURA = ("/status", "/obs", "/battery/status", "/connectivity/status")
 HISTORIA = os.path.join(BASE_DIR, "historia.jsonl")
@@ -33,10 +48,10 @@ def _get(ruta):
     if not XIO_BASE:
         return 0, None
     url = XIO_BASE.rstrip("/") + ruta
+    # La red de XIO no usa tokens: la clave del hotspot es la frontera de
+    # acceso (ver xio/FACES.md y tests/test_xio_superficie.py).  Este monitor
+    # es GET-only y no manda credenciales.
     headers = {"User-Agent": "mak-xio-puente/1.0"}
-    token = os.environ.get("XIO_TOKEN")
-    if token:
-        headers["X-Token"] = token
     req = urllib.request.Request(url, headers=headers, method="GET")
     try:
         with urllib.request.urlopen(req, timeout=6) as r:

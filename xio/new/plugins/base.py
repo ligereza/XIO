@@ -93,8 +93,16 @@ class PluginBase(ABC):
         if self.config_path.exists():
             try:
                 self._config = json.loads(self.config_path.read_text())
-            except Exception:
+            except Exception as e:
+                # corrupt config must not crash the plugin, but silence here
+                # made persisted state vanish with zero trace (audit finding)
                 self._config = {}
+                try:
+                    self.context.logger.warning(
+                        "plugin %s: config.json unreadable, starting empty (%s)",
+                        self.plugin_id or self.__class__.__name__, e)
+                except Exception:
+                    pass
 
     def get_config(self, key: str, default: Any = None) -> Any:
         return self._config.get(key, default)

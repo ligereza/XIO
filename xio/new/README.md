@@ -77,7 +77,7 @@ contenido.
 │   ├── base.py                # PluginBase + PluginContext
 │   ├── _template/             # Template para nuevos plugins
 │   └── [legacy plugins]/      # Plugins retirados
-├── ../new-plugins/            # ← LIVE: Conjunto de 30 plugins en deploy
+├── ../new-plugins/            # ← LIVE: Conjunto de 33 plugins en deploy
 │   ├── plugin_guardian/
 │   ├── battery_care/
 │   └── [28 mas plugins]

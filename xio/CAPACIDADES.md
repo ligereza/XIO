@@ -1,6 +1,7 @@
 # XIO — capacidades, inventario y proyectos
 
-Inventario consolidado al 2026-08-28. Separa lo que existe en el repositorio, lo
+Inventario consolidado al 2026-08-28, con el bloque RD NODO/conectividad
+reverificado contra el árbol el 2026-09-16. Separa lo que existe en el repositorio, lo
 que el despliegue prepara y lo que está realmente instalado/verificado en el
 Xiaomi. Un README o manifest no demuestra una capacidad operativa.
 
@@ -72,10 +73,12 @@ xio/new/plugins/ y xio/new/requirements.txt.
   usa el modo RD NODO, que separa el servicio público y enlaza el controlador a
   localhost.
 
-## Los 32 plugins del conjunto vivo
+## Los 33 plugins del conjunto vivo
 
 Están en xio/new-plugins/ y tienen estructura descubrible por el registro. Son
 repo/deploy/cargables; no equivalen a instalación verificada en el Xiaomi.
+El directorio contiene además `_template/`, que es andamiaje para escribir un
+plugin nuevo y no se cuenta como uno.
 
 Versiones declaradas por los manifests: 1.0.0 en el conjunto general,
 showcontrol 1.8.0 y example_tool 0.1.0. foh_monitor no tiene manifest propio.
@@ -130,6 +133,7 @@ showcontrol 1.8.0 y example_tool 0.1.0. foh_monitor no tiene manifest propio.
 | example_tool | Plantilla de integración con extensiones Xiaomi externas. | Placeholder, no producto terminado. |
 | foh_monitor | Monitor pasivo UDP, OSC, Art-Net, sACN, timecode, batería, audio y logs. | Sin manifest propio; device: no verificado. |
 | hub | Sirve el hub estático de flujo desde el teléfono. | Device: no verificado. |
+| rd_field | Superficie RD de terreno: bootstrap host-gated, muestras, capturas y catálogo visual de moldes con estados de revisión. | Overlay de campo; el evento debe existir en el bootstrap del host; device: no verificado. |
 | showcontrol | OSC, Art-Net, sACN, cues, fades, timecode, fabric, discovery, automapping, telemetría y WoL. | Nodo activo; token/destinos deben verificarse. |
 
 ### Registro base
@@ -163,8 +167,8 @@ Flask, configuración, scheduler, safe_shell, permisos, logger y auditoría.
 | cultura/mak_xio_puente/staged/mak_link.py | Enlace staged MAK↔XIO. | Código y pruebas presentes. |
 | cultura/mak_xio_puente/staged/wake_mak.py | Wake/recovery staged de MAK. | Código y pruebas presentes. |
 | cultura/mak_plataforma/mak-xio.service | Unidad systemd user para el monitor. | Archivo presente; box no verificado. |
-| xio/radio_monitor.py | Radio celular Xiaomi + enlace Windows↔XIO + latencia/consumo. | Ausente en este repositorio; quedó en el monorepo de origen. |
-| xio/PLAN_CONECTIVIDAD_CLARO_2026.md | USB tethering → Windows/ICS/QoS → Ethernet → MAK y plan de evidencia. | Ausente en este repositorio; quedó en el monorepo de origen. |
+| xio/radio_monitor.py | Radio celular Xiaomi + enlace Windows↔XIO + latencia/consumo. | Repo; parsers cubiertos por `tests/test_radio_monitor.py`. Corre en Windows, no aplica dentro del teléfono. |
+| xio/PLAN_CONECTIVIDAD_CLARO_2026.md | USB tethering → Windows/ICS/QoS → Ethernet → MAK y plan de evidencia. | Repo; plan vigente, entregables sin ejecutar. |
 
 ## Show kit
 
@@ -192,23 +196,19 @@ Flask, configuración, scheduler, safe_shell, permisos, logger y auditoría.
 
 ## RD NODO — proyecto de Reducción de Daño
 
-**Ninguno de los siete componentes de esta sección está en este repositorio.**
-Viven en el monorepo de origen (`C:\IA\flujo`, ver `MATERIAL_ORIGEN.md`) y no
-fueron seleccionados en la extracción a XIO. Se conservan aquí como registro
-del diseño, no como inventario de lo que este repositorio puede operar: un
-`find` de cada nombre no devuelve nada, ni en `main` ni en las ramas
-`codex/xio-*`. La columna de estado describe lo que se sabía en el monorepo,
-que este repositorio no puede verificar ni ejecutar.
+Los siete componentes están en este repositorio y son versionados. La tabla
+describe lo que este checkout puede operar; sigue sin implicar despliegue ni
+verificación en el Xiaomi.
 
-| Componente | Función | Estado en el monorepo de origen |
+| Componente | Función | Estado |
 |---|---|---|
-| rd_nodo_public_server.py | Plano público independiente, sólo GET/HEAD, sin Flask/ADB/plugins/SQLite. | Ausente aquí. Allá: implementado; no desplegado. |
-| rd_nodo_build_pack.py | Exporta sólo catálogo reactivos desde rd.db en modo lectura. | Ausente aquí. Allá: ejecutado, 23 entradas, 4,2 KB. |
-| rd_nodo_admin.py | CLI local para estados de zonas y avisos aprobados. | Ausente aquí. Allá: implementado; no ejecutado en Termux. |
-| rd_nodo_start.sh | Inicia :8088 sólo con pack ready. | Ausente aquí. Allá: implementado; no verificado. |
-| rd_nodo_public_supervisor.sh | Recupera sólo el proceso público. | Ausente aquí. Allá: implementado; no verificado. |
-| RD_NODO_ARQUITECTURA_OPERATIVA.md | Capacidad, seguridad, DB, privacidad y operación. | Ausente aquí. Allá: vigente. |
-| rd_nodo_public/public_pack.json | Pack real desde C:/IA/flujo/data/rd.db. | Ausente aquí. Allá: pending_review; no se sirve hasta revisión y --publish. |
+| xio/new/rd_nodo_public_server.py | Plano público independiente, sólo GET/HEAD, sin Flask/ADB/plugins/SQLite. | Repo; cubierto por `tests/test_rd_nodo_backend.py`; no desplegado. |
+| xio/new/rd_nodo_build_pack.py | Exporta sólo catálogo reactivos desde rd.db en modo lectura. | Repo; cubierto por el mismo test. |
+| xio/new/rd_nodo_admin.py | CLI local para estados de zonas y avisos aprobados. | Repo; no ejecutado en Termux. |
+| xio/new/rd_nodo_start.sh | Inicia :8088 sólo con pack ready. | Repo; device: no verificado. |
+| xio/new/rd_nodo_public_supervisor.sh | Recupera sólo el proceso público. | Repo; device: no verificado. |
+| xio/RD_NODO_ARQUITECTURA_OPERATIVA.md | Capacidad, seguridad, DB, privacidad y operación. | Repo; vigente. |
+| xio/new/rd_nodo_public/public_pack.json | Pack generado desde una `rd.db` autorizada. | Repo; `publication_status=pending_review`, 23 reactivos; no se sirve hasta revisión y `--publish`. |
 
 Diseño:
 
