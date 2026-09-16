@@ -122,7 +122,11 @@ watcher above has a transport. `reboot_recover.sh` then sends an actionable ntfy
 DOWN, toca el hotspot en el telefono." No PIN on the phone -> one tap on the
 hotspot toggle fixes it (iPhone needs its OWN cellular data to receive this).
 
-**Close the gap for real -- AccessibilityService (source written, NOT built/tested):**
+**Close the gap for real -- AccessibilityService (built and installed; the reboot
+itself is what remains untested):** the Xiaomi carries `com.xio.hotspotboot` 1.0
+since 2026-07-22 with the service armed (`accessibility_enabled=1`, measured over
+ADB on 2026-09-16). The commands below are how it got there and how to verify or
+disable it; they are not pending work.
 ```bash
 cd xio/hotspot_boot_service
 ./gradlew assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk

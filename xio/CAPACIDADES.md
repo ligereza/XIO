@@ -229,7 +229,11 @@ HotspotAccessibilityService. Abre tethering al boot, busca el switch por texto,
 usa fallback configurable y no toca un hotspot ya encendido. Declara minSdk 29 y
 target 34.
 
-Estado: source-only. No está compilado, instalado ni probado en el dispositivo.
+Estado: compilado e instalado en el Xiaomi (`com.xio.hotspotboot` 1.0,
+2026-07-22) y con el AccessibilityService armado en secure settings
+(`accessibility_enabled=1`), medido por ADB el 2026-09-16. Lo que sigue sin
+verificarse es su efecto: nadie registró un reboot real en el que el servicio
+reviviera el hotspot. Instalado y armado no es probado.
 
 ## Proyectos e ideas de XIO
 

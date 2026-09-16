@@ -21,9 +21,11 @@ NO usa root. NO usa Shizuku. NO toca red por comando (imposible non-root); toca 
 
 ## LIMITES honestos (leer antes de confiar)
 
-- **SIN COMPILAR/PROBAR por mi**: el PC del repo no tiene toolchain Android (sin
-  Java/SDK), asi que este source esta ESCRITO pero NO buildeado ni corrido en el
-  dispositivo. Es el andamiaje para tu parte; hay que buildearlo y ajustarlo on-device.
+- **INSTALADO, NO PROBADO**: el Xiaomi tiene `com.xio.hotspotboot` 1.0 desde el
+  2026-07-22 y el AccessibilityService aparece en `enabled_accessibility_services`
+  con `accessibility_enabled=1` (medido por ADB el 2026-09-16). Eso prueba que
+  compila, instala y queda armado; NO prueba que al bootear encuentre el switch y
+  lo toque. Esa comprobacion necesita un reboot observado y nadie la registro.
 - **Coordenada de fallback a AJUSTAR**: `FALLBACK_TAP_X/Y` estan puestas segun la UI de
   HyperOS del Mi 11 Lite 5G NE (mismo tap 540,583 que usa hotspot_watch.sh). Si el nodo
   por texto funciona (lo normal), el fallback ni se usa. Verificar en el dispositivo real.

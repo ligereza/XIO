@@ -140,8 +140,11 @@ propio -- datos celulares --, no el hotspot del Xiaomi.)
   `AccessibilityService` + `BroadcastReceiver` de `BOOT_COMPLETED` que, al bootear, abre
   `TETHER_SETTINGS` y toca el toggle SOLO si esta OFF (misma doble-compuerta que
   `hotspot_watch.sh`, pero como servicio del sistema que no necesita Shizuku). Ver su
-  README para build + install + activar. NO buildeado/probado (este PC no tiene toolchain
-  Android): hay que compilarlo y ajustar la coordenada de fallback on-device.
+  README para build + install + activar. YA BUILDEADO E INSTALADO: el Xiaomi tiene
+  `com.xio.hotspotboot` 1.0 desde el 2026-07-22 con el servicio armado
+  (`accessibility_enabled=1`, medido por ADB el 2026-09-16). Falta lo unico que
+  cierra el hueco de verdad: un reboot real observado en que el servicio levante
+  el hotspot solo. Hasta entonces, sigue el aviso por ntfy y tu toque al toggle.
 - Se instala con `adb install` (silencioso, uid shell) y se ACTIVA headless via:
   `settings put secure enabled_accessibility_services <pkg>/<Service>` +
   `settings put secure accessibility_enabled 1` (WRITE_SECURE_SETTINGS lo tiene shell;
