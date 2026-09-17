@@ -44,8 +44,11 @@ android {
         applicationId "cl.xio.foh"
         minSdk 29
         targetSdk 34
-        versionCode 3
-        versionName "0.3.0-functional-parity"
+        // 4: marca en vivo, clip_trigger, fuente por canal, join de multicast
+        // por el enlace del show y captura de camara con exposicion fija. Lo
+        // que hay en el telefono tiene que poder distinguirse de lo que habia.
+        versionCode 4
+        versionName "0.4.0-marca-multicast-camara"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
