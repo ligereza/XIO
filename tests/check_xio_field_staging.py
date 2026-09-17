@@ -30,14 +30,27 @@ REQUIRED_ASSETS = (
     "rd_field/static/styles.css",
     "rd_field/static/sw.js",
 )
+# Lo que la base del host TIENE que traer: nadie mas lo crea, y sin esto la
+# sesion de campo no puede arrancar. `testeo_eventos_fuente` es la que manda:
+# es la lista de eventos preparados contra la que `rd_field` valida el
+# `eventRef` y sin ella el plugin no puede rechazar un evento inventado.
 REQUIRED_TABLES = (
     "rd_entidades_candidatas",
     "testeo_eventos_fuente",
+)
+
+# Lo que el propio puente crea al cargar, con `prepare_schema`. Exigir que ya
+# existan era pedir de mas: hacia fallar el gate por algo que se resuelve solo
+# al arrancar el plugin, y tentaba a crear tablas vacias en la base canonica
+# nada mas que para poner el chequeo en verde. En vez de eso se verifica que
+# el puente las declare, que es lo que de verdad importa.
+BRIDGE_TABLES = (
     "evento_productoras",
     "evento_venues",
     "mesas_testeo",
     "muestras",
     "muestra_resultados",
+    "muestra_capturas",
     "xio_eventos",
     "xio_signal_events",
 )
@@ -102,6 +115,24 @@ def main() -> int:
         except (OSError, ValueError, TypeError) as exc:
             errors.append(f"FOH catalog unreadable: {exc}")
 
+    # El puente debe declarar todo lo que el gate deja de exigirle a la base.
+    # Si alguien saca una tabla del esquema del puente, esto lo detecta en vez
+    # de que aparezca recien en terreno, con la mesa puesta.
+    bridge = root / "rd_field" / "bridge.py"
+    if bridge.is_file():
+        try:
+            fuente = bridge.read_text(encoding="utf-8")
+            sin_declarar = [
+                nombre for nombre in BRIDGE_TABLES
+                if f"CREATE TABLE IF NOT EXISTS {nombre}" not in fuente
+            ]
+            if sin_declarar:
+                errors.append("el puente RD no declara: " + ", ".join(sin_declarar))
+            else:
+                print(f"BRIDGE_SCHEMA=PASS tables={len(BRIDGE_TABLES)}")
+        except OSError as exc:
+            errors.append(f"puente RD ilegible: {exc}")
+
     db = args.rd_db
     if not db.is_file():
         errors.append(f"RD host database absent: {db}")
@@ -118,6 +149,12 @@ def main() -> int:
             missing = [name for name in REQUIRED_TABLES if name not in tables]
             if missing:
                 errors.append("RD tables absent: " + ", ".join(missing))
+
+            # Las del puente se informan, no bloquean: si faltan en la base,
+            # `prepare_schema` las crea al cargar el plugin en el telefono.
+            por_crear = [name for name in BRIDGE_TABLES if name not in tables]
+            if por_crear:
+                print("BRIDGE_SCHEMA=pending " + ",".join(por_crear))
             event_count = (
                 conn.execute("SELECT COUNT(*) FROM testeo_eventos_fuente").fetchone()[0]
                 if "testeo_eventos_fuente" in tables

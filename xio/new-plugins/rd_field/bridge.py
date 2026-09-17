@@ -13,6 +13,8 @@ import hashlib
 import json
 import re
 import sqlite3
+import unicodedata
+from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -299,21 +301,107 @@ def assert_read_schema(conn: sqlite3.Connection) -> None:
 
 
 def historical_mold_designs(conn: sqlite3.Connection) -> list[dict[str, Any]]:
-    """Return text labels seen in RD history, not visual matches."""
-    table = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='testeo_filas_fuente'"
+    """Troqueles vistos en la historia de RD, con los colores que dieron.
+
+    Es texto, no reconocimiento visual: dice que ese nombre de molde ya se
+    anoto antes y cuantas veces, para que la persona en la mesa lo escriba
+    igual y no invente una variante nueva.
+
+    Lee de `v_testeo_muestras`, la vista que la base construye al clasificar
+    las filas. Antes contaba sobre `testeo_filas_fuente` en crudo, y ahi el
+    91% de las filas de `Mamisonga 8225` son un bloque pegado 31 veces: un
+    troquel de esa hoja le llegaba al voluntario con treinta y una veces su
+    frecuencia real. La cifra que se muestra en terreno tiene que ser la de
+    muestras distintas, no la de filas.
+
+    Se agregan los colores observados porque es lo que la persona esta por
+    mirar. NO es un veredicto: dice que ese molde, cuando se anoto antes, dio
+    estos colores con estos reactivos. Que significan lo dice quien atiende.
+    """
+    tiene_vista = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='view' AND name='v_testeo_muestras'"
     ).fetchone()
-    if table is None:
+    # Una base vieja todavia no tiene la clasificacion: se responde con el
+    # conteo crudo antes que con nada, marcandolo para que el cliente sepa.
+    fuente = "v_testeo_muestras" if tiene_vista else "testeo_filas_fuente"
+    if not tiene_vista and conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='testeo_filas_fuente'"
+    ).fetchone() is None:
         return []
-    rows = conn.execute(
-        "SELECT MIN(TRIM(format_raw)) AS label, COUNT(*) AS observations "
-        "FROM testeo_filas_fuente "
-        "WHERE LOWER(COALESCE(substance_normalized_candidate, substance_raw, '')) LIKE '%mdma%' "
-        "AND TRIM(COALESCE(format_raw, '')) <> '' "
-        "AND LOWER(TRIM(format_raw)) NOT IN ('pastilla', 'pasti', 'polvo', 'polvo blanco', 'cristal', 'sin registro') "
-        "GROUP BY LOWER(TRIM(format_raw)) ORDER BY observations DESC, label LIMIT 80"
+
+    # `Tesla Rosada` y `tesla rosa` son el mismo troquel: el color va en
+    # femenino o masculino segun quien escriba, y a veces en plural. Es la
+    # misma normalizacion ortografica que ya se aplica a reactivos y
+    # sustancias -- une variantes de escritura, no decide nada sobre la
+    # muestra. Sin esto el voluntario escribe «tesla rosa» y ve 22 donde hay
+    # 90, que es peor que no mostrar nada.
+    COLORES_VARIANTES = {
+        "rosada": "rosa", "rosadas": "rosa", "rosas": "rosa",
+        "rosado": "rosa", "rosados": "rosa",
+        "morada": "morado", "moradas": "morado", "morados": "morado",
+        "amarilla": "amarillo", "amarillas": "amarillo", "amarillos": "amarillo",
+        "blanca": "blanco", "blancas": "blanco", "blancos": "blanco",
+        "negra": "negro", "negras": "negro", "negros": "negro",
+        "roja": "rojo", "rojas": "rojo", "rojos": "rojo",
+        "naranja": "naranjo", "naranjas": "naranjo", "naranjos": "naranjo",
+        "verdes": "verde", "azules": "azul", "celestes": "celeste",
+        "doradas": "dorado", "dorada": "dorado",
+    }
+
+    def clave_troquel(texto: str) -> str:
+        plano = unicodedata.normalize("NFKD", str(texto or "").lower())
+        plano = "".join(c for c in plano if not unicodedata.combining(c))
+        palabras = [COLORES_VARIANTES.get(w, w) for w in plano.split()]
+        return " ".join(palabras)
+
+    GENERICOS = ("pastilla", "pasti", "polvo", "polvo blanco", "cristal",
+                 "cristales", "sin registro", "papel", "liquido")
+    marcas = ",".join("?" for _ in GENERICOS)
+    filas = conn.execute(
+        "SELECT TRIM(format_raw) AS label, substance_raw, "
+        "       test_1_raw, result_1_raw, test_2_raw, result_2_raw, "
+        "       test_3_raw, result_3_raw, test_4_raw, result_4_raw "
+        f"FROM {fuente} "
+        "WHERE TRIM(COALESCE(format_raw, '')) <> '' "
+        f"AND LOWER(TRIM(format_raw)) NOT IN ({marcas})",
+        GENERICOS,
     ).fetchall()
-    return [{"label": row["label"], "observations": int(row["observations"]), "visualReference": False} for row in rows]
+
+    agrupado: dict[str, dict[str, Any]] = {}
+    for fila in filas:
+        clave = clave_troquel(fila["label"])
+        entrada = agrupado.setdefault(clave, {
+            "label": str(fila["label"]).strip(),
+            "observations": 0,
+            "substances": Counter(),
+            "readings": Counter(),
+        })
+        entrada["observations"] += 1
+        sustancia = str(fila["substance_raw"] or "").strip()
+        if sustancia:
+            entrada["substances"][sustancia] += 1
+        for t, r in (("test_1_raw", "result_1_raw"), ("test_2_raw", "result_2_raw"),
+                     ("test_3_raw", "result_3_raw"), ("test_4_raw", "result_4_raw")):
+            reactivo = str(fila[t] or "").strip()
+            color = str(fila[r] or "").strip()
+            if reactivo and color:
+                entrada["readings"][f"{reactivo.lower()}: {color.lower()}"] += 1
+
+    orden = sorted(agrupado.values(),
+                   key=lambda e: (-e["observations"], e["label"]))[:80]
+    return [
+        {
+            "label": e["label"],
+            "observations": e["observations"],
+            "substances": [s for s, _ in e["substances"].most_common(3)],
+            "readings": [
+                {"reading": k, "times": v} for k, v in e["readings"].most_common(4)
+            ],
+            "countsDistinctSamples": bool(tiene_vista),
+            "visualReference": False,
+        }
+        for e in orden
+    ]
 
 
 def visual_catalog(
