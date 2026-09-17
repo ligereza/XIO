@@ -120,8 +120,26 @@ def main() -> None:
     assert python_set == java_set, (
         f"las clases de marca difieren: python={sorted(python_set)} apk={sorted(java_set)}")
 
+    # La camara: medir el flicker de la sala pide exposicion FIJA, que es lo
+    # que termux-camera-photo no puede hacer y por eso vive en la APK. Con
+    # auto-exposicion la medicion no existe: el sensor compensa justo lo que se
+    # quiere ver.
+    probe = (PROJECT / "app" / "src" / "main" / "java" / "cl" / "xio" / "foh"
+             / "FohCameraProbe.java")
+    assert probe.is_file(), probe
+    camera = probe.read_text(encoding="utf-8")
+    assert "android.permission.CAMERA" in manifest
+    for marker in ("CONTROL_AE_MODE_OFF", "SENSOR_EXPOSURE_TIME", "SENSOR_SENSITIVITY",
+                   "NOISE_REDUCTION_MODE_OFF", "EDGE_MODE_OFF",
+                   "SENSOR_ROLLING_SHUTTER_SKEW", "rowLuminance"):
+        assert marker in camera, marker
+    assert "ImageFormat.YUV_420_888" in camera, (
+        "el plano Y ES la luminancia: sin conversion de color que meta un "
+        "artefacto propio")
+    assert '"/flicker".equals(path)' in native and "line_seconds" in native
+
     print("OK: XIO-FOH native APK contract/package/menu/service/ports/mark/"
-          f"multicast-lock/clip-trigger (clases de marca: {sorted(java_set)})")
+          f"multicast-lock/clip-trigger/camara (clases de marca: {sorted(java_set)})")
 
 
 if __name__ == "__main__":

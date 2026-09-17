@@ -9,8 +9,11 @@ CAME OUT instead of the packets the rig sent.
 This module deliberately takes **a luminance value per sensor row**, not an
 image. Decoding a frame belongs to whoever holds the camera (the APK, or a
 host tool); the math, the provenance and the honesty about ambiguity belong
-here, the same boundary `semantic_lighting` draws. Nothing here opens a
-socket, touches a device or reads a file.
+here, the same boundary `semantic_lighting` draws. La biblioteca no abre
+sockets ni lee archivos; solo el `main()` del final va a buscarle las filas a
+la APK, y esta separado a proposito:
+
+    python xio/flicker.py --from-apk http://10.207.52.119:5100
 
 Two questions it answers, both asked in a real booth:
 
@@ -41,6 +44,20 @@ MIN_HZ = 20.0
 # Profundidad de modulacion por debajo de la cual no se afirma un flicker: es
 # ruido de sensor o textura de la imagen.
 MIN_MODULATION = 0.02
+
+# Cuanto tiene que sobresalir el pico sobre la mediana del espectro para
+# llamarlo pulso. Un cuadro con el lente tapado igual puede dar 70x -- el ruido
+# de patron fijo del sensor es coherente, no blanco -- asi que esto descarta
+# ruido blanco y nada mas. Lo que descalifica un cuadro oscuro es el nivel.
+MIN_PEAK_TO_NOISE = 8.0
+
+# No se puede medir la modulacion de una luz que no esta. Con el lente tapado
+# el telefono devolvio nivel medio 2.3 sobre 255 (0.9%) y amplitud de 1.97
+# unidades -- el escalon de cuantizacion -- y esta lectura contestaba
+# "flicker medido, 72 Hz". Medido el 2026-09-17.
+MIN_MEAN_LEVEL = 0.02     # 2% de la escala
+MIN_AMPLITUDE = 0.01      # 1% de la escala, pico a pico
+DEFAULT_LEVEL_SCALE = 255.0
 
 # Un cuadro de rolling shutter es una ventana corta: 1080 filas a 28 us son
 # 30 ms, y en 30 ms un pulso de 100 Hz entra solo 3 veces. Con menos de dos
@@ -126,23 +143,36 @@ def _fft(values):
 
 
 def _peak_bin(series, bottom_cycles, top_cycles):
-    """Dominant cycles-per-row from the FFT, restricted to the allowed band."""
+    """Dominant cycles-per-row and how much it stands above the noise floor.
+
+    Devuelve tambien la razon entre el pico y la MEDIANA del espectro en la
+    banda buscada. Un pulso real sobresale; el ruido no tiene un pico que
+    sobresalga de sus vecinos. Es una medida sin unidades, asi que no hay que
+    suponer una escala de luminancia para usarla.
+    """
     padded = 1
     while padded < len(series):
         padded *= 2
     window = series + [0.0] * (padded - len(series))
     spectrum = _fft(window)
     best_index, best_magnitude = None, -1.0
+    magnitudes = []
     for index in range(1, padded // 2):
         cycles = index / float(padded)
         if cycles < bottom_cycles or cycles > top_cycles:
             continue
         magnitude = abs(spectrum[index])
+        magnitudes.append(magnitude)
         if magnitude > best_magnitude:
             best_magnitude, best_index = magnitude, index
     if best_index is None:
-        return None
-    return best_index / float(padded)
+        return None, None
+    ordered = sorted(magnitudes)
+    middle = len(ordered) // 2
+    median = (ordered[middle] if len(ordered) % 2
+              else (ordered[middle - 1] + ordered[middle]) / 2.0)
+    snr = (best_magnitude / median) if median > 0 else None
+    return best_index / float(padded), snr
 
 
 def _goertzel(series, bin_frequency):
@@ -224,7 +254,8 @@ def resolvable_range(rows, line_seconds):
     }
 
 
-def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5):
+def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5,
+                    level_scale=DEFAULT_LEVEL_SCALE):
     """Measure the pulse in one rolling-shutter frame's row luminance."""
     series = _finite_series(rows)
     detrended = detrend(series)
@@ -234,6 +265,9 @@ def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5):
     reading = {
         "schema": SCHEMA,
         "rows": len(series),
+        "mean_level": round(sum(series) / len(series), 4),
+        "amplitude": round(max(series) - min(series), 4),
+        "peak_to_noise": None,
         "modulation_depth": None if depth is None else round(depth, 4),
         "flicker_index": None if index is None else round(index, 4),
         "line_seconds": line_seconds,
@@ -255,6 +289,28 @@ def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5):
         # barriendo mas fino: es el ancho del propio lobulo.
         reading["resolution_hz"] = round(1.0 / frame_seconds, 2)
         reading["resolvable_min_hz"] = round(MIN_CYCLES / frame_seconds, 2)
+
+    # Primero lo obvio: si no hay luz, no hay nada que medir. `level_scale` es
+    # la escala de las unidades entregadas (255 para luminancia de 8 bits);
+    # pasando None se salta esta comprobacion, para series en otras unidades.
+    if level_scale:
+        mean_level = reading["mean_level"]
+        amplitude = reading["amplitude"]
+        if mean_level < MIN_MEAN_LEVEL * level_scale:
+            reading["verdict"] = "sin luz que medir"
+            reading["reason"] = (
+                f"nivel medio {mean_level:.1f} sobre una escala de {level_scale:g} "
+                f"({mean_level / level_scale * 100:.1f}%): el cuadro esta "
+                "practicamente negro. Con el lente tapado o la sala a oscuras no "
+                "hay modulacion que interpretar, por coherente que se vea.")
+            return reading
+        if amplitude < MIN_AMPLITUDE * level_scale:
+            reading["verdict"] = "sin luz que medir"
+            reading["reason"] = (
+                f"amplitud pico a pico {amplitude:.2f} sobre {level_scale:g}: "
+                "cabe en el escalon de cuantizacion, asi que cualquier "
+                "periodicidad que se encuentre es del sensor, no de la luz.")
+            return reading
 
     if depth is not None and depth < MIN_MODULATION:
         reading["verdict"] = "sin flicker medible"
@@ -281,7 +337,8 @@ def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5):
         return reading
 
     # Busqueda por FFT, refinado por Goertzel alrededor del pico.
-    best_cycles = _peak_bin(detrended, bottom_cycles, top_cycles)
+    best_cycles, snr = _peak_bin(detrended, bottom_cycles, top_cycles)
+    reading["peak_to_noise"] = None if snr is None else round(snr, 2)
     if best_cycles is None:
         reading["verdict"] = "sin flicker medible"
         reading["reason"] = "no hubo ningun maximo en la banda buscada"
@@ -319,6 +376,21 @@ def flicker_reading(rows, line_seconds=None, min_hz=MIN_HZ, resolution_hz=0.5):
             f"el maximo cae en el piso del barrido ({cycles_in_frame:.1f} ciclos "
             f"en el cuadro). Con esta ventana no se puede afirmar una frecuencia "
             f"mas baja: hace falta capturar mas filas o un modo mas lento.")
+        return reading
+
+    # Un pico que no sobresale del ruido del propio espectro no es un pulso.
+    # Medido el 2026-09-17 con el lente tapado: nivel medio 2.3 sobre 255 y
+    # amplitud de 1.97 unidades -- el escalon de cuantizacion -- y esta lectura
+    # devolvia "flicker medido, 72 Hz" con toda seguridad.
+    if snr is not None and snr < MIN_PEAK_TO_NOISE:
+        reading["verdict"] = "sin flicker medible"
+        reading["frequency_hz"] = None
+        reading["band_rows"] = None
+        reading["reason"] = (
+            f"el pico apenas supera el ruido del espectro ({snr:.1f}x, hace "
+            f"falta {MIN_PEAK_TO_NOISE:g}x): no hay un pulso, hay ruido. Nivel "
+            f"medio {reading['mean_level']:.1f} y amplitud "
+            f"{reading['amplitude']:.2f} en las unidades entregadas.")
         return reading
 
     reading["confidence"] = ("gruesa" if cycles_in_frame < COARSE_CYCLES
@@ -541,3 +613,62 @@ def banding_origin(frames_rows, geometry_rows=None, tolerance=1e-6):
         result["reason"] = ("no se puede distinguir con esta evidencia: hacen "
                             "falta mas cuadros, o el encuadre se movio")
     return result
+
+
+def main():
+    """Pide una captura a la APK de XIO-FOH y la lee. Lo unico que usa red."""
+    import argparse
+    import json
+    import urllib.request
+
+    parser = argparse.ArgumentParser(description="lectura de flicker desde la APK")
+    parser.add_argument("--from-apk", dest="host", required=True,
+                        help="http://<telefono>:5100")
+    parser.add_argument("--exposure-us", type=int, default=100)
+    parser.add_argument("--iso", type=int, default=800)
+    parser.add_argument("--camera", default="")
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+
+    url = (f"{args.host.rstrip('/')}/api/plugins/foh_monitor/flicker"
+           f"?exposure_ns={args.exposure_us * 1000}&iso={args.iso}"
+           f"&camera={args.camera}")
+    with urllib.request.urlopen(url, timeout=30) as response:
+        payload = json.loads(response.read())
+    if not payload.get("ok"):
+        print(f"la APK no pudo capturar: {payload.get('error')}")
+        return 1
+
+    reading = flicker_reading(payload["rows"], payload.get("line_seconds"))
+    capture = {
+        "camera": payload.get("camera"),
+        "size": f"{payload.get('width')}x{payload.get('height')}",
+        "exposure_us": payload.get("exposure_ns", 0) / 1000.0,
+        "iso": payload.get("iso"),
+        # El propio aparato reporta cuanto tarda en leer todas sus filas, asi
+        # que el tiempo de linea no hay que calibrarlo contra una lampara.
+        "rolling_shutter_skew_ms": payload.get("rolling_shutter_skew_ns", 0) / 1e6,
+        "line_seconds": payload.get("line_seconds"),
+    }
+    reading["capture"] = capture
+    if args.json:
+        print(json.dumps(reading, ensure_ascii=False, indent=2))
+        return 0
+    print(f"camara {capture['camera']} {capture['size']}  "
+          f"exposicion {capture['exposure_us']:.0f} us  iso {capture['iso']}")
+    print(f"skew {capture['rolling_shutter_skew_ms']:.3f} ms  ->  "
+          f"tiempo de linea {capture['line_seconds']}")
+    print(f"nivel medio {reading['mean_level']}  amplitud {reading['amplitude']}")
+    print(f"veredicto: {reading['verdict']}")
+    if reading.get("frequency_hz") is not None:
+        print(f"  {reading['frequency_hz']} Hz +-{reading['resolution_hz']} "
+              f"({reading['confidence']}, {reading['cycles_in_frame']} ciclos)")
+        print(f"  modulacion {reading['modulation_depth']}  "
+              f"indice {reading['flicker_index']}  pico/ruido {reading['peak_to_noise']}")
+    if reading.get("reason"):
+        print(f"  {reading['reason']}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

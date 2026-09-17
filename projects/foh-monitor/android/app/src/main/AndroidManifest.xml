@@ -4,6 +4,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Medir el flicker de la sala pide una captura con exposicion FIJA, que
+         es lo que `termux-camera-photo` no puede hacer. No se saca una foto
+         para mirarla: se devuelve la luminancia media por fila del plano Y. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="false"

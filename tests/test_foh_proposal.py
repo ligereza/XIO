@@ -26,7 +26,9 @@ FIXTURES = ["par1", "par2", "par3", "par4"]
 
 
 def _rows(frequency, rows=4000, depth=0.4):
-    return [0.5 * (1 + depth * math.sin(2 * math.pi * frequency * index * LINE_SECONDS))
+    """En la escala de un sensor de 8 bits: la lectura se niega a medir un
+    cuadro sin luz, asi que los fixtures tienen que traer luz."""
+    return [128.0 * (1 + depth * math.sin(2 * math.pi * frequency * index * LINE_SECONDS))
             for index in range(rows)]
 
 
@@ -81,10 +83,16 @@ def test_without_a_measurement_the_cycle_stays_free_instead_of_inventing_one():
     assert cycle["locked_to_hz"] is None
     assert "numero inventado" in cycle["reason"]
 
-    failed = flicker_reading([0.5] * 512, LINE_SECONDS)
-    cycle = cycle_from_room(failed, mode="lock")
-    assert cycle["mode"] == "free"
-    assert "ruido" in cycle["reason"]
+    # Una lectura que no pudo medir arrastra SU motivo al ciclo, sea cual sea:
+    # un cuadro sin luz y un cuadro con luz pero sin pulso fallan distinto.
+    oscuro = cycle_from_room(flicker_reading([2.0] * 512, LINE_SECONDS), mode="lock")
+    assert oscuro["mode"] == "free"
+    assert "practicamente negro" in oscuro["reason"]
+
+    plano = [128.0 + 2.0 * math.sin(index * 12.9898) for index in range(4000)]
+    sin_pulso = cycle_from_room(flicker_reading(plano, LINE_SECONDS), mode="lock")
+    assert sin_pulso["mode"] == "free"
+    assert "ruido" in sin_pulso["reason"]
 
 
 def test_the_beat_mode_offsets_the_cycle_on_purpose():

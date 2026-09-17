@@ -31,7 +31,12 @@ ROWS = 1080
 
 
 def _rows(frequency_hz, depth=0.5, line_seconds=LINE_SECONDS, rows=ROWS,
-          phase=0.0, base=0.5, slope=0.0, noise=None):
+          phase=0.0, base=128.0, slope=0.0, noise=None):
+    """Serie sintetica en la MISMA escala que entrega un sensor: 0..255.
+
+    Las unidades importan desde que la lectura se niega a medir un cuadro sin
+    luz: con valores alrededor de 0.5 estaria midiendo un cuadro negro.
+    """
     series = []
     for index in range(rows):
         value = base * (1.0 + depth * math.sin(
@@ -99,7 +104,9 @@ def test_a_spatial_ramp_is_removed_instead_of_being_read_as_a_pulse():
 
 
 def test_noise_does_not_invent_a_frequency_where_there_is_no_pulse():
-    flat = [0.5 + 0.001 * math.sin(index * 12.9898) for index in range(ROWS)]
+    # Amplitud suficiente para pasar el piso de luz, modulacion por debajo del
+    # minimo: el caso es "hay luz, no hay pulso".
+    flat = [128.0 + 2.0 * math.sin(index * 12.9898) for index in range(ROWS)]
     reading = flicker_reading(flat, LINE_SECONDS)
     assert reading["verdict"] == "sin flicker medible"
     assert "ruido" in reading["reason"]
@@ -143,7 +150,7 @@ def test_the_mains_lamp_calibrates_the_line_time_of_this_sensor():
 
 def test_calibration_refuses_a_series_with_no_band():
     with pytest.raises(FlickerError):
-        calibrate_line_seconds([0.5] * 256, known_hz=100.0)
+        calibrate_line_seconds([128.0] * 256, known_hz=100.0)
     with pytest.raises(FlickerError):
         calibrate_line_seconds(_rows(100.0), known_hz=0)
 
@@ -159,9 +166,9 @@ def test_a_reading_needs_real_numbers_and_enough_rows():
     with pytest.raises(FlickerError):
         flicker_reading([0.1, 0.2, 0.3], LINE_SECONDS)
     with pytest.raises(FlickerError):
-        flicker_reading([0.5] * 64 + [float("nan")] * 64, LINE_SECONDS)
+        flicker_reading([128.0] * 64 + [float("nan")] * 64, LINE_SECONDS)
     with pytest.raises(FlickerError):
-        flicker_reading(["0.5"] * 128, LINE_SECONDS)
+        flicker_reading(["128.0"] * 128, LINE_SECONDS)
 
 
 def test_modulation_and_flicker_index_describe_depth_not_frequency():
@@ -175,12 +182,12 @@ def test_modulation_and_flicker_index_describe_depth_not_frequency():
 # ── de quien son las bandas ──────────────────────────────────────────────
 
 
-def _staircase(steps=8, rows=ROWS, offset=0.0):
+def _staircase(steps=8, rows=ROWS, offset=20.0):
     """A posterized gradient: flat plateaus with equal-height steps."""
     series = []
     for index in range(rows):
         level = int(index * steps / rows)
-        series.append(offset + level / float(steps))
+        series.append(offset + 255.0 * level / float(steps))
     return series
 
 
@@ -200,8 +207,8 @@ def test_a_smooth_pulse_is_not_a_staircase():
 def test_content_posterization_is_attributed_to_the_content():
     # El mismo degrade posterizado, corrido en el cuadro porque el contenido se
     # movio: sigue siendo del contenido.
-    origin = banding_origin([_staircase(), _staircase(offset=0.05),
-                             _staircase(offset=0.1)])
+    origin = banding_origin([_staircase(), _staircase(offset=22.0),
+                             _staircase(offset=24.0)])
     assert origin["origin"] == "contenido"
     assert "posterizacion" in origin["reason"]
     assert origin["quantized_frames"] == 3
@@ -292,7 +299,7 @@ def test_a_scene_without_a_resolvable_band_gets_no_origin_attributed():
     def cuadro(shift):
         filas = []
         for index in range(720):
-            base = 40.0 + 60.0 * math.sin(math.pi * index / 720.0)
+            base = 60.0 + 90.0 * math.sin(math.pi * index / 720.0)
             ruido = (((index * 1103515245 + shift * 12345) >> 7) % 997) / 997.0
             filas.append(base + 0.8 * ruido)
         return filas
@@ -303,3 +310,43 @@ def test_a_scene_without_a_resolvable_band_gets_no_origin_attributed():
     assert "no traen una banda de al menos" in origin["reason"]
     assert "lo que domina es la escena" in origin["reason"]
     assert origin["phase_spread"] is None
+
+
+def test_a_dark_frame_is_refused_however_coherent_it_looks():
+    # Medido con el lente del Xiaomi tapado el 2026-09-17: nivel medio 2.35
+    # sobre 255, amplitud pico a pico 1.97 -- el escalon de cuantizacion -- y
+    # aun asi el pico del espectro sobresalia 70x del ruido, porque el patron
+    # fijo del sensor es coherente. La lectura devolvia "flicker medido, 72 Hz"
+    # con toda seguridad. No se puede medir la modulacion de una luz que no
+    # esta, por coherente que se vea.
+    oscuro = [2.35 + 0.98 * math.sin(2 * math.pi * 2.3 * index / 3472)
+              for index in range(3472)]
+    reading = flicker_reading(oscuro, 9.264e-6)
+    assert reading["verdict"] == "sin luz que medir"
+    assert reading["frequency_hz"] is None
+    assert "practicamente negro" in reading["reason"]
+    assert reading["mean_level"] == pytest.approx(2.35, abs=0.1)
+
+
+def test_a_frame_with_light_but_a_quantization_sized_ripple_is_refused_too():
+    apenas = [128.0 + 0.9 * math.sin(2 * math.pi * 240.0 * index * LINE_SECONDS)
+              for index in range(ROWS)]
+    reading = flicker_reading(apenas, LINE_SECONDS)
+    assert reading["verdict"] == "sin luz que medir"
+    assert "escalon de cuantizacion" in reading["reason"]
+
+
+def test_series_in_other_units_can_skip_the_light_floor():
+    # La comprobacion supone luminancia de 8 bits; con otras unidades se pasa
+    # level_scale=None y la lectura vuelve a ser puramente de forma.
+    normalizado = [0.5 * (1 + 0.5 * math.sin(2 * math.pi * 240.0 * index * LINE_SECONDS))
+                   for index in range(ROWS)]
+    assert flicker_reading(normalizado, LINE_SECONDS)["verdict"] == "sin luz que medir"
+    libre = flicker_reading(normalizado, LINE_SECONDS, level_scale=None)
+    assert libre["verdict"] == "flicker medido"
+    assert libre["frequency_hz"] == pytest.approx(240.0, rel=0.03)
+
+
+def test_the_peak_to_noise_ratio_is_reported_so_it_can_be_judged():
+    clean = flicker_reading(_rows(240.0, depth=0.4), LINE_SECONDS)
+    assert clean["peak_to_noise"] > 100

@@ -144,6 +144,7 @@ public final class FohNativeServer {
         if (path.isEmpty() || "/".equals(path)) path = "/view";
         try {
             if ("GET".equals(method) && "/status".equals(path)) return json(statusJson());
+            if ("GET".equals(method) && "/flicker".equals(path)) return flicker(query);
             if ("GET".equals(method) && "/events".equals(path)) return json(eventsJson(query));
             if ("GET".equals(method) && "/context/data".equals(path)) return json(contextJson());
             if ("GET".equals(method) && "/context".equals(path)) return asset("context.html", "text/html; charset=utf-8");
@@ -217,6 +218,52 @@ public final class FohNativeServer {
         JSONObject setlist = setlistJson();
         String current = setlist == null ? "" : setlist.optString("current_name", "");
         return current == null || current.isEmpty() ? JSONObject.NULL : current;
+    }
+
+    /** Una captura con exposicion FIJA, devuelta como serie de luminancia por fila.
+     *
+     * Es lo unico en XIO que mide la luz que SALIO en vez de los paquetes que el
+     * rig mando, y `xio/flicker.py` consume esta serie tal cual. La captura
+     * ocupa la camara por un instante: no graba, no guarda una imagen y no deja
+     * nada en el almacenamiento. Lo que se devuelve son numeros.
+     */
+    private Response flicker(String query) throws JSONException {
+        long exposure = parseLongOr(queryValue(query, "exposure_ns"),
+                FohCameraProbe.DEFAULT_EXPOSURE_NANOS);
+        int iso = (int) parseLongOr(queryValue(query, "iso"),
+                FohCameraProbe.DEFAULT_SENSITIVITY);
+        String camera = queryValue(query, "camera");
+        FohCameraProbe.Result result = FohCameraProbe.capture(context, camera, exposure, iso, 8000);
+        if (result.error != null) {
+            return json(503, new JSONObject().put("ok", false).put("domain", "vj_foh")
+                    .put("source", "xio_foh_apk").put("error", result.error)
+                    .put("manual_cameras", new JSONArray(FohCameraProbe.manualCameras(context))));
+        }
+        JSONArray rows = new JSONArray();
+        for (double value : result.rows) rows.put(Math.round(value * 1000d) / 1000d);
+        Double lineSeconds = result.lineSeconds();
+        return json(new JSONObject()
+                .put("ok", true).put("domain", "vj_foh").put("source", "xio_foh_apk")
+                .put("schema", "xio:foh-camera-rows:0.1")
+                .put("camera", result.cameraId)
+                .put("width", result.width).put("height", result.height)
+                .put("exposure_ns", result.exposureNanos)
+                .put("iso", result.sensitivity)
+                .put("rolling_shutter_skew_ns", result.rollingShutterSkewNanos)
+                // El tiempo de LINEA sale del skew dividido por las filas: es la
+                // constante que convierte espaciado de bandas en Hz, y el propio
+                // aparato la reporta. No hay que calibrar contra una lampara.
+                .put("line_seconds", lineSeconds == null ? JSONObject.NULL : lineSeconds)
+                .put("manual_exposure", result.manualExposure)
+                .put("rows", rows));
+    }
+
+    private static long parseLongOr(String value, long fallback) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (Exception ignored) {
+            return fallback;
+        }
     }
 
     private Response ingest(String body) throws JSONException {
