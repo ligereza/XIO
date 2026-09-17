@@ -27,5 +27,13 @@ Salida: `app/build/outputs/apk/debug/app-debug.apk`.
 - FOH: `cl.xio.foh`; escucha técnica VJ/FOH.
 - XIO hub: HTTP `5000`; los navegadores visualizan, no reemplazan la escucha
   activa de la APK.
-- `foh_monitor` usa `listener_mode=auto`: `server` en PC y `app_proxy` en
-  Termux/Android para evitar doble bind.
+- La separación de escucha la decide `XIO_HOST_DOMAIN`, no un ajuste del
+  plugin: `xio/new/server.py` NO carga `foh_monitor` cuando el host se declara
+  `rd`, y ahí la APK nativa es la dueña de 6454/5568/7000. (Este README decía
+  antes que `foh_monitor` usaba un `listener_mode=auto` con modos `server` y
+  `app_proxy`; ese ajuste nunca existió en el código — medido el 2026-09-17.)
+- El valor por omisión de `XIO_HOST_DOMAIN` es `all`, y con ese valor el plugin
+  Python **sí** bindea. Como los sockets usan `SO_REUSEADDR`, un doble bind no
+  falla: reparte los paquetes en silencio. `GET /status` ahora publica
+  `port_ownership` con esa advertencia; declarar `XIO_HOST_DOMAIN=foh` en el
+  host Python, o dejarle la escucha a la APK.

@@ -36,6 +36,7 @@ from plugins.base import PluginBase
 import json
 import math
 import os
+import re
 import shutil
 import socket
 import struct
@@ -46,6 +47,22 @@ from datetime import datetime
 
 _ARTNET_HEADER = b"Art-Net\x00"
 _ACN_PID = b"ASC-E1.17\x00\x00\x00"
+
+# Lo que el operador puede decir EN VIVO sobre el tramo que esta corriendo.
+# La distincion importa y no se puede reconstruir despues: el 2026-07-24 los
+# tramos sin timecode eran CCTV, texto y conversacion con el publico -- o sea
+# CONTENIDO -- y el panel los pintaba igual que una caida. Quien sabe cual es
+# cual es quien esta ahi, en ese momento.
+#   contenido -> ese tramo es su propio bloque; no es el tema anterior
+#   falla     -> el tema siguio corriendo, lo que se cayo fue la señal
+#   nota      -> cualquier otra cosa que valga anotar sin interpretarla
+MARK_CLASSES = ("contenido", "falla", "nota")
+
+# Direccion de disparo de clip de Resolume. `cue_map_dref.json` ya declara la
+# plantilla: /composition/layers/{layer}/clips/{clip}/connect. En un show sin
+# timecode este address es el unico reloj que ademas NOMBRA lo que sono.
+_CLIP_ADDRESS = re.compile(
+    r"/composition/layers?/(\d+)/clips?/(\d+)/(connect|select)\b", re.IGNORECASE)
 
 # Panel autocontenido (sin assets externos: funciona offline en el hotspot).
 # Fetch por URLs RELATIVAS asi el host/IP da igual.
@@ -81,6 +98,9 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
 .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#1e7a41,#4ade80);transition:width .16s linear}
 .bar .pct{position:absolute;top:0;left:0;right:0;line-height:28px;font:800 14px ui-monospace,monospace;color:#e6e9ef;text-shadow:0 1px 3px #000}
 .row{display:flex;gap:10px;align-items:center;font-size:13px;color:#9aa0b0;justify-content:space-between}
+.mk{flex:1;font:800 15px inherit;padding:15px 8px;border-radius:12px;background:#12151d;border:1px solid #334155;color:#cbd5e1;letter-spacing:.04em}
+#mkc{color:#4ade80;border-color:#14532d}#mkf{color:#f87171;border-color:#7f1d1d}
+.mk:active{filter:brightness(1.6)}
 .feed{flex:1;overflow-y:auto;background:#0d1016;border:1px solid #1c2130;border-radius:12px;padding:8px}
 .ev{font-size:13px;padding:5px 8px;border-left:3px solid #333;margin-bottom:4px;background:#12151d;border-radius:0 8px 8px 0}
 .ev .t{color:#6b7280;font-size:11px;margin-right:6px}
@@ -99,6 +119,8 @@ body{font:16px/1.3 -apple-system,system-ui,Roboto,sans-serif;background:#07090d;
  <div class=nxt id=nx></div>
 </div>
 <div class=row><span id=batt></span><span><a href=mapping style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">MAPPING</a><a href=registro style="color:#60a5fa;font-weight:800;text-decoration:none;padding:6px 8px">REGISTRO &#9776;</a><a href=/raider?domain=foh style="color:#fbbf24;font-weight:800;text-decoration:none;padding:6px 8px">RAIDER</a></span><span id=sub>...</span></div>
+<div class=row><button class=mk id=mkc>TRAMO: CONTENIDO</button><button class=mk id=mkf>FALLA</button></div>
+<div class=row><span id=mkst style="font-size:12px">marcar en vivo: lo que el log no puede reconstruir despues</span></div>
 <div class=feed id=feed></div>
 <script>
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -171,6 +193,16 @@ setInterval(function(){paintTc();paintBar();},50);
 // wake-lock best-effort (requiere gesto en algunos Android)
 var wl=null;function lock(){if(navigator.wakeLock&&!wl)navigator.wakeLock.request('screen').then(function(l){wl=l;l.addEventListener('release',function(){wl=null})}).catch(function(){})}
 document.addEventListener('click',lock);document.addEventListener('visibilitychange',function(){if(!document.hidden)lock()});lock();
+// marca en vivo: un toque dice si este tramo es contenido o es falla. Sin
+// esto, el log de un tramo sin timecode se lee igual en los dos casos.
+function mark(c,btn){var label=btn.textContent;btn.textContent='...';
+ fetch('mark',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clase:c})})
+ .then(function(r){return r.json()}).then(function(d){
+  document.getElementById('mkst').textContent=d.ok?('marcado '+c+(d.tc!=null?(' \u00b7 tc '+d.tc):' \u00b7 sin tc')):('no se pudo marcar: '+esc(d.error||''));
+  btn.textContent=label;tick()})
+ .catch(function(e){document.getElementById('mkst').textContent='ERR '+esc(e);btn.textContent=label})}
+document.getElementById('mkc').onclick=function(){mark('contenido',this)};
+document.getElementById('mkf').onclick=function(){mark('falla',this)};
 tick();setInterval(tick,1000);
 </script></body></html>"""
 
@@ -317,8 +349,16 @@ class _Channel:
         self.buckets = {}        # segundo(int) -> count, pa packets/s
         self.info = ""           # detalle libre (universo, address, etc.)
         self.error = ""          # error de bind/listener si lo hubo
+        # De QUE maquina llega la señal. `recvfrom` ya lo entrega y se estaba
+        # tirando. Sirve para dos cosas que hoy no existen: saber que notebook
+        # manda cada canal (post-show), y ver un cambio de fuente EN VIVO --
+        # el 2026-07-24 el venue cambio la IP por DHCP, y eso es exactamente lo
+        # que rompe Chataigne a mitad de show.
+        self.source = ""
+        self.sources = {}        # ip -> paquetes validos desde ahi
+        self.source_changes = 0
 
-    def hit(self, info=""):
+    def hit(self, info="", source=""):
         now = time.time()
         self.last_seen = now
         self.total += 1
@@ -330,6 +370,11 @@ class _Channel:
                 self.buckets.pop(k, None)
         if info:
             self.info = info
+        if source:
+            if self.source and source != self.source:
+                self.source_changes += 1
+            self.source = source
+            self.sources[source] = self.sources.get(source, 0) + 1
 
     def pps(self):
         """Promedio de paquetes/s sobre los ultimos 3 segundos completos."""
@@ -347,6 +392,9 @@ class _Channel:
             "pps": self.pps(),
             "packets_total": self.total,
             "invalid_packets": self.other,
+            "source": self.source or None,
+            "sources": dict(sorted(self.sources.items(), key=lambda kv: -kv[1])[:4]) or None,
+            "source_changes": self.source_changes,
             "info": self.info,
             "error": self.error,
         }
@@ -398,6 +446,7 @@ class FohMonitorPlugin(PluginBase):
                     "total": 0, "state": "sin_senal"}
         self._tc_buckets = {}  # segundo -> count (pps del TC)
         self._tc_song_index = -1  # ultimo tema auto-detectado por TC (evita re-loguear)
+        self._clip_last = None  # ultimo (capa, clip) logueado: solo se registra el cambio
         self._audio = {"available": False, "reason": "no evaluado", "level_db": None,
                        "active": False, "last_seen": 0.0}
         self._setlist = {"songs": [], "durations": [], "index": -1,
@@ -444,6 +493,7 @@ class FohMonitorPlugin(PluginBase):
         self.register_route("/prev", self._api_prev, methods=["POST"])
         self.register_route("/log", self._api_log, methods=["GET"])
         self.register_route("/logs", self._api_logs, methods=["GET"])
+        self.register_route("/mark", self._api_mark, methods=["POST"])
         self.register_route("/ingest", self._api_ingest, methods=["POST"])
         self.register_route("/config", self._api_get_config, methods=["GET"])
         self.register_route("/config", self._api_set_config, methods=["POST"])
@@ -763,7 +813,16 @@ class FohMonitorPlugin(PluginBase):
             if info is None:
                 ch.other += 1
             else:
-                ch.hit(info)
+                source = addr[0] if isinstance(addr, tuple) and addr else ""
+                previous = ch.source
+                ch.hit(info, source)
+                # Un cambio de fuente en vivo se registra: el enlace se cae (o
+                # cambia de IP) ANTES de que se noten los datos, y con esto el
+                # log lo dice en el momento en vez de dejarlo para deducir.
+                if source and previous and source != previous:
+                    self._log_event("fuente_cambio", {
+                        "canal": ch.name, "antes": previous, "ahora": source,
+                        "cambios": ch.source_changes})
 
     # parsers: devuelven str info si el paquete es valido, None si no
     @staticmethod
@@ -802,9 +861,29 @@ class FohMonitorPlugin(PluginBase):
                 self._tc_hit(message)
             elif address:
                 visual_addresses.append(address)
+                self._note_clip_trigger(address)
         if messages and not visual_addresses:
             return False
         return visual_addresses[0] if visual_addresses else None
+
+    def _note_clip_trigger(self, address):
+        """Record WHICH clip was triggered, once per change.
+
+        Resolume manda muchos mensajes por segundo, asi que se registra solo el
+        cambio de (capa, clip) -- igual que el avance automatico por timecode
+        actua solo al cambiar el frame. El address ya venia parseado y se usaba
+        nada mas que para prender el tile VISUAL; su contenido, que es lo unico
+        que dice QUE se vio, no se guardaba en ninguna parte.
+        """
+        match = _CLIP_ADDRESS.search(address or "")
+        if not match:
+            return
+        pair = (int(match.group(1)), int(match.group(2)))
+        if pair == self._clip_last:
+            return
+        self._clip_last = pair
+        self._log_event("clip_trigger", {"layer": pair[0], "clip": pair[1],
+                                         "address": str(address)[:120]})
 
     def _tc_hit(self, data):
         """Registra un paquete de timecode: primer arg string o float."""
@@ -1177,6 +1256,40 @@ class FohMonitorPlugin(PluginBase):
                 self._prev_batt = {"level": lvl, "charging": bat.get("charging")}
 
     # ── API ──────────────────────────────────────────────────────────
+    def _host_domain(self):
+        """Which surface this host declares itself to be."""
+        return os.environ.get("XIO_HOST_DOMAIN", "all").strip().lower() or "all"
+
+    def _port_ownership(self):
+        """Say out loud who may own the show ports on this host.
+
+        `xio/new/server.py` no carga este plugin cuando el host se declara RD,
+        y ahi la APK nativa es la dueña de 6454/5568/7000. Pero el valor por
+        omision de XIO_HOST_DOMAIN es "all": en un host sin dominio declarado
+        este plugin SI bindea, y como los sockets se abren con SO_REUSEADDR un
+        doble bind no falla -- se reparte los paquetes en silencio, que es peor
+        que un error. No se cambia el comportamiento aca (el flujo de prueba en
+        PC depende de que estos listeners funcionen sin declarar dominio); se
+        declara, para que un monitor a medias no se lea como un monitor sano.
+
+        El README de `projects/foh-monitor` decia que esto lo resolvia un
+        `listener_mode=auto` con modos `server` y `app_proxy`. Ese ajuste no
+        existe en el codigo: la separacion real es XIO_HOST_DOMAIN.
+        """
+        domain = self._host_domain()
+        owned = domain in ("foh", "iskvw")
+        return {
+            "declared_by": "XIO_HOST_DOMAIN",
+            "host_domain": domain,
+            "foh_declared": owned,
+            "warning": None if owned else (
+                f"este host se declara '{domain}' y no 'foh': si la APK nativa "
+                "esta escuchando en el mismo aparato, los dos procesos bindean "
+                "6454/5568/7000 con SO_REUSEADDR y el reparto de paquetes queda "
+                "indefinido. Declarar XIO_HOST_DOMAIN=foh, o dejar la escucha a "
+                "la APK."),
+        }
+
     def _api_status(self):
         from flask import jsonify
         window = int(self._cfg("active_window"))
@@ -1188,6 +1301,8 @@ class FohMonitorPlugin(PluginBase):
         audio.pop("last_seen", None)
         return jsonify({
             "domain": "vj_foh",
+            "host_domain": self._host_domain(),
+            "port_ownership": self._port_ownership(),
             "channels": {k: c.snapshot(window) for k, c in self._channels.items()},
             "timecode": self._tc_state(),
             "sacn_mode": self._sacn_mode,
@@ -1349,6 +1464,36 @@ class FohMonitorPlugin(PluginBase):
         })
         binding = self._bind_unowned_setlist_to_context(selected)
         return jsonify({**self._foh_context_view(), "setlistBinding": binding})
+
+    def _api_mark(self):
+        """Label the block that is running, while it is running.
+
+        Es escritura, pero al propio registro del plugin y nada mas: no toca el
+        rig, no manda un paquete y no cambia el setlist. Queda en la misma
+        familia inocua que `next`, no en DANGEROUS_ENDPOINTS.
+        """
+        from flask import request, jsonify
+        data = request.get_json(silent=True) or {}
+        clase = str(data.get("clase") or "").strip().lower()
+        if clase not in MARK_CLASSES:
+            return jsonify({
+                "ok": False, "domain": "vj_foh",
+                "error": "clase debe ser una de: " + ", ".join(MARK_CLASSES),
+            }), 400
+        songs = self._setlist.get("songs") or []
+        index = self._setlist.get("index", -1)
+        current = songs[index] if 0 <= index < len(songs) else None
+        detalle = {
+            "clase": clase,
+            "texto": " ".join(str(data.get("texto") or "").split())[:280],
+            # Lo que el setlist estaba mostrando. Es contexto, no una
+            # afirmacion de que la marca pertenezca a ese tema.
+            "tema_en_pantalla": current,
+            "tc_estado": self._tc_state()["state"],
+        }
+        self._log_event("marca", detalle)
+        return jsonify({"ok": True, "domain": "vj_foh", "marca": detalle,
+                        "tc": self._tc_current()})
 
     def _api_manifest(self):
         """PWA manifest: 'Agregar a pantalla de inicio' abre el panel fullscreen
