@@ -1,0 +1,219 @@
+{"ts": "2026-07-23T20:40:09", "tipo": "heartbeat", "detalle": {"msg": "foh_monitor cargado", "sacn_mode": "multicast(16 joins)", "audio": "termux-microphone-record no instalado (pkg install termux-api + app Termux:API)"}}
+{"ts": "2026-07-23T20:40:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:40:13", "tipo": "bateria", "detalle": {"nivel": 99, "cargando": true, "temp": 27.0}}
+{"ts": "2026-07-23T20:41:10", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:41:20", "tipo": "setlist_next", "detalle": {"accion": "cargada", "temas": 3, "actual": "Intro Ambient"}}
+{"ts": "2026-07-23T20:41:21", "tipo": "senal_on", "detalle": {"canal": "artnet", "info": "OpDmx uni 1", "pps": 0.3}}
+{"ts": "2026-07-23T20:41:21", "tipo": "senal_on", "detalle": {"canal": "sacn", "info": "E1.31 uni 1", "pps": 0.3}}
+{"ts": "2026-07-23T20:41:21", "tipo": "senal_on", "detalle": {"canal": "osc", "info": "/composition/layers/1/clips/3/connect", "pps": 0.3}}
+{"ts": "2026-07-23T20:41:34", "tipo": "setlist_next", "detalle": {"actual": "Tema Uno", "n": 2, "de": 3}}
+{"ts": "2026-07-23T20:41:56", "tipo": "senal_off", "detalle": {"canal": "artnet", "ultimo": "2026-07-23T20:41:50"}}
+{"ts": "2026-07-23T20:41:56", "tipo": "senal_off", "detalle": {"canal": "sacn", "ultimo": "2026-07-23T20:41:50"}}
+{"ts": "2026-07-23T20:41:56", "tipo": "senal_off", "detalle": {"canal": "osc", "ultimo": "2026-07-23T20:41:50"}}
+{"ts": "2026-07-23T20:42:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:43:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:44:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:45:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:46:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:47:14", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:48:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:49:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:50:17", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:51:21", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:52:17", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:53:19", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:54:17", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:55:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:56:19", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:57:19", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:58:25", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T20:59:20", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:00:24", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:01:21", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:02:23", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:03:22", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:04:23", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:05:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:06:26", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:07:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:08:26", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:09:26", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:10:27", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:11:27", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:12:31", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:13:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:14:29", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:15:29", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:16:36", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:17:30", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:18:31", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:19:32", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:20:32", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:21:38", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:22:34", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:23:37", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:24:35", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:25:38", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:26:35", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:27:39", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null}, "bateria": 99, "cargando": true}}
+{"ts": "2026-07-23T21:27:53", "tipo": "heartbeat", "detalle": {"msg": "foh_monitor cargado", "sacn_mode": "multicast(16 joins)", "audio": "termux-microphone-record no instalado (pkg install termux-api + app Termux:API)"}, "tc": null}
+{"ts": "2026-07-23T21:27:58", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "sin_senal"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:27:58", "tipo": "bateria", "detalle": {"nivel": 99, "cargando": true, "temp": 29.0}, "tc": null}
+{"ts": "2026-07-23T21:28:56", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "sin_senal"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:29:09", "tipo": "tc_freeze", "detalle": {"estado": "congelado", "valor": "01:00:09:24", "pps": 24.7}, "tc": "01:00:09:24"}
+{"ts": "2026-07-23T21:29:17", "tipo": "tc_freeze", "detalle": {"estado": "caido", "valor": "01:00:09:24", "pps": 0}, "tc": null}
+{"ts": "2026-07-23T21:29:56", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:30:57", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:31:58", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:32:58", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:33:30", "tipo": "senal_on", "detalle": {"canal": "artnet", "info": "OpDmx uni 2", "pps": 4.7}, "tc": null}
+{"ts": "2026-07-23T21:33:30", "tipo": "senal_on", "detalle": {"canal": "sacn", "info": "E1.31 uni 2", "pps": 4.7}, "tc": null}
+{"ts": "2026-07-23T21:33:38", "tipo": "senal_off", "detalle": {"canal": "artnet", "ultimo": "2026-07-23T21:33:32"}, "tc": null}
+{"ts": "2026-07-23T21:33:38", "tipo": "senal_off", "detalle": {"canal": "sacn", "ultimo": "2026-07-23T21:33:32"}, "tc": null}
+{"ts": "2026-07-23T21:33:55", "tipo": "setlist_next", "detalle": {"accion": "cargada", "temas": 5, "actual": "Intro / ambiente"}, "tc": null}
+{"ts": "2026-07-23T21:33:58", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:34:59", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:36:05", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:37:01", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:38:00", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:39:01", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:40:02", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:41:03", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:42:04", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:43:05", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:44:05", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:45:09", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:46:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:47:10", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:48:08", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:49:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:50:09", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:51:09", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:52:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 99, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:53:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:54:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:55:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:56:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:57:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:58:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T21:59:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:00:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:01:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:02:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:03:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:04:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:05:16", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:06:16", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:07:16", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:08:19", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:09:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:10:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:11:19", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:12:20", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:13:21", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:14:29", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:15:22", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:16:27", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:17:24", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:18:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:19:25", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:20:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:21:27", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 98, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:22:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:23:28", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:24:34", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:25:30", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:26:31", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:27:31", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:28:30", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:29:32", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:30:32", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:31:32", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:32:33", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:33:33", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 97, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:34:34", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:35:34", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:36:36", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:37:36", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:38:36", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:39:38", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:40:37", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:41:38", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:42:38", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:43:39", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:44:41", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:45:46", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 96, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:46:39", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:47:40", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:48:41", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:49:43", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:50:43", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:51:43", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:52:45", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:53:46", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:54:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:55:52", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:56:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:57:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 95, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:58:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T22:58:47", "tipo": "bateria", "detalle": {"nivel": 94, "cargando": true, "temp": 32.0}, "tc": null}
+{"ts": "2026-07-23T22:59:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:00:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:01:47", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:02:48", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:03:49", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:04:48", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:05:52", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:06:50", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:07:52", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:08:50", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:09:55", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 94, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:10:54", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:11:53", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:12:53", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:13:54", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:14:53", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:15:55", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:16:55", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:17:57", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:18:56", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:19:56", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:20:57", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:21:57", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:22:58", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 93, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:23:57", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:24:59", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:25:59", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:27:01", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:28:01", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:29:04", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:30:04", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:31:02", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:32:02", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:33:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:34:06", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:35:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 92, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:36:05", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:37:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:38:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:39:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:40:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:41:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:42:07", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:43:08", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:44:08", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:45:09", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:46:09", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:47:17", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 91, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:48:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:49:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:50:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:51:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:52:11", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:53:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:54:12", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:55:18", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:56:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:57:13", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:58:14", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
+{"ts": "2026-07-23T23:59:15", "tipo": "heartbeat", "detalle": {"activos": {"artnet": false, "sacn": false, "osc": false, "audio": null, "tc": "caido"}, "bateria": 90, "cargando": true}, "tc": null}
