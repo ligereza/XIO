@@ -207,16 +207,25 @@ def test_content_posterization_is_attributed_to_the_content():
     assert origin["quantized_frames"] == 3
 
 
+def _still_band(count):
+    """Same band, frame after frame, with the sensor noise a real camera has.
+
+    Cuadros identicos hasta el ultimo bit no existen en un sensor vivo, y el
+    modulo los rechaza; la fase quieta se modela con ruido distinto por cuadro.
+    """
+    return [_rows(240.0, depth=0.4, phase=0.0, noise=0.001 * (index + 1))
+            for index in range(count)]
+
+
 def test_two_frames_never_establish_that_a_band_stayed_put():
-    frames = [_rows(240.0, depth=0.4, phase=0.0) for _ in range(2)]
+    frames = _still_band(2)
     origin = banding_origin(frames)
     assert origin["origin"] is None
     assert "casualidad" in origin["reason"]
 
 
 def test_a_band_that_does_not_move_between_frames_belongs_to_the_wall():
-    frames = [_rows(240.0, depth=0.4, phase=0.0) for _ in range(4)]
-    origin = banding_origin(frames)
+    origin = banding_origin(_still_band(4))
     assert origin["origin"] == "muro o refresco"
     assert origin["phase_spread"] <= 0.1
 
@@ -242,7 +251,7 @@ def test_one_frame_cannot_answer_a_temporal_question():
 
 
 def test_known_cabinet_seams_turn_the_inference_into_a_check():
-    frames = [_rows(240.0, depth=0.4) for _ in range(3)]
+    frames = _still_band(3)
     period = flicker_reading(frames[0], None)["band_rows"]
     seams = [int(round(period * multiple)) for multiple in (1, 2, 3)]
     origin = banding_origin(frames, geometry_rows=seams)
@@ -262,3 +271,35 @@ def test_the_resolvable_range_is_answered_before_capturing():
     assert front["nyquist_hz"] == main["nyquist_hz"]
     with pytest.raises(Exception):
         resolvable_range(0, 20e-6)
+
+
+def test_repeated_frames_are_refused_instead_of_read_as_a_still_band():
+    # Encontrado corriendo el modulo sobre una captura real: ffmpeg entrego seis
+    # veces el mismo cuadro y banding_origin contestaba "muro o refresco" con
+    # dispersion de fase 0.0. Una respuesta segura y falsa es peor que ninguna.
+    frame = _rows(240.0, depth=0.4)
+    with pytest.raises(FlickerError) as failure:
+        banding_origin([frame, frame, frame])
+    assert "mismo buffer" in str(failure.value)
+    # Cuadros de verdad distintos siguen funcionando.
+    assert banding_origin(_still_band(3))["origin"] == "muro o refresco"
+
+
+def test_a_scene_without_a_resolvable_band_gets_no_origin_attributed():
+    # Encontrado sobre luz real: la pieza no tenia flicker resoluble y lo que
+    # dominaba era la escena (una zona clara y otra oscura, ~2 ciclos en el
+    # cuadro). El modulo etiquetaba eso como "muro o refresco".
+    def cuadro(shift):
+        filas = []
+        for index in range(720):
+            base = 40.0 + 60.0 * math.sin(math.pi * index / 720.0)
+            ruido = (((index * 1103515245 + shift * 12345) >> 7) % 997) / 997.0
+            filas.append(base + 0.8 * ruido)
+        return filas
+
+    escena = [cuadro(shift) for shift in range(4)]
+    origin = banding_origin(escena)
+    assert origin["origin"] is None
+    assert "no traen una banda de al menos" in origin["reason"]
+    assert "lo que domina es la escena" in origin["reason"]
+    assert origin["phase_spread"] is None

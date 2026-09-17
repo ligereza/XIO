@@ -436,12 +436,51 @@ def banding_origin(frames_rows, geometry_rows=None, tolerance=1e-6):
     if len(frames_rows) < 2:
         raise FlickerError("banding_origin necesita al menos dos cuadros: la "
                            "discriminacion es temporal, no espacial")
+    # Cuadros IDENTICOS no son evidencia de que la banda este quieta: son una
+    # captura que entrego el mismo buffer varias veces. Medido el 2026-09-17:
+    # ffmpeg escribio seis veces el mismo cuadro de la webcam y este modulo
+    # contesto "muro o refresco" con dispersion de fase 0.0 -- una respuesta
+    # segura y falsa. Un sensor vivo tiene ruido: dos cuadros iguales hasta el
+    # ultimo bit no existen.
+    distintos = {tuple(rows) for rows in frames_rows}
+    if len(distintos) < len(frames_rows):
+        raise FlickerError(
+            f"{len(frames_rows)} cuadros y solo {len(distintos)} distintos: la "
+            "captura esta repitiendo el mismo buffer. Dos cuadros identicos de "
+            "un sensor vivo no existen, asi que esto no mide nada.")
     # Con dos cuadros una fase parecida puede ser casualidad. Tres es el minimo
     # para decir que la banda "no se movio".
     enough_frames = len(frames_rows) >= 3
     readings = [flicker_reading(rows, None) for rows in frames_rows]
+    # Para preguntar DE QUIEN es la banda, primero tiene que haber banda. Dos o
+    # tres ciclos en un cuadro son un degradado de la escena, no un patron: con
+    # esa cantidad no se distingue un pulso de la forma de lo que se esta
+    # mirando. Se exige el mismo umbral que hace utilizable una lectura.
     periods = [reading["band_rows"] for reading in readings
-               if reading.get("band_rows")]
+               if reading.get("band_rows")
+               and (reading.get("cycles_in_frame") or 0) >= COARSE_CYCLES]
+    # Sin banda no hay origen que atribuir. Medido el 2026-09-17 sobre la webcam
+    # de MAK: la luz de la pieza no tenia flicker resoluble y el componente
+    # dominante era la propia escena (1.9 ciclos en el cuadro, o sea una zona
+    # clara y otra oscura). Este modulo contestaba igual "muro o refresco",
+    # etiquetando el origen de algo que no era una banda.
+    if len(periods) < len(frames_rows):
+        sin_banda = len(frames_rows) - len(periods)
+        return {
+            "schema": SCHEMA,
+            "frames": len(frames_rows),
+            "band_rows": None,
+            "phase_spread": None,
+            "quantized_frames": sum(1 for rows in frames_rows
+                                    if value_quantization(rows, tolerance)["quantized"]),
+            "origin": None,
+            "at_known_geometry": None,
+            "reason": (f"{sin_banda} de {len(frames_rows)} cuadros no traen una "
+                       f"banda de al menos {COARSE_CYCLES:g} ciclos: lo que domina "
+                       "es la escena, no un pulso. Sin banda no hay origen que "
+                       "atribuir -- hace falta una ventana mas larga (mas filas) "
+                       "o exposicion mas corta."),
+        }
     quantization = [value_quantization(rows, tolerance) for rows in frames_rows]
 
     phases = []
