@@ -22,9 +22,30 @@ automatización, documentación, ideas y proyectos de instalación.
 - `cultura/`: mapa conceptual XIO, handoff técnico y puente MAK↔XIO.
 - `projects/cultura/MAPA_GENERATIVO.md`: contexto del XIO dentro del mapa de
   proyectos e ideas de Cauce.
-- `tests/`: 8 suites de pytest y 9 gates `check_xio_*.py` que se corren con el
+- `xio/show_reading.py`: la lectura medida de un show a partir de su JSONL, con
+  el **reloj declarado por segmento** (`ltc`, `osc_trigger`, `wall`, `tap`).
+  Reproduce la tabla de duraciones que se calculó a mano para el show del
+  2026-07-24 y, donde el log se contradice, lo dice en vez de elegir.
+- `xio/flicker.py`: flicker y bandas leídos de un cuadro de rolling shutter —
+  frecuencia de PWM, profundidad de modulación, y de quién son las bandas
+  (contenido o muro). Declara su propia resolución y se niega a dar una
+  frecuencia que la ventana no puede resolver.
+- `xio/foh_knowledge.py`: el ledger de conocimiento FOH/VJ (venues, eventos,
+  artistas, obras) en dos capas que no se mezclan — lo declarado por una fuente
+  y lo observado por un instrumento — y su publicación al Hub de MAK en el
+  esquema `faro-xio-evidence-v1` que el Hub ya renderiza.
+- `xio/foh_learning.py`: lo que el corpus de shows puede enseñar, con la
+  cantidad de muestras pegada al número: la latencia del toque humano, la
+  duración real contra el clip acumulada por obra, y las cues que no dispararon.
+- `xio/semantic_lighting.py` y `xio/experimental_rehearsal.py`: la mitad
+  generativa, que propone escena y paquete desde un evento canónico de
+  audio/timecode. La superficie FOH todavía no las usa.
+- `tests/`: 13 suites de pytest y 9 gates `check_xio_*.py` que se corren con el
   intérprete y verifican contratos (staging de campo, runtime del teléfono,
-  puente RD, contexto FOH, host dinámico y las dos APK).
+  puente RD, contexto FOH, host dinámico y las dos APK). Dos de esas suites
+  —`test_showcontrol_token.py` y `test_wifi_intelligence_plugin.py`— llegaron
+  desde VIBECODEINE el 2026-09-17: probaban plugins de este repositorio desde
+  un árbol donde el código ya no estaba.
 
 ## Arranque rápido
 
@@ -61,9 +82,23 @@ for t in xio/new-plugins/showcontrol/test_*.py; do python3 "$t" || break; done
 ```
 
 Medido sobre Linux con `requirements-dev.txt` instalado: `python -m pytest -q`
-ejecuta 37 pruebas y todas pasan; las diez suites directas de `showcontrol`
-ejecutan otras 69 y todas pasan. Son 106 pruebas locales en total. Ninguna
+ejecuta 184 pruebas y todas pasan; las diez suites directas de `showcontrol`
+ejecutan otras 69 y todas pasan. Son 253 pruebas locales en total. Ninguna
 toca el teléfono, la red ni `adb`.
+
+Las suites de `show_reading`, `foh_learning` y `foh_knowledge` se apoyan en el
+registro VERSIONADO del show DREF del 2026-07-24
+(`xio/show_kit/registros/show_dref_20260724/`), no en `xio/show_kit/_logs/`,
+que está ignorado por git: una prueba que se salta sola cuando falta el archivo
+se lee igual que una prueba que pasa.
+
+Los nueve gates `tests/check_xio_*.py` son aparte y no los recoge pytest.
+Medido el 2026-09-17: seis pasan sin argumentos; `check_xio_field_staging.py`
+pasa con `--rd-db /home/mak/data/rd.db`; `check_xio_runtime_bundle.py` pasa
+contra el paquete que construye `xio/new/build_field_bundle.py`; y
+`check_xio_phone_runtime.py` exige el Xiaomi conectado y no se puede cerrar
+sin el teléfono. Un gate que pide un argumento y no lo recibe sale con código
+2 sin medir nada: eso no es un gate verde.
 
 Este repositorio fija su propio `pytest.ini`. Sin él, pytest sube por encima
 del checkout, adopta la configuración de un directorio padre y deselecciona

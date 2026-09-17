@@ -336,6 +336,37 @@ pantalla una vez lo arma; igual sube el timeout de pantalla en Ajustes pa show).
   seleccionando la interfaz WiFi del hotspot. Si el software bloquea el
   broadcast global, usa el broadcast `.255` de la subred actual.
 
+**MEDIDO en el aparato el 2026-09-17** (Xiaomi 8299e66f, hotspot
+10.207.52.119/24, MAK como cliente en 10.207.52.85, APK nativa corriendo).
+Se mandaron 6 paquetes validos de cada familia por cada destino y se leyeron
+los contadores de `/status` antes y despues:
+
+| destino | Art-Net :6454 | sACN :5568 | OSC :7000 |
+|---|---|---|---|
+| unicast a la IP del telefono | llega | llega | llega |
+| broadcast de subred `10.207.52.255` | llega | llega | llega |
+| broadcast global `255.255.255.255` | llega | llega | llega |
+| multicast `239.255.0.3` | -- | **NO llega** | -- |
+
+Dos consecuencias para el dia de show:
+
+1. El broadcast global **si cruza** a este telefono en este hotspot, asi que la
+   configuracion de Chataigne que trae el show kit (`255.255.255.255:7000`)
+   funciona, y el `.255` de la subred sirve igual como respaldo. Eso deja de ser
+   una reserva escrita y pasa a ser un hecho medido.
+2. El multicast de sACN **no llega**: 8 paquetes enviados a `239.255.0.3:5568`,
+   cero recibidos, con unicast y los dos broadcasts funcionando en la misma
+   sesion. Confirma la advertencia de este runbook: para sACN, **unicast a la IP
+   actual o broadcast**, nunca multicast. No se midio la causa (puede ser el
+   join en HyperOS o que el AP no reinyecte multicast de un cliente al enlace
+   inalambrico); la conclusion operativa es la misma.
+
+Tambien quedo verificado en vivo lo que hasta ahora solo estaba probado fuera
+del aparato: los 6 paquetes de `/timecode` movieron el canal TIMECODE a
+`corriendo` con valor `01:30:00:15` y **no incrementaron el canal VISUAL**
+(subio exactamente los 6 del clip). Y al repetirse el mismo valor, el estado
+paso a `congelado` solo.
+
 **Consultar la red de la sesion:**
 
 `connectivity_supervisor` calcula estos valores desde la direccion actual de
@@ -391,6 +422,124 @@ Message /timecode`. Paso a paso + kit completo del dia (check GO/NO-GO,
 setlist doble-click, relay de luces por cable, playbook de fallas):
 `xio/show_kit/DIA_DEL_SHOW.md`.
 
+**Marcar un tramo EN VIVO (lo que el log no puede reconstruir despues):**
+
+El panel trae dos botones, `TRAMO: CONTENIDO` y `FALLA`, que escriben un
+registro `marca` con el timecode vigente. La distincion no es cosmetica: el
+2026-07-24 los tramos sin SMPTE eran CCTV, texto y conversacion con el publico
+--o sea contenido-- y el panel los pintaba igual que una caida. Quien sabe cual
+es cual es quien esta ahi, en ese momento.
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"clase":"contenido","texto":"tema invitado, CCTV"}'   http://<phone>:5000/api/plugins/foh_monitor/mark
+```
+`clase` es `contenido`, `falla` o `nota`. La lectura del show usa esa marca:
+una ventana marcada como CONTENIDO se descuenta del tema (es su propio bloque),
+una marcada como FALLA no (el tema siguio, lo que se cayo fue la señal), y sin
+marca se descuenta diciendo que ahi hay un supuesto.
+
+**Show sin timecode:** el address de disparo de clip de Resolume
+(`/composition/layers/N/clips/M/connect`) ahora se registra como `clip_trigger`,
+una linea por cambio de (capa, clip). Es el reloj de un show sin SMPTE, y
+ademas nombra lo que sono. Requiere OSC Output habilitado en Resolume hacia el
+telefono.
+
+**Quien es el dueño de los puertos:** `GET /status` publica `port_ownership`.
+El server no carga este plugin cuando el host se declara `rd`, pero el valor por
+omision de `XIO_HOST_DOMAIN` es `all`, y con ese valor el plugin SI bindea. Los
+sockets usan `SO_REUSEADDR`, asi que un doble bind con la APK nativa no falla:
+reparte los paquetes en silencio. Declarar `XIO_HOST_DOMAIN=foh` en el host
+Python, o dejarle la escucha a la APK.
+
+## 6c. Leer el show despues (sin telefono)
+
+```bash
+# que sesiones hay en el archivo -- un log NO es un show
+python xio/show_reading.py xio/show_kit/_logs/xio_show_20260724.jsonl --sessions
+
+# la lectura medida de una de ellas
+python xio/show_reading.py xio/show_kit/_logs/xio_show_20260724.jsonl   --durations xio/show_kit/setlist_durations_dref.json   --cue-map xio/show_kit/cue_map_dref.json   --from 2026-07-24T20:01:38 --to 2026-07-24T21:28:04
+```
+Cada segmento declara QUE reloj lo midio y con que precision. El limite del
+show no se deduce: lo trae el `fohEventKey` de los registros, o lo pone el
+operador con la ventana. Un archivo de un dia entero trae 469 avances de los
+cuales 21 son el show.
+
+Lo que esta lectura reprodujo del analisis hecho a mano (2168 registros): el
+intro es el clip largo de 5:31, Enrolar necesita 5:12 y tiene 1:28 (faltan
+3:44), FINAL FALSO son 21 s separados de Pinky, "Llama a tu amiga" son 2:09 de
+tema mas 1:03 de conversacion, y el tema invitado aparece como una ventana sin
+atribuir de 4:16 dentro de A Fuego.
+
+Y una correccion: la anotacion dice que el LTC de Funkysolo "murio a los 7 s".
+El log tiene 9 muestras en ese tramo y los heartbeats avanzan 1:1 con el reloj
+hasta 34484.2 (4:44 dentro del tema); solo el congelamiento reporta 34207.4. La
+lectura no elige entre las dos: reporta la contradiccion.
+
+**Conocimiento acumulado y puente al Hub de MAK:**
+```bash
+python -m xio.foh_knowledge --log xio/show_kit/registros/show_dref_20260724/foh_20260724.jsonl   --event-key "producer_event:freedom:0" --durations xio/show_kit/setlist_durations_dref.json   --from 2026-07-24T20:01:38 --to 2026-07-24T21:28:04 --publish
+```
+Deja un sobre `faro-xio-evidence-v1` por sujeto en `xio/data/foh_knowledge/`
+(fuera del repositorio). `cultura/mak_plataforma/xio_evidence.py` lo lee con
+`load_foh_knowledge()` y el Hub lo expone en la pestaña Portafolio como
+`xio_knowledge`. Atribuir un log a un evento y filtrar por evento son cosas
+distintas: los logs anteriores al selector no traen `fohEventKey`, y la
+atribucion por palabra del operador queda escrita en la procedencia del atomo.
+
+**Aprendizaje sobre el corpus:** `xio/foh_learning.py`. Sobre el show real, la
+mediana de atraso de los avances disparados por timecode es 0.033 s --el
+control del metodo-- y los toques manuales NO son medibles en este corpus (los
+seis que hay ocurrieron sin timecode corriendo), asi que el reloj `tap` sigue
+sin precision declarada en vez de tener una inventada. Tambien encontro las dos
+cues que nunca dispararon (Yoseke y DIABLO SANTO) y un defecto del dato
+versionado: en `cue_map_dref.json` la cue de FINAL FALSO trae `n` igual a
+`"%%%%%%"`, y por eso el mapa numera 18 lo que el setlist llama 19.
+
+## 6d. Medir la luz de la sala (flicker y bandas)
+
+`xio/flicker.py` lee una serie de luminancia POR FILA de un cuadro de rolling
+shutter: un cuadro es una serie temporal en el eje vertical, o sea un fotometro
+barato. Es lo unico en XIO que mide la luz que SALIO en vez de los paquetes que
+el rig mando.
+
+Limites declarados, no escondidos: 1080 filas a 28 us son 30 ms, y en 30 ms un
+pulso de 100 Hz entra 3 veces -- la frecuencia vale +-33 Hz y la lectura lo
+dice (`confidence: gruesa`). Por debajo de dos ciclos se niega a dar una
+frecuencia. Una foto de 4000 filas resuelve desde la red hasta el PWM de un LED
+moderno. El tiempo de linea es una constante del aparato y se calibra contra
+una fuente conocida: la red en Chile es de 50 Hz, asi que cualquier lampara
+barata pulsa a 100 Hz y sirve de patron (`calibrate_line_seconds`).
+
+De quien son las bandas: `banding_origin` necesita al menos tres cuadros,
+porque la discriminacion es temporal. Si la fase de la banda no se movio
+mientras el contenido cambiaba, es del muro o del refresco; si se movio con la
+imagen, o si el valor sube en escalones parejos con mesetas, es posterizacion
+del contenido. Con dos cuadros, o con evidencia ambigua, contesta que no se
+puede distinguir.
+
+**MEDIDO en el aparato el 2026-09-17** (`dumpsys media.camera`):
+`MANUAL_SENSOR` esta soportado, y tambien `RAW`, `READ_SENSOR_SETTINGS`,
+`BURST_CAPTURE` y `MANUAL_POST_PROCESSING`. O sea que la medicion es viable en
+este telefono: se puede fijar obturador e ISO, y con RAW la compresion no se
+come las bandas.
+
+| camara | filas | exposicion minima | sirve para |
+|---|---|---|---|
+| 0 (principal, 4640x3472) | 3472 | 82 us | ventana larga: red y frecuencias bajas |
+| 1 (2592x1940) | 1940 | 17 us | PWM rapido: la exposicion tiene que ser mas corta que el periodo |
+
+Con un tiempo de linea de 20 us --todavia una suposicion-- la camara 0 da una
+ventana de 69 ms, resolucion +-14 Hz y lecturas utilizables desde 58 Hz, asi
+que resuelve bien el patron de 100 Hz de la red. La camara 1 da 39 ms y
+utilizable desde 103 Hz, pero su exposicion minima es cuatro veces mas corta.
+`xio/flicker.py::resolvable_range(filas, tiempo_de_linea)` contesta esto ANTES
+de capturar, para elegir camara y modo en vez de descubrirlo despues.
+
+Pendiente con el telefono: calibrar el tiempo de linea del sensor del Xiaomi y
+confirmar que Camera2 deja fijar shutter e ISO ahi. Con exposicion automatica
+esta medicion no existe.
+
 **Audio:** requiere `pkg install termux-api ffmpeg` + app Termux:API instalada.
 Si faltan, el tile AUDIO queda "N/D" con el motivo en `/status` -- el resto del
 plugin funciona igual. Umbral: config `audio_threshold_db` (default -50 dBFS).
@@ -408,6 +557,28 @@ sh setup_watchdog.sh      # installs adb client in Termux, authorizes loopback,
 sh setup_boot.sh          # installs Termux:Boot launcher -> ~/.termux/boot/00-xio-boot.sh
 sh setup_runcommand.sh    # allow-external-apps=true (headless RUN_COMMAND post-reboot)
 ```
+
+**Build and stage the field runtime package (host side, before touching the phone):**
+```bash
+python xio/new/build_field_bundle.py                                  # -> dist/xio-field-runtime-<fecha>.zip
+python tests/check_xio_runtime_bundle.py dist/xio-field-runtime-<fecha>.zip
+```
+The package is extracted directly under `/sdcard/xio_termux`, so its paths ARE
+the phone layout: the shell entry points of section 4 at the root, where they
+call each other by absolute path, and the server under `new/`, which
+`run_server.sh` copies to `$HOME/xioserver`. `new-plugins/` carries exactly the
+three field plugins (`rd_field`, `foh_monitor`, `connectivity_supervisor`) and
+lands as an overlay, so the rest of the phone's plugin library survives.
+
+The builder ships only files git tracks: a filesystem walk dragged this host's
+own `foh_monitor/config.json` -- gitignored precisely because it is local
+configuration -- into the phone package. The plugin has `DEFAULTS` and the
+launcher's environment wins over a copied config, so its absence is the
+correct state, not a gap. The zip is deterministic: same checkout, same
+sha256. `dist/` is not versioned. The gate must report `RUNTIME_BUNDLE=PASS`;
+it is the only check that reads what actually travels to the phone, and until
+now nothing on MAK produced the package it verifies (the one that existed was
+built on the Windows machine).
 
 **Deploy / redeploy the server (replaces the runtime copy; do not run during a show):**
 ```bash
@@ -444,8 +615,8 @@ The deploy path is split and `xio/new/README.md` now says so: server code and
 the plugin FRAMEWORK (`plugins/base.py`, `plugins/__init__.py`) come from
 `xio/new/`, while the live plugin LIBRARY comes from the separate
 `xio/new-plugins/`, wired via `PLUGINS_DIR=$HOME/xioplugins`. `xio/new/plugins/`
-also holds `_template`, `battery_care` and `example_tool` as legacy fallback;
-that is not what ships. The runtime copy is updated by overlay, so a focused
+holds only the framework: the `_template`, `battery_care` and `example_tool`
+fallback folders were retired from this repository and are not there to ship. The runtime copy is updated by overlay, so a focused
 field package does not remove unrelated plugins.
 
 **Quick local dev run (off-device, PC only, not the show path):**
