@@ -45,7 +45,61 @@ def main() -> None:
     assert "age == null ? JSONObject.NULL : age" in activity
     for marker in ("ARTNET_PORT = 6454", "SACN_PORT = 5568", "OSC_PORT = 7000", "MulticastSocket", "#bundle"):
         assert marker in listener, marker
-    print("OK: XIO-FOH native APK contract/package/menu/service/ports")
+
+    # Unirse a los grupos sACN sin tomar el MulticastLock del WiFi no sirve de
+    # nada: el driver descarta el multicast. Medido el 2026-09-17 contra el
+    # Xiaomi -- 8 paquetes a 239.255.0.3:5568, cero recibidos, con unicast y
+    # broadcast funcionando. El manifest declaraba el permiso y el codigo nunca
+    # lo usaba, o sea que el permiso pedido era la unica señal de una intencion
+    # que no se cumplia.
+    assert "CHANGE_WIFI_MULTICAST_STATE" in manifest
+    for marker in ("createMulticastLock", "acquireMulticastLock", "releaseMulticastLock",
+                   "multicastStatus"):
+        assert marker in listener, marker
+    assert "joinGroup" in listener
+    assert listener.index("acquireMulticastLock()") < listener.index("joinGroup"), (
+        "el lock se toma ANTES de unirse a los grupos")
+    assert '"multicast", listener.multicastStatus()' in native, (
+        "/status tiene que publicar si el lock esta tomado, en vez de afirmar "
+        "que el multicast llega")
+
+    # El address de disparo de clip es el reloj de un show SIN timecode, y
+    # ademas nombra lo que sono. Una linea por cambio de (capa, clip), no una
+    # por paquete: Resolume manda muchos por segundo.
+    for marker in ("CLIP_ADDRESS", "noteClipTrigger", "clip_trigger", "lastClipTrigger"):
+        assert marker in listener, marker
+
+    # La IP de origen por canal: el enlace se cae, o cambia de IP por DHCP,
+    # antes de que se noten los datos.
+    for marker in ("packet.getAddress()", "lastSource", "sourceChanges", "fuente_cambio"):
+        assert marker in listener, marker
+    assert '"source", s.source' in native and '"source_changes"' in native
+
+    # La marca en vivo tiene que existir en la superficie que DE VERDAD corre en
+    # un show, no solo en el plugin Python.
+    assert '"/mark".equals(path)' in native, "la APK necesita POST /mark"
+    assert "MARK_CLASSES" in native and '"marca"' in native
+    for marker in ("MARCAR EL TRAMO QUE CORRE", "CONTENIDO", "FALLA",
+                   'foh_monitor/mark'):
+        assert marker in activity, marker
+
+    # Y las dos superficies tienen que aceptar LAS MISMAS clases: si no, una
+    # marca significa cosas distintas segun quien la reciba.
+    plugin = (ROOT / "xio" / "new-plugins" / "foh_monitor" / "__init__.py").read_text(
+        encoding="utf-8")
+    import re as _re
+    python_classes = _re.search(r"MARK_CLASSES = \(([^)]*)\)", plugin)
+    assert python_classes, "el plugin Python declara MARK_CLASSES"
+    python_set = set(_re.findall(r'"([a-z]+)"', python_classes.group(1)))
+    java_classes = _re.search(r"MARK_CLASSES =\s*\n?\s*java\.util\.Arrays\.asList\(([^)]*)\)",
+                              native)
+    assert java_classes, "la APK declara MARK_CLASSES"
+    java_set = set(_re.findall(r'"([a-z]+)"', java_classes.group(1)))
+    assert python_set == java_set, (
+        f"las clases de marca difieren: python={sorted(python_set)} apk={sorted(java_set)}")
+
+    print("OK: XIO-FOH native APK contract/package/menu/service/ports/mark/"
+          f"multicast-lock/clip-trigger (clases de marca: {sorted(java_set)})")
 
 
 if __name__ == "__main__":

@@ -152,6 +152,7 @@ public final class FohNativeServer {
             if ("POST".equals(method) && "/setlist".equals(path)) return postSetlist(body);
             if ("POST".equals(method) && "/next".equals(path)) return moveSetlist(1);
             if ("POST".equals(method) && "/prev".equals(path)) return moveSetlist(-1);
+            if ("POST".equals(method) && "/mark".equals(path)) return mark(body);
             if ("POST".equals(method) && "/ingest".equals(path)) return ingest(body);
             if ("GET".equals(method) && "/resumen".equals(path)) return summary(query);
             if ("GET".equals(method) && "/registro".equals(path)) return asset("registro.html", "text/html; charset=utf-8");
@@ -170,6 +171,52 @@ public final class FohNativeServer {
         } catch (Exception error) {
             return json(500, errorJson(error.getMessage() == null ? "error interno" : error.getMessage()));
         }
+    }
+
+    /** Las clases que el operador puede distinguir EN VIVO sobre el tramo que
+     * esta corriendo. Mismo contrato que el plugin Python: contenido | falla |
+     * nota. Es la superficie que de verdad corre en un show, asi que la marca
+     * tiene que existir aca y no solo alla. */
+    private static final java.util.List<String> MARK_CLASSES =
+            java.util.Arrays.asList("contenido", "falla", "nota");
+
+    /** Etiqueta el tramo que esta corriendo, mientras esta corriendo.
+     *
+     * La distincion no se puede reconstruir despues: el 2026-07-24 los tramos
+     * sin SMPTE eran CCTV, texto y conversacion con el publico -- o sea
+     * contenido -- y el panel los pintaba igual que una caida. Quien sabe cual
+     * es cual es quien esta ahi, en ese momento.
+     *
+     * Es escritura, pero al propio registro y nada mas: no toca el rig, no
+     * manda un paquete y no cambia el setlist.
+     */
+    private Response mark(String body) throws JSONException {
+        JSONObject data = new JSONObject(body.isEmpty() ? "{}" : body);
+        String clase = data.optString("clase", "").trim().toLowerCase(java.util.Locale.ROOT);
+        if (!MARK_CLASSES.contains(clase)) {
+            return json(400, errorJson("clase debe ser una de: " + String.join(", ", MARK_CLASSES)));
+        }
+        String texto = data.optString("texto", "").trim();
+        if (texto.length() > 280) texto = texto.substring(0, 280);
+        JSONObject timecode = listener.timecodeSnapshot();
+        JSONObject detalle = new JSONObject()
+                .put("clase", clase)
+                .put("texto", texto)
+                // Lo que el setlist estaba mostrando. Es contexto, no una
+                // afirmacion de que la marca pertenezca a ese tema.
+                .put("tema_en_pantalla", currentSongOrNull())
+                .put("tc_estado", timecode.optString("state", "sin_senal"));
+        store.append(System.currentTimeMillis(), "marca", detalle.toString(), currentEventKey(),
+                timecode.isNull("value") ? null : timecode.optString("value", null));
+        return json(new JSONObject().put("ok", true).put("domain", "vj_foh")
+                .put("source", "xio_foh_apk").put("marca", detalle)
+                .put("tc", timecode.isNull("value") ? JSONObject.NULL : timecode.opt("value")));
+    }
+
+    private Object currentSongOrNull() throws JSONException {
+        JSONObject setlist = setlistJson();
+        String current = setlist == null ? "" : setlist.optString("current_name", "");
+        return current == null || current.isEmpty() ? JSONObject.NULL : current;
     }
 
     private Response ingest(String body) throws JSONException {
@@ -269,6 +316,9 @@ public final class FohNativeServer {
             String key = "Art-Net".equals(entry.getKey()) ? "artnet" : "sACN".equals(entry.getKey()) ? "sacn" : "osc";
             channel.put("last_seen", s.lastAt == 0 ? JSONObject.NULL : s.lastAt);
             channel.put("invalid_packets", 0).put("error", JSONObject.NULL);
+            // De que maquina llega cada canal, y cuantas veces cambio.
+            channel.put("source", s.source.isEmpty() ? JSONObject.NULL : s.source);
+            channel.put("source_changes", s.sourceChanges);
             channels.put(key, channel);
         }
         JSONObject audio = new JSONObject().put("available", false).put("active", false)
@@ -280,6 +330,7 @@ public final class FohNativeServer {
                 .put("audio", audio).put("battery", batteryJson()).put("eventKey", currentEventKey())
                 .put("context", currentContext()).put("setlist", setlistJson())
                 .put("active_window", 5).put("log_file", "app-private/xio_foh.db")
+                .put("multicast", listener.multicastStatus())
                 .put("storage", "xio_foh.db");
     }
 

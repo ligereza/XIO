@@ -134,6 +134,25 @@ public final class MainActivity extends ComponentActivity {
 
         statusView = text("Estado: consultando…", 12, GREEN); pageHost.addView(statusView);
         batteryView = text("", 12, MUTED); pageHost.addView(batteryView);
+        // Marca en vivo. Un toque dice si este tramo es CONTENIDO o es FALLA, y
+        // esa distincion no se puede reconstruir despues: el 2026-07-24 los
+        // tramos sin SMPTE eran CCTV, texto y conversacion con el publico, y
+        // hubo que aportarlo de memoria tras el show. Dedo en cabina oscura:
+        // botones altos, no controles finos.
+        LinearLayout marca = card();
+        marca.addView(text("MARCAR EL TRAMO QUE CORRE", 11, AMBER));
+        LinearLayout marcaRow = row();
+        Button marcaContenido = button("CONTENIDO", SURFACE, GREEN);
+        Button marcaFalla = button("FALLA", SURFACE, RED);
+        marcaContenido.setOnClickListener(v -> postJson("/api/plugins/foh_monitor/mark",
+                "{\"clase\":\"contenido\"}", "marcado: contenido"));
+        marcaFalla.setOnClickListener(v -> postJson("/api/plugins/foh_monitor/mark",
+                "{\"clase\":\"falla\"}", "marcado: falla"));
+        marcaRow.addView(marcaContenido, weight(1, dp(46), 0));
+        marcaRow.addView(marcaFalla, weight(1, dp(46), 6));
+        marca.addView(marcaRow);
+        pageHost.addView(marca);
+
         LinearLayout feed = card(); feed.addView(text("FEED DE EVENTOS", 11, AMBER)); feedView = text("sin eventos", 12, MUTED); feed.addView(feedView); pageHost.addView(feed);
         refreshStatus();
     }

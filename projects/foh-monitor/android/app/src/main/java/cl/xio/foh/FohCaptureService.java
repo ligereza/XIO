@@ -45,7 +45,10 @@ public final class FohCaptureService extends Service {
             @Override public void onSetlistIndexChanged(int index) {
                 getSharedPreferences("xio_foh", MODE_PRIVATE).edit().putInt("setlistIndex", index).apply();
             }
-        });
+        // El servicio pasa su Context para que el listener pueda tomar el
+        // MulticastLock del WiFi: sin ese lock el driver descarta el multicast y
+        // el join de los grupos sACN no sirve de nada (medido 2026-09-17).
+        }, this);
         // XIO-FOH is self-hosting on the private hotspot. The APK UI is native;
         // this HTTP surface is only for colleagues' browsers and the existing
         // FLUJO-ISKVW visualizer, so no PC or Termux process is required.

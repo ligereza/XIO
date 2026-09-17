@@ -1,5 +1,8 @@
 package cl.xio.foh;
 
+import android.content.Context;
+import android.net.wifi.WifiManager;
+
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -13,6 +16,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -29,7 +34,19 @@ public final class FohListener {
     public static final int OSC_PORT = 7000;
     private static final long ACTIVE_WINDOW_MS = 5000L;
     private static final long TC_FREEZE_MS = 2000L;
+    /** Direccion de disparo de clip de Resolume. cue_map_dref.json ya declara la
+     * plantilla: /composition/layers/{layer}/clips/{clip}/connect. En un show sin
+     * timecode este address es el unico reloj que ademas NOMBRA lo que sono, y
+     * hasta ahora solo servia para prender el tile VISUAL. */
+    private static final Pattern CLIP_ADDRESS = Pattern.compile(
+            "/composition/layers?/(\\d+)/clips?/(\\d+)/(connect|select)",
+            Pattern.CASE_INSENSITIVE);
     private final FohLogStore store;
+    private final Context context;
+    private WifiManager.MulticastLock multicastLock;
+    private volatile boolean multicastLockHeld;
+    private volatile int multicastGroupsJoined;
+    private volatile String lastClipTrigger = "";
     private final Callback callback;
     private final Map<String, Channel> channels = new HashMap<>();
     private final Object stateLock = new Object();
@@ -50,8 +67,14 @@ public final class FohListener {
     private int tcSongIndex = -1;
 
     public FohListener(FohLogStore store, Callback callback) {
+        this(store, callback, null);
+    }
+
+    /** `context` habilita el MulticastLock. Sin el, sACN por multicast no llega. */
+    public FohListener(FohLogStore store, Callback callback, Context context) {
         this.store = store;
         this.callback = callback;
+        this.context = context;
         channels.put("Art-Net", new Channel("Art-Net", ARTNET_PORT));
         channels.put("sACN", new Channel("sACN", SACN_PORT));
         channels.put("OSC / visual", new Channel("OSC / visual", OSC_PORT));
@@ -125,14 +148,69 @@ public final class FohListener {
         }
     }
 
+    /** Toma el MulticastLock del WiFi. Sin el, el driver descarta el multicast.
+     *
+     * Medido el 2026-09-17 contra este mismo telefono (Xiaomi 8299e66f): 8
+     * paquetes sACN a 239.255.0.3:5568 y CERO recibidos, con unicast y los dos
+     * broadcasts funcionando en la misma sesion. El manifest YA declaraba
+     * CHANGE_WIFI_MULTICAST_STATE y nadie la usaba: el permiso estaba pedido y
+     * el lock nunca se tomaba, asi que el join de grupos no servia de nada.
+     *
+     * Tomarlo no garantiza la entrega -- el punto de acceso puede no reinyectar
+     * multicast de un cliente al enlace inalambrico -- y por eso /status
+     * publica si el lock esta tomado en vez de afirmar que el multicast llega.
+     */
+    private void acquireMulticastLock() {
+        multicastLockHeld = false;
+        if (context == null) return;
+        try {
+            WifiManager wifi = (WifiManager) context.getApplicationContext()
+                    .getSystemService(Context.WIFI_SERVICE);
+            if (wifi == null) return;
+            multicastLock = wifi.createMulticastLock("xio-foh-sacn");
+            multicastLock.setReferenceCounted(false);
+            multicastLock.acquire();
+            multicastLockHeld = multicastLock.isHeld();
+        } catch (Exception ignored) {
+            multicastLockHeld = false;
+        }
+    }
+
+    private void releaseMulticastLock() {
+        try {
+            if (multicastLock != null && multicastLock.isHeld()) multicastLock.release();
+        } catch (Exception ignored) {
+        } finally {
+            multicastLock = null;
+            multicastLockHeld = false;
+        }
+    }
+
+    /** Lo que se puede AFIRMAR sobre el multicast, que no es que llegue. */
+    public JSONObject multicastStatus() throws JSONException {
+        return new JSONObject()
+                .put("lock_held", multicastLockHeld)
+                .put("groups_joined", multicastGroupsJoined)
+                .put("permission", "android.permission.CHANGE_WIFI_MULTICAST_STATE")
+                .put("note", multicastLockHeld
+                        ? "lock tomado: el driver entrega multicast a este proceso. Que el AP lo reinyecte al enlace es otra cosa y no se afirma aca."
+                        : "sin lock: el driver descarta multicast. sACN tiene que llegar por unicast a la IP actual o por broadcast.");
+    }
+
     private void run() {
         try (DatagramSocket artnet = new DatagramSocket(ARTNET_PORT);
              MulticastSocket sacn = new MulticastSocket(SACN_PORT);
              DatagramSocket osc = new DatagramSocket(OSC_PORT)) {
             artnet.setSoTimeout(250); sacn.setSoTimeout(250); osc.setSoTimeout(250);
+            acquireMulticastLock();
+            int joined = 0;
             for (int universe = 1; universe <= 16; universe++) {
-                try { sacn.joinGroup(InetAddress.getByName("239.255.0." + universe)); } catch (IOException ignored) { }
+                try {
+                    sacn.joinGroup(InetAddress.getByName("239.255.0." + universe));
+                    joined++;
+                } catch (IOException ignored) { }
             }
+            multicastGroupsJoined = joined;
             Thread a = receiver("Art-Net", artnet, this::parseArtNet);
             Thread s = receiver("sACN", sacn, this::parseSacn);
             Thread o = receiver("OSC", osc, this::parseOsc);
@@ -141,7 +219,7 @@ public final class FohListener {
             a.interrupt(); s.interrupt(); o.interrupt();
         } catch (Exception error) {
             callback.onError(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
-        } finally { running = false; callback.onChanged(); }
+        } finally { running = false; releaseMulticastLock(); callback.onChanged(); }
     }
 
     private Thread receiver(String name, DatagramSocket socket, PacketParser parser) {
@@ -153,10 +231,23 @@ public final class FohListener {
                     socket.receive(packet);
                     String detail = parser.parse(packet.getData(), packet.getLength());
                     if (detail == null || detail.isEmpty()) continue;
+                    // De QUE maquina llega la señal. recvfrom ya lo entrega y se
+                    // estaba tirando: el enlace se cae, o cambia de IP por DHCP,
+                    // ANTES de que se noten los datos.
+                    String source = packet.getAddress() == null ? "" : packet.getAddress().getHostAddress();
                     Channel channel = channels.get(name);
                     if ("OSC".equals(name)) channel = detail.startsWith("timecode=") ? null : channels.get("OSC / visual");
                     if (channel != null) {
-                        synchronized (stateLock) { channel.hit(System.currentTimeMillis(), detail); }
+                        String previousSource;
+                        synchronized (stateLock) {
+                            previousSource = channel.lastSource;
+                            channel.hit(System.currentTimeMillis(), detail, source);
+                        }
+                        if (source != null && !source.isEmpty() && previousSource != null
+                                && !previousSource.isEmpty() && !source.equals(previousSource)) {
+                            appendLog("fuente_cambio", channel.name + ": " + previousSource + " -> " + source);
+                        }
+                        if ("OSC".equals(name)) noteClipTrigger(detail);
                         if (channel.shouldLog()) {
                             appendLog(channel.name, detail);
                             callback.onPacket("OSC".equals(name) ? "OSC / TC" : name, detail);
@@ -278,6 +369,23 @@ public final class FohListener {
         for (String[] row : pending) appendLog(row[0], row[1]);
     }
 
+    /** Registra QUE clip se disparo, una sola vez por cambio de (capa, clip).
+     *
+     * Resolume manda muchos mensajes por segundo: si cada paquete escribiera una
+     * linea, el registro del show seria ilegible. Medido contra el plugin Python
+     * el 2026-09-17: 24 paquetes dieron 3 registros.
+     */
+    private void noteClipTrigger(String detail) {
+        if (detail == null) return;
+        Matcher match = CLIP_ADDRESS.matcher(detail);
+        if (!match.find()) return;
+        String pair = match.group(1) + "/" + match.group(2);
+        if (pair.equals(lastClipTrigger)) return;
+        lastClipTrigger = pair;
+        appendLog("clip_trigger", "layer=" + match.group(1) + " clip=" + match.group(2)
+                + " address=" + detail);
+    }
+
     private void appendLog(String type, String detail) {
         store.append(System.currentTimeMillis(), type, detail == null ? "" : detail, eventKey, currentTimecodeValue());
     }
@@ -392,24 +500,35 @@ public final class FohListener {
     private static final class Channel {
         final String name; final int port; long packets; long lastAt; String lastDetail = ""; long lastLogged;
         long windowStarted; long windowPackets; long pps;
+        String lastSource = ""; long sourceChanges;
         Channel(String name, int port) { this.name = name; this.port = port; }
         boolean shouldLog() { if (lastAt - lastLogged < 1000) return false; lastLogged = lastAt; return true; }
-        void hit(long now, String detail) {
+        void hit(long now, String detail) { hit(now, detail, ""); }
+        void hit(long now, String detail, String source) {
             if (windowStarted == 0) windowStarted = now;
             if (now - windowStarted >= 1000) { pps = windowPackets; windowPackets = 0; windowStarted = now; }
             windowPackets++; packets++; lastAt = now; lastDetail = detail;
+            if (source != null && !source.isEmpty()) {
+                if (!lastSource.isEmpty() && !source.equals(lastSource)) sourceChanges++;
+                lastSource = source;
+            }
         }
         Snapshot snapshot() {
             long now = System.currentTimeMillis(); long age = lastAt == 0 ? Long.MAX_VALUE : now - lastAt;
-            return new Snapshot(name, port, packets, lastAt, lastDetail, pps + (now - windowStarted < 1000 ? windowPackets : 0), age <= ACTIVE_WINDOW_MS);
+            return new Snapshot(name, port, packets, lastAt, lastDetail, pps + (now - windowStarted < 1000 ? windowPackets : 0), age <= ACTIVE_WINDOW_MS, lastSource, sourceChanges);
         }
     }
 
     public static final class Snapshot {
         public final String name; public final int port; public final long packets; public final long lastAt;
         public final String detail; public final long pps; public final boolean active;
+        public final String source; public final long sourceChanges;
         Snapshot(String name, int port, long packets, long lastAt, String detail, long pps, boolean active) {
+            this(name, port, packets, lastAt, detail, pps, active, "", 0L);
+        }
+        Snapshot(String name, int port, long packets, long lastAt, String detail, long pps, boolean active, String source, long sourceChanges) {
             this.name = name; this.port = port; this.packets = packets; this.lastAt = lastAt; this.detail = detail; this.pps = pps; this.active = active;
+            this.source = source == null ? "" : source; this.sourceChanges = sourceChanges;
         }
     }
 }

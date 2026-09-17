@@ -356,10 +356,22 @@ Dos consecuencias para el dia de show:
    una reserva escrita y pasa a ser un hecho medido.
 2. El multicast de sACN **no llega**: 8 paquetes enviados a `239.255.0.3:5568`,
    cero recibidos, con unicast y los dos broadcasts funcionando en la misma
-   sesion. Confirma la advertencia de este runbook: para sACN, **unicast a la IP
-   actual o broadcast**, nunca multicast. No se midio la causa (puede ser el
-   join en HyperOS o que el AP no reinyecte multicast de un cliente al enlace
-   inalambrico); la conclusion operativa es la misma.
+   sesion. Para sACN: **unicast a la IP actual o broadcast**, nunca multicast.
+
+   La causa SI se midio despues, con un oyente propio en Termux: el join al
+   grupo tiene exito, 12 paquetes multicast dan cero recibidos, y 6 unicast al
+   MISMO socket y puerto llegan los 6. Como el telefono **es** el punto de
+   acceso, no hay equipo intermedio: las tramas llegan a su propia interfaz y
+   algo en el telefono las descarta antes del socket. Eso es el filtro de
+   multicast del WiFi, que en Android se desactiva tomando un
+   `WifiManager.MulticastLock`.
+
+   Consecuencia de arquitectura: la APK nativa ahora toma ese lock (el manifest
+   ya declaraba `CHANGE_WIFI_MULTICAST_STATE` y el codigo nunca lo usaba), asi
+   que es la unica superficie que puede llegar a recibir sACN por multicast. El
+   host Python **no puede tomarlo** -- no tiene acceso al WifiManager desde
+   Termux -- asi que para el, unicast o broadcast no es una recomendacion: es el
+   unico camino que existe. Falta confirmarlo con la APK compilada.
 
 Tambien quedo verificado en vivo lo que hasta ahora solo estaba probado fuera
 del aparato: los 6 paquetes de `/timecode` movieron el canal TIMECODE a
