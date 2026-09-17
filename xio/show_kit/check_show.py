@@ -111,8 +111,46 @@ else:
 
 bat = st.get("battery") or {}
 lvl, chg = bat.get("level"), bat.get("charging")
-item("Bateria del telefono", lvl is not None and (lvl >= 60 or chg),
-     f"{lvl}% {'cargando' if chg else 'SIN cargar'}")
+# El 2026-07-24 el show ENTERO corrio al 0%, alimentado solo por el cable: un
+# tiron y se caen el timecode y el panel en pleno show. Y "cargando" no alcanza
+# como garantia -- ese dia charge_control reportaba carga forzada
+# (`hard_floor 20%`) y el nivel no se movio del 0 en horas. Asi que 0% es NO-GO
+# incluso diciendo que carga: el estado que importa es que el equipo tenga
+# reserva propia, no que este enchufado.
+if lvl is None:
+    item("Bateria del telefono", False,
+         "el host no reporta nivel de bateria: no se puede afirmar que haya reserva")
+elif lvl == 0:
+    item("Bateria del telefono", False,
+         "0%" + (" y dice CARGANDO, pero 0% es 0%" if chg else "")
+         + ": el equipo depende del cable; un tiron corta el show (24/07/2026)")
+else:
+    item("Bateria del telefono", lvl >= 60 or chg,
+         f"{lvl}% {'cargando' if chg else 'SIN cargar'}")
+
+# 4b. el puerto USB tiene que ser LEGIBLE: sin eso no se sabe si carga de
+# verdad. El 2026-07-24, despues del reboot, charge_control devolvia
+# current_mode / power_role / sink_power todos en null -- la firma de Shizuku
+# sin re-autorizar, que es justo lo que deja al telefono sin control de carga.
+try:
+    status, cc = get_json(f"{BASE}/api/plugins/charge_control/status")
+    usb = (cc or {}).get("usb") or {}
+    campos = ("current_mode", "power_role", "sink_power")
+    presentes = [name for name in campos if usb.get(name) is not None]
+    if not usb:
+        item("Puerto USB legible", False,
+             "charge_control responde pero no expone `usb`: no se puede "
+             "verificar que la carga este bajo control")
+    elif not presentes:
+        item("Puerto USB legible", False,
+             f"{', '.join(campos)} todos en null: Shizuku/rish probablemente "
+             "quedo sin re-autorizar tras un reboot")
+    else:
+        item("Puerto USB legible", True, ", ".join(f"{n}={usb.get(n)}" for n in presentes))
+except Exception as e:
+    item("Puerto USB legible", True,
+         f"no se pudo consultar charge_control ({e}): no medido, NO verificado",
+         warn=True)
 
 sl = st.get("setlist") or {}
 if sl.get("total"):
