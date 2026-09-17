@@ -133,3 +133,73 @@ def test_a_channel_with_no_source_yet_reports_none_not_empty_text():
     snapshot = _channel().snapshot(5)
     assert snapshot["source"] is None
     assert snapshot["sources"] is None
+
+
+# ── por que enlace se une a los grupos sACN ──────────────────────────────
+
+
+def _plugin_with_interfaces(names, wanted=""):
+    """Simula un aparato donde SOLO existen `names`, preguntando por nombre.
+
+    Android no deja enumerar interfaces (`if_nameindex` levanta PermissionError
+    desde Android 11) pero si deja resolver un nombre, asi que el codigo
+    pregunta y esta prueba responde igual que el sistema.
+    """
+    import socket as _socket
+
+    plugin = FohMonitorPlugin.__new__(FohMonitorPlugin)
+    plugin._cfg = lambda key: wanted if key == "sacn_interface" else 30
+    original_index = _socket.if_nametoindex
+    original_list = getattr(_socket, "if_nameindex", None)
+
+    def fake_index(name):
+        if name in names:
+            return names.index(name) + 1
+        raise OSError("no such device")
+
+    def fake_list():
+        raise PermissionError(13, "Permission denied")
+
+    _socket.if_nametoindex = fake_index
+    _socket.if_nameindex = fake_list
+    try:
+        return plugin._multicast_interface()
+    finally:
+        _socket.if_nametoindex = original_index
+        if original_list is None:
+            del _socket.if_nameindex
+        else:
+            _socket.if_nameindex = original_list
+
+
+def test_the_join_prefers_the_hotspot_link_over_the_default_route():
+    # El defecto medido el 2026-09-17: unirse por la ruta por omision manda el
+    # join a la red celular (rmnet_data2), donde no llega ningun sACN. Por la
+    # ruta por omision, 12 paquetes multicast dieron cero; por wlan1, 12 de 12.
+    assert _plugin_with_interfaces(["lo", "rmnet_data2", "wlan1"]) == "wlan1"
+
+
+def test_the_link_is_asked_for_by_name_because_android_forbids_enumerating():
+    # Con la enumeracion prohibida, preguntar por nombre sigue funcionando.
+    assert _plugin_with_interfaces(["lo", "wlan1"]) == "wlan1"
+
+
+def test_other_vendors_hotspot_names_are_tried_too():
+    assert _plugin_with_interfaces(["lo", "rmnet_data2", "ap0"]) == "ap0"
+    assert _plugin_with_interfaces(["lo", "swlan0"]) == "swlan0"
+
+
+def test_the_client_wifi_is_the_last_resort_not_the_first():
+    # wlan0 sirve, pero wlan1 (el AP) manda cuando los dos existen.
+    assert _plugin_with_interfaces(["lo", "wlan0", "wlan1"]) == "wlan1"
+    assert _plugin_with_interfaces(["lo", "wlan0"]) == "wlan0"
+
+
+def test_without_a_wifi_link_it_returns_none_instead_of_guessing():
+    assert _plugin_with_interfaces(["lo", "rmnet_data2"]) is None
+
+
+def test_an_explicit_interface_is_honored_and_a_wrong_one_is_refused():
+    assert _plugin_with_interfaces(["lo", "wlan1", "eth0"], wanted="eth0") == "eth0"
+    # Pedir un enlace que no existe no cae de vuelta en otro cualquiera.
+    assert _plugin_with_interfaces(["lo", "wlan1"], wanted="eth7") is None

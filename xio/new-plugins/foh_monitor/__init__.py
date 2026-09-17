@@ -416,6 +416,9 @@ class FohMonitorPlugin(PluginBase):
         "osc_port": 7000,
         "active_window": 5,        # seg sin paquetes => canal OFF
         "sacn_universes": "1-16",  # universos pa join multicast best-effort
+        # Enlace por el que unirse a los grupos sACN. Vacio = automatico
+        # (prefiere wlan1, el AP del Xiaomi). Ver _multicast_interface.
+        "sacn_interface": "",
         "audio_enabled": True,
         "audio_chunk_seconds": 2,  # duracion de cada muestra de mic
         "audio_threshold_db": -50, # RMS dBFS: por encima => hay audio
@@ -441,6 +444,7 @@ class FohMonitorPlugin(PluginBase):
             "osc": _Channel("osc"),
         }
         self._sacn_mode = "desconocido"  # multicast | unicast (join fallo)
+        self._sacn_interface = None  # enlace por el que se unio a los grupos
         # Timecode: canal propio, excluido del canal osc/VISUAL.
         self._tc = {"value": None, "last_seen": 0.0, "last_change": 0.0,
                     "total": 0, "state": "sin_senal"}
@@ -754,6 +758,54 @@ class FohMonitorPlugin(PluginBase):
                              daemon=True, name=f"foh-{key}")
         t.start()
 
+    # Nombres del enlace del show, en orden de preferencia. wlan1 es el AP en
+    # este Xiaomi; wlan0 seria el WiFi cliente; ap0/swlan0 aparecen en otros
+    # vendors. Se PREGUNTA por nombre porque Android no deja enumerar.
+    SHOW_INTERFACES = ("wlan1", "ap0", "swlan0", "wlan0")
+
+    def _multicast_interface(self):
+        """El enlace por el que hay que unirse a los grupos sACN.
+
+        `IP_ADD_MEMBERSHIP` con la interfaz en 0.0.0.0 deja que el kernel elija,
+        y elige la ruta por OMISION. En el Xiaomi eso es la red celular
+        (`rmnet_data2`), no el hotspot (`wlan1`), asi que el join tenia exito y
+        no llegaba nada.
+
+        Medido el 2026-09-17 sobre este mismo plugin corriendo en el telefono:
+        uniendose por la ruta por omision, 12 paquetes multicast dieron CERO;
+        uniendose explicitamente por wlan1, llegaron los 12 -- y SIN que nadie
+        tuviera el MulticastLock del WiFi, con la APK detenida. Antes se le
+        habia echado la culpa a ese lock, y era falso: tomarlo no cambio nada.
+        O sea que sACN por multicast SI funciona en este aparato, al contrario
+        de lo que decia el runbook.
+
+        Y no se enumera: en Android `socket.if_nameindex()` levanta
+        PermissionError -- enumerar interfaces esta restringido desde Android 11
+        -- mientras que `socket.if_nametoindex("wlan1")` SI funciona y devuelve
+        su indice. Medido en el telefono el 2026-09-17. En un PC la enumeracion
+        funciona y el defecto no se nota, asi que se pregunta por nombre y la
+        enumeracion queda solo como camino secundario.
+        """
+        def indice(nombre):
+            try:
+                return socket.if_nametoindex(nombre)
+            except Exception:
+                return 0
+
+        wanted = str(self._cfg("sacn_interface") or "").strip()
+        if wanted:
+            return wanted if indice(wanted) else None
+        for nombre in self.SHOW_INTERFACES:
+            if indice(nombre):
+                return nombre
+        try:
+            for _, nombre in socket.if_nameindex():
+                if nombre.startswith("wlan") or nombre.startswith("ap"):
+                    return nombre
+        except Exception:
+            pass
+        return None
+
     def _start_sacn(self):
         ch = self._channels["sacn"]
         port = int(self._cfg("sacn_port"))
@@ -763,19 +815,38 @@ class FohMonitorPlugin(PluginBase):
             ch.error = f"bind {port} fallo: {e}"
             self.logger.error(f"foh sacn: {ch.error}")
             return
-        # join multicast best-effort por universo (239.255.hi.lo). En Android
-        # sin MulticastLock esto puede no recibir nada igual: se anota el modo
-        # y sACN por UNICAST a la IP del telefono siempre funciona.
+        # Join multicast por universo (239.255.hi.lo), POR EL ENLACE DEL SHOW.
+        # No hace falta ningun MulticastLock: medido el 2026-09-17, este
+        # proceso recibio 12 de 12 con la APK detenida. Lo que hacia falta era
+        # unirse por el enlace correcto.
+        link = self._multicast_interface()
+        index = 0
+        if link:
+            try:
+                index = socket.if_nametoindex(link)
+            except Exception:
+                index = 0
+        self._sacn_interface = link if index else None
         joined = 0
         for u in self._parse_universes(str(self._cfg("sacn_universes"))):
             try:
                 grp = socket.inet_aton(f"239.255.{(u >> 8) & 0xFF}.{u & 0xFF}")
-                mreq = struct.pack("4s4s", grp, socket.inet_aton("0.0.0.0"))
+                if index:
+                    # ip_mreqn: grupo, direccion local, indice de interfaz.
+                    mreq = struct.pack("4s4si", grp, socket.inet_aton("0.0.0.0"), index)
+                else:
+                    mreq = struct.pack("4s4s", grp, socket.inet_aton("0.0.0.0"))
                 sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
                 joined += 1
             except Exception:
                 pass
-        self._sacn_mode = f"multicast({joined} joins)" if joined else "unicast (join multicast fallo/bloqueado)"
+        if joined and link:
+            self._sacn_mode = f"multicast({joined} joins por {link})"
+        elif joined:
+            self._sacn_mode = (f"multicast({joined} joins por la ruta por omision: "
+                               "puede no ser el enlace del show)")
+        else:
+            self._sacn_mode = "unicast (join multicast fallo/bloqueado)"
         t = threading.Thread(target=self._recv_loop, args=(sock, ch, self._parse_sacn),
                              daemon=True, name="foh-sacn")
         t.start()
@@ -1306,6 +1377,7 @@ class FohMonitorPlugin(PluginBase):
             "channels": {k: c.snapshot(window) for k, c in self._channels.items()},
             "timecode": self._tc_state(),
             "sacn_mode": self._sacn_mode,
+            "sacn_interface": self._sacn_interface,
             "audio": audio,
             "setlist": self._setlist_view(),
             "context": self._foh_context_current,

@@ -354,24 +354,40 @@ Dos consecuencias para el dia de show:
    configuracion de Chataigne que trae el show kit (`255.255.255.255:7000`)
    funciona, y el `.255` de la subred sirve igual como respaldo. Eso deja de ser
    una reserva escrita y pasa a ser un hecho medido.
-2. El multicast de sACN **no llega**: 8 paquetes enviados a `239.255.0.3:5568`,
-   cero recibidos, con unicast y los dos broadcasts funcionando en la misma
-   sesion. Para sACN: **unicast a la IP actual o broadcast**, nunca multicast.
+2. **El multicast de sACN SI funciona**, al contrario de lo que este runbook
+   dijo por meses ("best-effort, HyperOS puede no entregarlo") y de lo que yo
+   mismo escribi esta manana. La primera medicion fue correcta -- 8 paquetes a
+   `239.255.0.3:5568`, cero recibidos -- y la explicacion estaba equivocada.
 
-   La causa SI se midio despues, con un oyente propio en Termux: el join al
-   grupo tiene exito, 12 paquetes multicast dan cero recibidos, y 6 unicast al
-   MISMO socket y puerto llegan los 6. Como el telefono **es** el punto de
-   acceso, no hay equipo intermedio: las tramas llegan a su propia interfaz y
-   algo en el telefono las descarta antes del socket. Eso es el filtro de
-   multicast del WiFi, que en Android se desactiva tomando un
-   `WifiManager.MulticastLock`.
+   La causa, aislada compilando la APK y probando tres veces: `joinGroup` sin
+   interfaz explicita usa la **ruta por omision**, y este telefono tiene datos
+   moviles (`rmnet_data2`, 10.128.8.140) ademas del hotspot (`wlan1`,
+   10.207.52.119). O sea que se unia a los grupos multicast por la red celular,
+   donde no llega ningun sACN. El join "tenia exito" y no recibia nada.
 
-   Consecuencia de arquitectura: la APK nativa ahora toma ese lock (el manifest
-   ya declaraba `CHANGE_WIFI_MULTICAST_STATE` y el codigo nunca lo usaba), asi
-   que es la unica superficie que puede llegar a recibir sACN por multicast. El
-   host Python **no puede tomarlo** -- no tiene acceso al WifiManager desde
-   Termux -- asi que para el, unicast o broadcast no es una recomendacion: es el
-   unico camino que existe. Falta confirmarlo con la APK compilada.
+   | intento | lock del WiFi | join por | recibidos |
+   |---|---|---|---|
+   | como estaba | no | ruta por omision | 0 de 12 |
+   | con MulticastLock | si | ruta por omision | 0 de 12 |
+   | con el enlace explicito | si | wlan1 | **12 de 12** |
+   | host Python, sin lock | **no** | wlan1 | **12 de 12** |
+
+   La ultima fila es la que cierra el asunto: el `MulticastLock` **no hacia
+   falta en este aparato**. Se conserva en la APK porque es el requisito que
+   Android declara y en otras ROMs va a hacer falta, pero no se le atribuye un
+   arreglo que no hizo.
+
+   Las dos superficies quedaron arregladas: la APK elige el enlace con
+   `showInterface()` y lo publica en `/status.multicast.interface`; el plugin
+   Python lo elige en `_multicast_interface()` y lo publica en
+   `/status.sacn_interface`. En el plugin hay un detalle de Android que en un PC
+   no se nota: `socket.if_nameindex()` esta **prohibido** (PermissionError desde
+   Android 11), asi que el enlace se pregunta por nombre con
+   `if_nametoindex("wlan1")`, que si funciona.
+
+   Para el dia de show: sACN por multicast ya es una opcion real, y unicast y
+   broadcast siguen funcionando. Si alguna vez vuelve a no llegar, lo primero
+   que hay que mirar es `/status` y ver por que enlace se unio.
 
 Tambien quedo verificado en vivo lo que hasta ahora solo estaba probado fuera
 del aparato: los 6 paquetes de `/timecode` movieron el canal TIMECODE a

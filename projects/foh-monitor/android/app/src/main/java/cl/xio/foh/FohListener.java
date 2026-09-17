@@ -6,13 +6,18 @@ import android.net.wifi.WifiManager;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.InterfaceAddress;
 import java.net.MulticastSocket;
+import java.net.NetworkInterface;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +51,7 @@ public final class FohListener {
     private WifiManager.MulticastLock multicastLock;
     private volatile boolean multicastLockHeld;
     private volatile int multicastGroupsJoined;
+    private volatile String multicastInterface = "";
     private volatile String lastClipTrigger = "";
     private final Callback callback;
     private final Map<String, Channel> channels = new HashMap<>();
@@ -148,17 +154,20 @@ public final class FohListener {
         }
     }
 
-    /** Toma el MulticastLock del WiFi. Sin el, el driver descarta el multicast.
+    /** Toma el MulticastLock del WiFi, que Android documenta como requisito.
      *
-     * Medido el 2026-09-17 contra este mismo telefono (Xiaomi 8299e66f): 8
-     * paquetes sACN a 239.255.0.3:5568 y CERO recibidos, con unicast y los dos
-     * broadcasts funcionando en la misma sesion. El manifest YA declaraba
-     * CHANGE_WIFI_MULTICAST_STATE y nadie la usaba: el permiso estaba pedido y
-     * el lock nunca se tomaba, asi que el join de grupos no servia de nada.
+     * CORRECCION del 2026-09-17: primero se culpo a este lock de que sACN por
+     * multicast no llegara, y era falso. Con el lock tomado y los 16 grupos
+     * unidos, 12 paquetes multicast seguian dando CERO. La causa era el enlace
+     * del join (ver showInterface), y una vez arreglado eso el host Python
+     * recibio 12 de 12 SIN tomar ningun lock. O sea que en este aparato el lock
+     * no hacia ninguna diferencia.
      *
-     * Tomarlo no garantiza la entrega -- el punto de acceso puede no reinyectar
-     * multicast de un cliente al enlace inalambrico -- y por eso /status
-     * publica si el lock esta tomado en vez de afirmar que el multicast llega.
+     * Se conserva igual: es el requisito que Android declara, el manifest ya
+     * pedia CHANGE_WIFI_MULTICAST_STATE sin usarla, y en ROMs donde el filtro
+     * de multicast SI este activo va a hacer falta. Lo que no se hace es
+     * atribuirle un arreglo que no hizo, y /status publica si esta tomado en
+     * vez de afirmar que el multicast llega.
      */
     private void acquireMulticastLock() {
         multicastLockHeld = false;
@@ -186,11 +195,50 @@ public final class FohListener {
         }
     }
 
+    /** El enlace por el que hay que unirse a los grupos sACN.
+     *
+     * ESTA era la causa, medida el 2026-09-17. `joinGroup(grupo)` sin interfaz
+     * usa la ruta por OMISION, y este telefono tiene datos moviles
+     * (rmnet_data2, 10.128.8.140) ademas del hotspot (wlan1, 10.207.52.119):
+     * se unia a los grupos por la red celular, donde no llega ningun sACN. Con
+     * el lock tomado seguian llegando cero; con el join explicito por wlan1,
+     * 12 de 12. El enlace queda publicado en /status para poder revisarlo.
+     *
+     * wlan1 es el AP en este Xiaomi y wlan0 seria el WiFi cliente, asi que el
+     * orden de preferencia importa: unirse por el WiFi cliente cuando el show
+     * va por el hotspot es el mismo error con otro nombre.
+     */
+    private NetworkInterface showInterface() {
+        try {
+            List<NetworkInterface> candidates = Collections.list(NetworkInterface.getNetworkInterfaces());
+            NetworkInterface conBroadcast = null;
+            NetworkInterface cualquierWlan = null;
+            for (NetworkInterface candidate : candidates) {
+                if (!candidate.isUp() || candidate.isLoopback() || !candidate.supportsMulticast()) continue;
+                boolean tieneIpv4 = false;
+                for (InterfaceAddress address : candidate.getInterfaceAddresses()) {
+                    if (address.getAddress() instanceof Inet4Address) {
+                        tieneIpv4 = true;
+                        if (conBroadcast == null && address.getBroadcast() != null) conBroadcast = candidate;
+                    }
+                }
+                if (!tieneIpv4) continue;
+                if ("wlan1".equals(candidate.getName())) return candidate;
+                if (cualquierWlan == null && candidate.getName().startsWith("wlan")) cualquierWlan = candidate;
+            }
+            if (cualquierWlan != null) return cualquierWlan;
+            return conBroadcast;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     /** Lo que se puede AFIRMAR sobre el multicast, que no es que llegue. */
     public JSONObject multicastStatus() throws JSONException {
         return new JSONObject()
                 .put("lock_held", multicastLockHeld)
                 .put("groups_joined", multicastGroupsJoined)
+                .put("interface", multicastInterface.isEmpty() ? JSONObject.NULL : multicastInterface)
                 .put("permission", "android.permission.CHANGE_WIFI_MULTICAST_STATE")
                 .put("note", multicastLockHeld
                         ? "lock tomado: el driver entrega multicast a este proceso. Que el AP lo reinyecte al enlace es otra cosa y no se afirma aca."
@@ -203,10 +251,14 @@ public final class FohListener {
              DatagramSocket osc = new DatagramSocket(OSC_PORT)) {
             artnet.setSoTimeout(250); sacn.setSoTimeout(250); osc.setSoTimeout(250);
             acquireMulticastLock();
+            NetworkInterface link = showInterface();
+            multicastInterface = link == null ? "" : link.getName();
             int joined = 0;
             for (int universe = 1; universe <= 16; universe++) {
                 try {
-                    sacn.joinGroup(InetAddress.getByName("239.255.0." + universe));
+                    InetAddress group = InetAddress.getByName("239.255.0." + universe);
+                    if (link != null) sacn.joinGroup(new InetSocketAddress(group, SACN_PORT), link);
+                    else sacn.joinGroup(group);
                     joined++;
                 } catch (IOException ignored) { }
             }
@@ -382,8 +434,10 @@ public final class FohListener {
         String pair = match.group(1) + "/" + match.group(2);
         if (pair.equals(lastClipTrigger)) return;
         lastClipTrigger = pair;
+        // El address limpio, no el detalle completo: el detalle ya viene con su
+        // propio prefijo "address=" y se leia "address=address=/composition/...".
         appendLog("clip_trigger", "layer=" + match.group(1) + " clip=" + match.group(2)
-                + " address=" + detail);
+                + " address=" + match.group(0));
     }
 
     private void appendLog(String type, String detail) {

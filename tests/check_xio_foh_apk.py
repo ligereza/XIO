@@ -59,6 +59,28 @@ def main() -> None:
     assert "joinGroup" in listener
     assert listener.index("acquireMulticastLock()") < listener.index("joinGroup"), (
         "el lock se toma ANTES de unirse a los grupos")
+
+    # La causa REAL de que sACN por multicast no llegara, medida el 2026-09-17:
+    # joinGroup sin interfaz usa la ruta por omision, que en este telefono es la
+    # red celular. Con el lock tomado seguian llegando cero paquetes; con el
+    # join explicito por wlan1, 12 de 12. El enlace se elige y se publica.
+    for marker in ("showInterface", "InetSocketAddress", "NetworkInterface",
+                   'joinGroup(new InetSocketAddress(group, SACN_PORT), link)',
+                   '"wlan1".equals(candidate.getName())'):
+        assert marker in listener, marker
+    assert '"interface", multicastInterface' in listener, (
+        "/status tiene que decir por que enlace se unio")
+
+    # Y el plugin Python tenia el mismo defecto: 0.0.0.0 en el mreq deja que el
+    # kernel elija. Las dos superficies se unen por el enlace del show.
+    plugin_text = (ROOT / "xio" / "new-plugins" / "foh_monitor" / "__init__.py").read_text(
+        encoding="utf-8")
+    for marker in ("_multicast_interface", "SHOW_INTERFACES", "if_nametoindex",
+                   '"4s4si"', "sacn_interface"):
+        assert marker in plugin_text, marker
+    assert 'SHOW_INTERFACES = ("wlan1"' in plugin_text, (
+        "el AP del Xiaomi va primero; unirse por el WiFi cliente es el mismo "
+        "error con otro nombre")
     assert '"multicast", listener.multicastStatus()' in native, (
         "/status tiene que publicar si el lock esta tomado, en vez de afirmar "
         "que el multicast llega")
