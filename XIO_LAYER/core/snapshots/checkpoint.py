@@ -1,0 +1,179 @@
+"""Atomic checkpoint persistence and replay-based recovery."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+import json
+import os
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from threading import RLock
+from ..contracts import Checkpoint, Snapshot, utc_now
+from ..events.log import EventLog
+from ..events.replay import replay_events
+from ..file_lock import exclusive_file_lock
+from .projector import SnapshotProjector
+
+
+@dataclass(frozen=True, slots=True)
+class RecoveryResult:
+    snapshot: Snapshot
+    used_checkpoint: bool
+    replayed_events: int
+    issues: tuple[str, ...] = ()
+
+
+class CheckpointConflictError(ValueError):
+    """Raised when a checkpoint version is reused with different content."""
+
+
+class CheckpointStore:
+    """Store checkpoints as atomic JSON files, never as executable state."""
+
+    def __init__(self, directory: str | Path):
+        self.directory = Path(directory)
+        self.last_issues: list[str] = []
+        self._lock = RLock()
+        self._lock_path = self.directory / ".checkpoints.lock"
+
+    @staticmethod
+    def _stream_key(stream_id: str) -> str:
+        if not isinstance(stream_id, str) or not stream_id.strip():
+            raise ValueError("stream_id must be a non-empty string")
+        return hashlib.sha256(stream_id.encode("utf-8")).hexdigest()[:24]
+
+    def _path(self, checkpoint: Checkpoint) -> Path:
+        return self.directory / f"{self._stream_key(checkpoint.stream_id)}-{checkpoint.sequence:020d}.json"
+
+    def save(self, snapshot: Snapshot) -> Checkpoint:
+        if not isinstance(snapshot, Snapshot):
+            raise TypeError("save accepts Snapshot only")
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                checkpoint = Checkpoint.from_snapshot(snapshot)
+                self.directory.mkdir(parents=True, exist_ok=True)
+                destination = self._path(checkpoint)
+                if destination.exists():
+                    try:
+                        existing = Checkpoint.from_dict(
+                            json.loads(destination.read_text(encoding="utf-8"))
+                        )
+                    except Exception as exc:
+                        raise ValueError("existing checkpoint is not valid") from exc
+                    if existing.to_dict() == checkpoint.to_dict():
+                        return existing
+                    raise CheckpointConflictError(
+                        f"checkpoint version already exists: {checkpoint.stream_id}:{checkpoint.sequence}"
+                    )
+
+                temporary: Path | None = None
+                try:
+                    with NamedTemporaryFile(
+                        "w",
+                        encoding="utf-8",
+                        dir=self.directory,
+                        prefix=".checkpoint-",
+                        suffix=".tmp",
+                        delete=False,
+                    ) as stream:
+                        temporary = Path(stream.name)
+                        json.dump(checkpoint.to_dict(), stream, ensure_ascii=False, sort_keys=True)
+                        stream.write("\n")
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    os.replace(temporary, destination)
+                finally:
+                    if temporary is not None and temporary.exists():
+                        temporary.unlink()
+                return checkpoint
+
+    def _candidates(self, stream_id: str) -> list[Path]:
+        if not self.directory.exists():
+            return []
+        prefix = f"{self._stream_key(stream_id)}-"
+        return sorted(self.directory.glob(f"{prefix}*.json"), reverse=True)
+
+    def load_latest(self, stream_id: str) -> Checkpoint | None:
+        self._stream_key(stream_id)
+        with self._lock:
+            with exclusive_file_lock(self._lock_path):
+                self.last_issues = []
+                for path in self._candidates(stream_id):
+                    try:
+                        data = json.loads(path.read_text(encoding="utf-8"))
+                        checkpoint = Checkpoint.from_dict(data)
+                        if checkpoint.stream_id != stream_id:
+                            raise ValueError("stream id mismatch")
+                        return checkpoint
+                    except Exception as exc:
+                        self.last_issues.append(f"{path.name}: {exc}")
+                return None
+
+
+class RecoveryManager:
+    """Resume from a valid checkpoint and replay only the remaining events."""
+
+    def __init__(self, checkpoints: CheckpointStore):
+        if not isinstance(checkpoints, CheckpointStore):
+            raise TypeError("checkpoints must be a CheckpointStore")
+        self.checkpoints = checkpoints
+
+    def recover(self, stream_id: str, events: EventLog, projector: SnapshotProjector) -> RecoveryResult:
+        self.checkpoints._stream_key(stream_id)
+        if not isinstance(events, EventLog):
+            raise TypeError("events must be an EventLog")
+        if not isinstance(projector, SnapshotProjector):
+            raise TypeError("projector must be a SnapshotProjector")
+        checkpoint = self.checkpoints.load_latest(stream_id)
+        issues = list(self.checkpoints.last_issues)
+        if checkpoint is not None:
+            checkpoint_issue = self._checkpoint_consistency_issue(checkpoint, events, projector)
+            if checkpoint_issue is not None:
+                issues.append(checkpoint_issue)
+                checkpoint = None
+        records = events.after(checkpoint.sequence, stream_id) if checkpoint else events.records(stream_id)
+        replay = replay_events(records, projector.reducer, checkpoint.state if checkpoint else projector.initial_state)
+        source_event_id = records[-1].event.event_id if records else (
+            checkpoint.source_event_id if checkpoint else None
+        )
+        version = replay.last_sequence if records else (checkpoint.sequence if checkpoint else 0)
+        snapshot = Snapshot(
+            stream_id=stream_id,
+            version=version,
+            state=replay.state,
+            captured_at=utc_now(),
+            source_event_id=source_event_id,
+        )
+        return RecoveryResult(
+            snapshot=snapshot,
+            used_checkpoint=checkpoint is not None,
+            replayed_events=replay.applied_events,
+            issues=tuple(issues),
+        )
+
+    @staticmethod
+    def _checkpoint_consistency_issue(
+        checkpoint: Checkpoint,
+        events: EventLog,
+        projector: SnapshotProjector,
+    ) -> str | None:
+        prefix = tuple(
+            record
+            for record in events.records(checkpoint.stream_id)
+            if record.sequence <= checkpoint.sequence
+        )
+        if checkpoint.sequence == 0:
+            expected_state = dict(projector.initial_state)
+            expected_event_id = None
+        else:
+            if not prefix or prefix[-1].sequence != checkpoint.sequence:
+                return "checkpoint sequence is not backed by event log"
+            replay = replay_events(prefix, projector.reducer, projector.initial_state)
+            expected_state = dict(replay.state)
+            expected_event_id = prefix[-1].event.event_id
+        if dict(checkpoint.state) != expected_state:
+            return "checkpoint state does not match event replay"
+        if checkpoint.source_event_id != expected_event_id:
+            return "checkpoint source event does not match event replay"
+        return None

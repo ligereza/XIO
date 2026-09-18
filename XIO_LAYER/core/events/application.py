@@ -1,0 +1,199 @@
+"""Canonical application event contract with reversible JSON encoding."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime
+import base64
+import math
+from typing import Any, Mapping
+from uuid import uuid4
+
+from ..contracts import content_hash, require_utc, utc_now
+
+
+class ApplicationEventContractError(ValueError):
+    """Raised when an application event cannot be represented safely."""
+
+
+def encode_value(value: Any) -> Any:
+    """Encode JSON values and bytes without changing their information."""
+
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ApplicationEventContractError("non-finite numbers are not JSON-safe")
+        return value
+    if isinstance(value, bytes):
+        return {
+            "__xio_type__": "bytes",
+            "base64": base64.b64encode(value).decode("ascii"),
+        }
+    if isinstance(value, datetime):
+        return {"__xio_type__": "datetime", "value": require_utc(value, "payload datetime").isoformat()}
+    if isinstance(value, Mapping):
+        encoded = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ApplicationEventContractError("payload mapping keys must be strings")
+            encoded[key] = encode_value(item)
+        return encoded
+    if isinstance(value, (list, tuple)):
+        return [encode_value(item) for item in value]
+    raise ApplicationEventContractError(f"unsupported payload value: {type(value).__name__}")
+
+
+def decode_value(value: Any) -> Any:
+    if isinstance(value, list):
+        return [decode_value(item) for item in value]
+    if isinstance(value, dict):
+        marker = value.get("__xio_type__")
+        if marker == "bytes":
+            if set(value) != {"__xio_type__", "base64"} or not isinstance(value["base64"], str):
+                raise ApplicationEventContractError("encoded bytes value is malformed")
+            try:
+                return base64.b64decode(value["base64"], validate=True)
+            except (ValueError, TypeError) as exc:
+                raise ApplicationEventContractError("encoded bytes value is malformed") from exc
+        if marker == "datetime":
+            if set(value) != {"__xio_type__", "value"} or not isinstance(value["value"], str):
+                raise ApplicationEventContractError("encoded datetime value is malformed")
+            try:
+                return require_utc(datetime.fromisoformat(value["value"]), "encoded datetime")
+            except (TypeError, ValueError) as exc:
+                raise ApplicationEventContractError("encoded datetime value is malformed") from exc
+        return {key: decode_value(item) for key, item in value.items()}
+    return value
+
+
+class ApplicationEvent:
+    """App-independent event envelope for signals from any protocol."""
+
+    def __init__(
+        self,
+        *,
+        source_app: str,
+        event_type: str,
+        channel: str,
+        payload: Any,
+        source_timestamp: datetime,
+        received_timestamp: datetime,
+        session_id: str,
+        peer_id: str,
+        sequence: int,
+        provenance: Mapping[str, Any],
+        raw_hash: str | None = None,
+        event_id: str | None = None,
+        schema_version: int = 1,
+    ) -> None:
+        self.source_app = self._required(source_app, "source_app")
+        self.event_type = self._required(event_type, "event_type")
+        self.channel = self._required(channel, "channel")
+        self.session_id = self._required(session_id, "session_id")
+        self.peer_id = self._required(peer_id, "peer_id")
+        if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+            raise ApplicationEventContractError("sequence must be positive")
+        if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version < 1:
+            raise ApplicationEventContractError("schema_version must be positive")
+        if not isinstance(provenance, Mapping):
+            raise ApplicationEventContractError("provenance must be a mapping")
+        self.sequence = sequence
+        self.schema_version = schema_version
+        self.source_timestamp = require_utc(source_timestamp, "source_timestamp")
+        self.received_timestamp = require_utc(received_timestamp, "received_timestamp")
+        self.payload = deepcopy(payload)
+        self.provenance = deepcopy(dict(provenance))
+        encoded_payload = encode_value(self.payload)
+        encode_value(self.provenance)
+        computed_hash = content_hash(encoded_payload)
+        if raw_hash is not None and raw_hash != computed_hash:
+            raise ApplicationEventContractError("raw_hash does not match payload")
+        self.raw_hash = computed_hash
+        if event_id is None:
+            event_id = str(uuid4())
+        self.event_id = self._required(event_id, "event_id")
+
+    @staticmethod
+    def _required(value: str, field_name: str) -> str:
+        if not isinstance(value, str) or not value.strip():
+            raise ApplicationEventContractError(f"{field_name} cannot be empty")
+        return value
+
+    @property
+    def source_clock_is_ahead(self) -> bool:
+        return self.source_timestamp > self.received_timestamp
+
+    @property
+    def fingerprint(self) -> str:
+        return content_hash(self.to_dict())
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "event_id": self.event_id,
+            "schema_version": self.schema_version,
+            "source_app": self.source_app,
+            "event_type": self.event_type,
+            "channel": self.channel,
+            "payload": encode_value(self.payload),
+            "source_timestamp": self.source_timestamp.isoformat(),
+            "received_timestamp": self.received_timestamp.isoformat(),
+            "session_id": self.session_id,
+            "peer_id": self.peer_id,
+            "sequence": self.sequence,
+            "raw_hash": self.raw_hash,
+            "provenance": encode_value(self.provenance),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "ApplicationEvent":
+        required = {
+            "event_id",
+            "schema_version",
+            "source_app",
+            "event_type",
+            "channel",
+            "payload",
+            "source_timestamp",
+            "received_timestamp",
+            "session_id",
+            "peer_id",
+            "sequence",
+            "raw_hash",
+            "provenance",
+        }
+        if not isinstance(data, Mapping) or set(data) != required:
+            raise ApplicationEventContractError("application event fields do not match the contract")
+        for field_name in (
+            "event_id",
+            "source_app",
+            "event_type",
+            "channel",
+            "source_timestamp",
+            "received_timestamp",
+            "session_id",
+            "peer_id",
+            "raw_hash",
+        ):
+            if not isinstance(data[field_name], str):
+                raise ApplicationEventContractError(f"application event {field_name} must be a string")
+        for field_name in ("schema_version", "sequence"):
+            if not isinstance(data[field_name], int) or isinstance(data[field_name], bool):
+                raise ApplicationEventContractError(f"application event {field_name} must be an integer")
+        if not isinstance(data["provenance"], Mapping):
+            raise ApplicationEventContractError("application event provenance must be a mapping")
+        return cls(
+            event_id=data["event_id"],
+            schema_version=data["schema_version"],
+            source_app=data["source_app"],
+            event_type=data["event_type"],
+            channel=data["channel"],
+            payload=decode_value(data["payload"]),
+            source_timestamp=datetime.fromisoformat(data["source_timestamp"]),
+            received_timestamp=datetime.fromisoformat(data["received_timestamp"]),
+            session_id=data["session_id"],
+            peer_id=data["peer_id"],
+            sequence=data["sequence"],
+            raw_hash=data["raw_hash"],
+            provenance=decode_value(data["provenance"]),
+        )
