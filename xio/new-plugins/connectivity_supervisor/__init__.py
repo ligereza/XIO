@@ -147,7 +147,8 @@ class ConnectivitySupervisorPlugin(PluginBase):
         self._events = []    # ring buffer of events
         self._net_state = {"hotspot_up": None, "internet": None, "radio_type": None,
                            "data_registered": None, "tethering_active": None}  # infra change tracking
-        self._infra = {"hotspot_up": False, "internet": {"iface": "", "addr": ""},
+        self._infra = {"hotspot": {"address": "", "network_text": "", "broadcast": ""},
+                       "hotspot_up": False, "internet": {"iface": "", "addr": ""},
                        "backend": {}, "radio": {}, "tethering": {}}  # cached for /status (poll refreshes)
         self._health = {}  # cached battery health (level/temp_c/status/charging) from the poll
         self._watchdogs = {}  # cached self-heal loop liveness (native pgrep) from the poll
@@ -310,11 +311,11 @@ class ConnectivitySupervisorPlugin(PluginBase):
         iface = self._cfg("ap_iface")
         raw = self._ipv4_map().get(iface, "")
         if not raw:
-            return {"address": "", "network": None, "network_text": "", "broadcast": ""}
+            return self._remember_hotspot({"address": "", "network": None, "network_text": "", "broadcast": ""})
         try:
             interface = ipaddress.ip_interface(raw)
         except ValueError:
-            return {"address": "", "network": None, "network_text": "", "broadcast": ""}
+            return self._remember_hotspot({"address": "", "network": None, "network_text": "", "broadcast": ""})
 
         network = interface.network
         configured = str(self._cfg("ap_prefix") or "").strip()
@@ -328,12 +329,19 @@ class ConnectivitySupervisorPlugin(PluginBase):
                 # this session's address. A stale 192.168.* value is ignored.
                 if str(interface.ip).startswith(configured):
                     network = interface.network
-        return {
+        return self._remember_hotspot({
             "address": str(interface.ip),
             "network": network,
             "network_text": str(network),
             "broadcast": str(network.broadcast_address),
+        })
+
+    def _remember_hotspot(self, details):
+        """Cache display-safe hotspot fields; /status must never call rish."""
+        self._infra["hotspot"] = {
+            key: details.get(key, "") for key in ("address", "network_text", "broadcast")
         }
+        return details
 
     def _scan_bt(self):
         """Informational: MACs/names seen in the BT manager dump (bonded/known).
@@ -490,6 +498,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
             if not backend["connected"]:
                 # Do not scan clients or emit drops from stale rish output.
                 self._infra = {
+                    "hotspot": {"address": "", "network_text": "", "broadcast": ""},
                     "hotspot_up": None,
                     "internet": {"iface": "", "addr": ""},
                     "backend": backend,
@@ -562,6 +571,9 @@ class ConnectivitySupervisorPlugin(PluginBase):
             self._check_infra(hs_up, inet, radio, tethering)
             # cache for /status so the hot path never touches rish (no pileup)
             self._infra = {
+                "hotspot": dict(self._infra.get("hotspot", {
+                    "address": "", "network_text": "", "broadcast": ""
+                })),
                 "hotspot_up": hs_up,
                 "internet": {"iface": inet, "addr": netmap.get(inet, "")},
                 "backend": backend,
@@ -704,7 +716,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
     # ── API handlers ─────────────────────────────────────────────────
     def _api_status(self):
         from flask import jsonify
-        hotspot = self._hotspot_details()
+        hotspot = self._infra.get("hotspot", {})
         with self._lock:
             devs = list(self._devices.values())
             tracked = len(self._devices)
@@ -712,9 +724,9 @@ class ConnectivitySupervisorPlugin(PluginBase):
         return jsonify({
             "hotspot_iface": self._cfg("ap_iface"),
             "hotspot_up": self._infra["hotspot_up"],       # cached from last poll -- no rish, no lock
-            "hotspot_address": hotspot["address"],
-            "hotspot_network": hotspot["network_text"],
-            "hotspot_broadcast": hotspot["broadcast"],
+            "hotspot_address": hotspot.get("address", ""),
+            "hotspot_network": hotspot.get("network_text", ""),
+            "hotspot_broadcast": hotspot.get("broadcast", ""),
             "internet": self._infra["internet"],
             "backend": self._infra.get("backend", {}),
             "radio": self._infra.get("radio", {}),
