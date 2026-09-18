@@ -707,7 +707,20 @@ class ConnectivitySupervisorPlugin(PluginBase):
 
         def _send():
             try:
-                self._sh(f"cmd notification post -S bigtext -t '{t}' xio_connsup '{b}'", timeout=5)
+                # Do not use XiaomiController._shell here: it serializes on the
+                # same rish lock as the telemetry sweep. A notification is
+                # optional and must never delay radio/tethering evidence.
+                if getattr(self.controller, "backend", "") != "rish":
+                    return
+                command = f"cmd notification post -S bigtext -t '{t}' xio_connsup '{b}'"
+                subprocess.run(
+                    ["sh", self.controller.rish, "-c", command],
+                    cwd="/sdcard",
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                    check=False,
+                )
             except Exception:
                 pass  # notification is a bonus, never critical
             finally:
