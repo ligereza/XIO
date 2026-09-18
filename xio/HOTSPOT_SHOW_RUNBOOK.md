@@ -79,7 +79,9 @@ completo en `xio/RD_NODO_ARQUITECTURA_OPERATIVA.md`.
 Dejar el telefono en este estado; luego se sostiene solo mientras NO reboote:
 
 1. Shizuku armado + tcpip 5555 arriba (el setup normal; el watcher de PC lo hace).
-2. `run_server.sh` corrido -> server + shizuku_watchdog + server_supervisor + **hotspot_watch**.
+2. `run_server.sh` corrido -> server + shizuku_watchdog + server_supervisor. El
+   `hotspot_watch` queda pasivo salvo que armes explícitamente
+   `/sdcard/xio_termux/hotspot_runtime_recovery.enabled`.
 3. Confirmar hotspot `😁` encendido y con clientes (PC + tu phone del FOH).
 4. Confirmar `flujo`/`/api/plugins` responde desde tu phone en el FOH
    (observacion sin cable). Si el show usa `showcontrol`, verificar aparte el
@@ -92,9 +94,11 @@ Una vez en ese estado, te alejas al FOH. El telefono es un appliance; no lo toqu
 ## Durante el show (sin PC)
 
 **Se auto-cura solo (sin Windows):**
-- Hotspot cae con el telefono ENCENDIDO (glitch, band-switch): `hotspot_watch.sh` lo
-  revive por el input-dance via Shizuku/loopback (~30-90s). Doble compuerta de seguridad:
-  nunca apaga un hotspot sano.
+- Hotspot cae con el telefono ENCENDIDO (glitch, band-switch): si el watcher fue
+  armado explícitamente, espera una transición real UP -> DOWN y luego intenta una
+  sola recuperación sólo si el switch semántico del hotspot aparece inequívocamente
+  OFF (~60-90s). UI ambigua, DOWN inicial o switch ON = no toca nada. Nunca apaga un
+  hotspot sano.
 - Shizuku muere: `shizuku_watchdog.sh` lo re-arma (~20s).
 - server.py muere: `server_supervisor.sh` lo relanza (~90s).
 
@@ -138,13 +142,16 @@ propio -- datos celulares --, no el hotspot del Xiaomi.)
 **Camino B -- AccessibilityService propio (robusto, para un dev / agente libre despues):**
 - SOURCE YA ESCRITO en `xio/hotspot_boot_service/` (Java, Gradle minimo): un
   `AccessibilityService` + `BroadcastReceiver` de `BOOT_COMPLETED` que, al bootear, abre
-  `TETHER_SETTINGS` y toca el toggle SOLO si esta OFF (misma doble-compuerta que
-  `hotspot_watch.sh`, pero como servicio del sistema que no necesita Shizuku). Ver su
+  `TETHER_SETTINGS` y toca el toggle SOLO si esta OFF y el nodo es inequívoco (misma
+  compuerta semántica que `hotspot_watch.sh`, pero como servicio del sistema que no
+  necesita Shizuku). Si no puede identificarlo, aborta sin coordenadas fijas. Ver su
   README para build + install + activar. YA BUILDEADO E INSTALADO: el Xiaomi tiene
   `com.xio.hotspotboot` 1.0 desde el 2026-07-22 con el servicio armado
   (`accessibility_enabled=1`, medido por ADB el 2026-09-16). Falta lo unico que
   cierra el hueco de verdad: un reboot real observado en que el servicio levante
   el hotspot solo. Hasta entonces, sigue el aviso por ntfy y tu toque al toggle.
+  El source de este repo ya elimina el fallback por coordenadas; el APK instalado
+  debe recompilarse y reinstalarse para adoptar esa corrección.
 - Se instala con `adb install` (silencioso, uid shell) y se ACTIVA headless via:
   `settings put secure enabled_accessibility_services <pkg>/<Service>` +
   `settings put secure accessibility_enabled 1` (WRITE_SECURE_SETTINGS lo tiene shell;

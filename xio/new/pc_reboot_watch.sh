@@ -15,9 +15,8 @@
 # Recovery (each step guarded/idempotent):
 #   1. re-arm Shizuku (setsid libshizuku.so) if not running.
 #   2. restore tcpip 5555 so the on-device watchdogs + wifi reachability come back.
-#   3. start the server stack via the Termux input-dance (screen is unlocked when the
-#      user is present; Termux:Boot is the headless backup once tcpip is up).
-#   4. report hotspot state -- NEVER touched if up; if down, tell the user to tap it.
+#   3. start the server stack through Termux RUN_COMMAND (headless; no screen typing).
+#   4. report hotspot state -- NEVER touched if up; if down, use one guarded semantic click.
 # All state changes are pushed to ntfy.sh/<topic> over the phone's 5G.
 #
 # The ntfy topic is read from the phone (/sdcard/xio_termux/ntfy_topic.txt) so it is
@@ -25,16 +24,24 @@
 # iPhone with the ntfy app to that topic.
 set -u
 
-ADB="/c/IA/flujo/xio/actual/platform-tools/adb.exe"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -z "${ADB:-}" ]; then
+  for candidate in \
+    "/c/XPEDR/XiaomiServer/platform-tools/adb.exe" \
+    "$SCRIPT_DIR/platform-tools/adb.exe"; do
+    if [ -x "$candidate" ]; then ADB="$candidate"; break; fi
+  done
+fi
+ADB="${ADB:-/c/XPEDR/XiaomiServer/platform-tools/adb.exe}"
 SERIAL="8299e66f"                       # USB serial (stable across reboots)
 WIFI="${PHONE_WIFI_ADB:-}"             # optional override; hotspot IP is dynamic
-LIB="/data/app/~~yX8VZY_1lHCIcZ-fg1no1w==/moe.shizuku.privileged.api-OrtcmTP5ZTXHLD7tYjZJBA==/lib/arm64/libshizuku.so"
-LOG="/c/IA/flujo/xio/new/pc_reboot_watch.log"
+LOG="${LOG:-$SCRIPT_DIR/pc_reboot_watch.log}"
+UI_PROBE="$SCRIPT_DIR/hotspot_ui_probe.py"
 INTERVAL=15
 BOOT_FRESH=240                          # uptime < this (s) => treat as a fresh boot
 
 # single-instance lock: duplicate watchers => duplicate recovery + duplicate ntfy
-PIDFILE="/c/IA/flujo/xio/new/.pc_watch.pid"
+PIDFILE="$SCRIPT_DIR/.pc_watch.pid"
 if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
   echo "watcher already running (pid $(cat "$PIDFILE"))"; exit 0
 fi
@@ -43,10 +50,9 @@ trap 'rm -f "$PIDFILE"' EXIT
 
 sh_usb(){ MSYS_NO_PATHCONV=1 "$ADB" -s "$SERIAL" shell "$@" 2>/dev/null; }
 log(){ echo "[$(date '+%F %T')] $*" >> "$LOG"; }
-wake_dismiss(){  # wake + dismiss the non-secure (swipe) keyguard so input taps land
+wake_dismiss(){  # only after hotspot DOWN has been confirmed
   sh_usb "input keyevent 224" >/dev/null 2>&1; sleep 1
   sh_usb "wm dismiss-keyguard" >/dev/null 2>&1
-  sh_usb "input swipe 540 1900 540 600 200" >/dev/null 2>&1; sleep 1
 }
 
 TOPIC=""
@@ -62,6 +68,7 @@ uptime_s(){ sh_usb 'cut -d. -f1 /proc/uptime' | tr -d ' \r\n'; }
 server_up(){ [ "$(sh_usb 'curl -s -m 5 http://127.0.0.1:5000/api/plugins >/dev/null 2>&1 && echo up')" = "up" ]; }
 shizuku_up(){ [ "$(sh_usb 'ps -A 2>/dev/null | grep shizuku_server | grep -v grep | wc -l' | tr -d ' \r\n')" != "0" ]; }
 hotspot_up(){ [ "$(sh_usb 'ip -o addr show wlan1 2>/dev/null | grep -c "inet "' | tr -d ' \r\n')" != "0" ]; }
+shizuku_lib(){ sh_usb 'd=$(pm path moe.shizuku.privileged.api 2>/dev/null | head -1 | sed "s/package://; s@base.apk$@@"); printf "%s/lib/arm64/libshizuku.so" "$d"' | tr -d '\r\n'; }
 
 current_wifi_target(){
   [ -n "$WIFI" ] && { printf '%s\n' "$WIFI"; return 0; }
@@ -70,51 +77,69 @@ current_wifi_target(){
   [ -n "$ip" ] && printf '%s:5555\n' "$ip"
 }
 
-reenable_hotspot(){  # HyperOS does NOT restore the hotspot on boot and no non-root
-  # command re-enables the user's tether (cmd wifi start-softap does NOT tether).
-  # The phone has NO PIN, so drive the toggle by screen: open the tether settings and
-  # tap the "Portable hotspot" row (first list checkbox) only if it is currently OFF.
+probe_hotspot_toggle(){
+  # Coordinates are accepted only from a semantic, unambiguous UI match.
+  MSYS_NO_PATHCONV=1 "$ADB" -s "$SERIAL" exec-out cat /sdcard/xio_termux/hotspot_uidump.xml 2>/dev/null | python "$UI_PROBE"
+}
+
+reenable_hotspot(){  # One guarded semantic click; never choose a fixed checkbox.
   hotspot_up && return 0
-  local i j checked
-  for i in 1 2 3; do
-    hotspot_up && return 0
-    wake_dismiss
-    sh_usb "am start -a android.settings.TETHER_SETTINGS" >/dev/null 2>&1
-    sleep 3
-    sh_usb "uiautomator dump /sdcard/uidump.xml" >/dev/null 2>&1
-    # first android:id/checkbox in the dump = the Portable hotspot toggle
-    checked="$(sh_usb 'cat /sdcard/uidump.xml' | tr '>' '\n' | grep 'android:id/checkbox' | head -1 | grep -o 'checked="[a-z]*"')"
-    log "hotspot toggle state: ${checked:-unknown} (try $i)"
-    case "$checked" in
-      *false*) sh_usb "input tap 540 583" >/dev/null 2>&1; log "tapped hotspot toggle" ;;
-    esac
-    sh_usb "input keyevent 3" >/dev/null 2>&1                         # HOME
-    # wlan1 takes ~15-20s to raise its IPv4 after the toggle flips on. Poll for it
-    # (up to ~24s) BEFORE retrying, so a successful tap does not trigger a pointless
-    # 2nd settings visit.
-    for j in 1 2 3 4 5 6 7 8; do sleep 3; hotspot_up && return 0; done
-  done
+  local info state rest x y j
+  wake_dismiss
+  sh_usb "am start -a android.settings.TETHER_SETTINGS" >/dev/null 2>&1
+  sleep 3
+  sh_usb "uiautomator dump --compressed /sdcard/xio_termux/hotspot_uidump.xml" >/dev/null 2>&1
+  info="$(probe_hotspot_toggle 2>/dev/null || true)"
+  log "semantic hotspot probe: ${info:-UNKNOWN}"
+  state="${info%%|*}"
+  rest="${info#*|}"
+  x="${rest%%|*}"
+  rest="${rest#*|}"
+  y="${rest%%|*}"
+  case "$state" in
+    OFF)
+      case "$x:$y" in
+        ''|*[^0-9:]*|*:*:) log "hotspot recovery aborted: invalid semantic bounds"; sh_usb "input keyevent 3" >/dev/null 2>&1; return 1 ;;
+      esac
+      log "semantic hotspot switch confirmed OFF at ${x},${y}; clicking once"
+      sh_usb "input tap $x $y" >/dev/null 2>&1
+      ;;
+    ON)
+      log "hotspot recovery aborted: semantic switch is already ON"; sh_usb "input keyevent 3" >/dev/null 2>&1; return 1
+      ;;
+    *)
+      log "hotspot recovery aborted: switch not identified; no tap performed"; sh_usb "input keyevent 3" >/dev/null 2>&1; return 1
+      ;;
+  esac
+  for j in 1 2 3 4 5 6 7 8 9 10; do sleep 3; hotspot_up && { log "hotspot recovered after semantic click"; sh_usb "input keyevent 3" >/dev/null 2>&1; return 0; }; done
+  log "hotspot recovery failed: wlan1 did not regain IPv4"
+  sh_usb "input keyevent 3" >/dev/null 2>&1
   return 1
 }
 
-start_server_dance(){  # drive Termux (no PIN); Termux:Boot is the headless backup
-  wake_dismiss
-  sh_usb "am start -n com.termux/com.termux.app.TermuxActivity" >/dev/null 2>&1
-  sleep 2
-  sh_usb "input text sh" >/dev/null 2>&1
-  sh_usb "input keyevent 62" >/dev/null 2>&1
-  sh_usb "input text /sdcard/xio_termux/run_server.sh" >/dev/null 2>&1
-  sh_usb "input keyevent 66" >/dev/null 2>&1
+start_server_headless(){  # Termux RUN_COMMAND; never type into the screen
+  local out
+  out="$(sh_usb "am startservice --user 0 -n com.termux/.app.RunCommandService -a com.termux.RUN_COMMAND --es com.termux.RUN_COMMAND_PATH /data/data/com.termux/files/usr/bin/sh --esa com.termux.RUN_COMMAND_ARGUMENTS /sdcard/xio_termux/run_server.sh --es com.termux.RUN_COMMAND_WORKDIR /data/data/com.termux/files/home --ez com.termux.RUN_COMMAND_BACKGROUND true --es com.termux.RUN_COMMAND_SESSION_ACTION 0" 2>&1)"
+  log "Termux RUN_COMMAND: ${out:-no output}"
+  case "$out" in
+    *Error*|*Exception*|*not*found*|*Permission*|*denied*) return 1 ;;
+  esac
+  return 0
 }
 
 recover(){
-  local up ok=0 i hs wifi_target; up="$(uptime_s)"
+  local up ok=0 i hs wifi_target lib; up="$(uptime_s)"
   log "RECOVERY start (uptime=${up}s)"
   notify "Reboot detectado (uptime ${up}s). Recuperando por USB..."
   # 1) Shizuku
   if ! shizuku_up; then
-    sh_usb "setsid $LIB </dev/null >/dev/null 2>&1 &" >/dev/null 2>&1
-    log "Shizuku re-armed"; sleep 4
+    lib="$(shizuku_lib)"
+    if [ -n "$lib" ]; then
+      sh_usb "setsid $lib </dev/null >/dev/null 2>&1 &" >/dev/null 2>&1
+      log "Shizuku re-armed from discovered library"; sleep 4
+    else
+      log "Shizuku library not found; skipping re-arm"
+    fi
   fi
   # 2) restore wifi-adb (on-device watchdogs + LAN reachability)
   wifi_target="$(current_wifi_target)"
@@ -129,13 +154,13 @@ recover(){
   # 3) HOTSPOT FIRST -- it is the user's ONLY internet, and an ntfy only reaches their
   #    iPhone AFTER the hotspot is back (the iPhone needs it). So re-enabling the
   #    hotspot IS the fix; notifying to "go tap it" can never arrive. HyperOS doesn't
-  #    restore it on boot -> screen-tap the toggle (no PIN).
+  #    restore it on boot -> use one semantic UI click, never a fixed coordinate.
   if ! hotspot_up; then
-    log "hotspot down -> auto re-enabling by screen-tap"
+    log "hotspot down -> auto re-enabling by semantic UI probe"
     reenable_hotspot && log "hotspot re-enabled" || log "hotspot re-enable FAILED"
   fi
-  # 4) start the server (Termux) -- input-dance (no PIN) + Termux:Boot headless backup
-  start_server_dance
+  # 4) start the server (Termux) headlessly through RUN_COMMAND
+  start_server_headless || log "Termux headless start unavailable (allow-external-apps may be missing)"
   for i in $(seq 1 16); do sleep 5; if server_up; then ok=1; break; fi; done
   # 5) final report -- now reaches the iPhone if the hotspot came back
   hs=$(hotspot_up && echo UP || echo DOWN)
@@ -170,9 +195,8 @@ while true; do
       fi
     fi
     # Keep the hotspot alive (the user's ONLY internet). If it's down for 2 polls,
-    # re-enable it by screen-tap. This also RETRIES a boot-time reenable that ran too
-    # early (SystemUI not ready), independent of the server. The phone is an appliance
-    # the user does not hand-use, so driving its screen is fine.
+    # try one semantic re-enable. This also retries a boot-time attempt that ran too
+    # early (SystemUI not ready), independent of the server; ambiguous UI aborts.
     if hotspot_up; then
       [ "$hs_down" -gt 0 ] && log "hotspot back up"
       hs_down=0

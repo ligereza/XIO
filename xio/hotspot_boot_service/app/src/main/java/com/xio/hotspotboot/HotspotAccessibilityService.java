@@ -1,159 +1,323 @@
 package com.xio.hotspotboot;
 
 import android.accessibilityservice.AccessibilityService;
-import android.accessibilityservice.GestureDescription;
 import android.content.Intent;
-import android.graphics.Path;
+import android.content.SharedPreferences;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 
+import java.net.Inet4Address;
+import java.net.NetworkInterface;
+import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 
 /**
- * Reenciende el hotspot al boot, SIN root y SIN Shizuku, tocando la UI de tethering.
+ * Boot-triggered hotspot recovery without root or Shizuku.
  *
- * Es el unico mecanismo host-free que sobrevive un reboot: un AccessibilityService
- * habilitado arranca solo al bootear (onServiceConnected), puede abrir Settings y tocar
- * el toggle. Replica la logica validada de hotspot_watch.sh:
- *   - DOBLE COMPUERTA: solo hace click si el switch esta OFF. Nunca apaga uno sano.
- *   - Busca el nodo por texto (multi-idioma); si no, cae a un gesto por coordenada.
- * Corre UNA vez por boot (mDone).
+ * Safety contract:
+ * - boot is the only automatic trigger;
+ * - if wlan1 (or another known SoftAP interface) already has an IPv4 address,
+ *   Settings is never opened;
+ * - the service acts at most once per Android boot;
+ * - only a semantically labelled, checkable Settings node may be clicked;
+ * - there is no first-checkbox fallback and no fixed-coordinate tap;
+ * - after a click, the network interface must confirm recovery, otherwise the
+ *   service aborts without retrying blindly.
  */
 public class HotspotAccessibilityService extends AccessibilityService {
 
     private static final String TAG = "xioHotspotBoot";
-
-    // Espera a que el sistema asiente tras el boot antes de abrir Settings. Corto: el
-    // flujo es event-driven (onAccessibilityEvent reintenta cuando aparece la ventana),
-    // asi que un boot lento no lo rompe; solo acelera el reenable.
+    private static final String PREFS = "recovery_state";
+    private static final String LAST_BOOT = "last_boot_count";
     private static final long BOOT_SETTLE_MS = 8000L;
+    private static final long FIND_TIMEOUT_MS = 20000L;
+    private static final long VERIFY_INTERVAL_MS = 3000L;
+    private static final int VERIFY_ATTEMPTS = 8;
 
-    // Textos posibles del switch/fila del hotspot (agregar variantes segun idioma/ROM).
     private static final String[] TOGGLE_HINTS = {
-        "portable hotspot", "punto de acceso portatil", "punto de acceso portátil",
-        "hotspot", "punto de acceso", "zona wi-fi portatil", "zona wi-fi portátil",
-        "compartir internet", "anclaje", "tethering"
+        "portable hotspot", "punto de acceso portatil", "hotspot",
+        "punto de acceso", "zona wi-fi portatil", "compartir internet",
+        "anclaje", "tethering"
     };
-
-    // Fallback por coordenada (UI HyperOS del Mi 11 Lite 5G NE; = tap 540,583 del
-    // hotspot_watch.sh). Solo se usa si el nodo por texto no aparece. AJUSTAR on-device.
-    private static final int FALLBACK_TAP_X = 540;
-    private static final int FALLBACK_TAP_Y = 583;
 
     private boolean mDone = false;
     private boolean mLaunchedSettings = false;
+    private boolean mActionInFlight = false;
+    private int mVerifyAttempts = 0;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    private static final class ToggleCandidate {
+        final AccessibilityNodeInfo node;
+        final int subtreeSize;
+
+        ToggleCandidate(AccessibilityNodeInfo node, int subtreeSize) {
+            this.node = node;
+            this.subtreeSize = subtreeSize;
+        }
+    }
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        Log.i(TAG, "service connected -> programando reenable de hotspot en " + BOOT_SETTLE_MS + "ms");
-        // Un solo intento por vida del servicio (que en la practica = una vez por boot).
+        if (hasHotspotIpv4()) {
+            mDone = true;
+            Log.i(TAG, "hotspot already UP; no Settings launch and no tap");
+            return;
+        }
+        if (!claimBootAttempt()) {
+            mDone = true;
+            Log.i(TAG, "recovery already evaluated for this boot; staying passive");
+            return;
+        }
+        Log.i(TAG, "hotspot DOWN at service start; scheduling guarded boot recovery");
         mHandler.postDelayed(this::openTetherSettings, BOOT_SETTLE_MS);
+        mHandler.postDelayed(() -> abort("Settings did not expose a confirmed switch"),
+                BOOT_SETTLE_MS + FIND_TIMEOUT_MS);
+    }
+
+    private boolean claimBootAttempt() {
+        int bootCount = Settings.Global.getInt(getContentResolver(), Settings.Global.BOOT_COUNT, -1);
+        String marker = bootCount >= 0 ? Integer.toString(bootCount) : "unknown";
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String previous = prefs.getString(LAST_BOOT, "");
+        if (marker.equals(previous) && !"unknown".equals(marker)) return false;
+        prefs.edit().putString(LAST_BOOT, marker).apply();
+        return true;
     }
 
     private void openTetherSettings() {
-        if (mDone) return;
+        if (mDone || hasHotspotIpv4()) {
+            if (!mDone) {
+                mDone = true;
+                Log.i(TAG, "hotspot came UP before UI; no tap");
+            }
+            return;
+        }
         try {
-            Intent i = new Intent("android.settings.TETHER_SETTINGS");
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(i);
+            Intent intent = new Intent("android.settings.TETHER_SETTINGS");
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
             mLaunchedSettings = true;
-            Log.i(TAG, "TETHER_SETTINGS abierto; esperando la ventana para tocar el toggle");
+            Log.i(TAG, "TETHER_SETTINGS opened; waiting for semantic switch");
         } catch (Exception e) {
-            Log.e(TAG, "no pude abrir TETHER_SETTINGS: " + e.getMessage());
+            abort("could not open TETHER_SETTINGS: " + e.getMessage());
         }
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (mDone || !mLaunchedSettings) return;
-        if (event == null) return;
+        if (mDone || !mLaunchedSettings || mActionInFlight || event == null) return;
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                 && event.getEventType() != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
             return;
         }
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) return;
+        if (root == null || !isSettingsWindow(root)) return;
 
         AccessibilityNodeInfo toggle = findToggle(root);
-        if (toggle != null) {
-            boolean on = toggle.isChecked();
-            Log.i(TAG, "toggle encontrado, checked=" + on);
-            if (!on) {
-                // COMPUERTA: solo si esta OFF.
-                boolean clicked = clickNodeOrAncestor(toggle);
-                Log.i(TAG, clicked ? "click en el toggle (OFF->ON)" : "click fallo -> fallback gesto");
-                if (!clicked) tapFallback();
-            } else {
-                Log.i(TAG, "hotspot ya ON -> no se toca (compuerta de seguridad)");
-            }
-            finishOnce();
+        if (toggle == null) return;
+
+        Log.i(TAG, "semantic hotspot switch found, checked=" + toggle.isChecked());
+        if (toggle.isChecked()) {
+            abort("semantic switch is already ON; no tap");
+            return;
         }
-        // Si no aparecio el toggle todavia, esperamos el proximo evento de ventana.
+        if (!toggle.isEnabled()) {
+            abort("semantic switch is disabled; no tap");
+            return;
+        }
+        if (!clickNodeOrAncestor(toggle)) {
+            abort("semantic switch click failed; no coordinate fallback");
+            return;
+        }
+        mActionInFlight = true;
+        mVerifyAttempts = 0;
+        Log.i(TAG, "semantic switch clicked once; verifying wlan interface");
+        mHandler.postDelayed(this::verifyHotspotAfterClick, VERIFY_INTERVAL_MS);
     }
 
-    /** Busca un Switch/checkable cuyo texto o el de su fila matchee un hint del hotspot. */
+    private boolean isSettingsWindow(AccessibilityNodeInfo root) {
+        CharSequence packageName = root.getPackageName();
+        return packageName != null && "com.android.settings".contentEquals(packageName);
+    }
+
     private AccessibilityNodeInfo findToggle(AccessibilityNodeInfo root) {
-        for (String hint : TOGGLE_HINTS) {
-            List<AccessibilityNodeInfo> hits = root.findAccessibilityNodeInfosByText(hint);
-            if (hits == null) continue;
-            for (AccessibilityNodeInfo n : hits) {
-                AccessibilityNodeInfo sw = firstCheckable(n);
-                if (sw != null) return sw;
+        List<ToggleCandidate> candidates = new ArrayList<>();
+        collectToggleCandidates(root, candidates);
+        if (candidates.isEmpty()) return null;
+
+        int smallest = Integer.MAX_VALUE;
+        for (ToggleCandidate candidate : candidates) {
+            smallest = Math.min(smallest, candidate.subtreeSize);
+        }
+        AccessibilityNodeInfo selected = null;
+        int selectedCount = 0;
+        for (ToggleCandidate candidate : candidates) {
+            if (candidate.subtreeSize != smallest) continue;
+            if (selected != null && sameBounds(selected, candidate.node)) continue;
+            selected = candidate.node;
+            selectedCount++;
+        }
+        // Deliberately no root-wide checkbox fallback: ambiguity means abort.
+        return selectedCount == 1 ? selected : null;
+    }
+
+    private void collectToggleCandidates(AccessibilityNodeInfo node,
+                                         List<ToggleCandidate> candidates) {
+        if (node == null) return;
+        if (containsAnyHint(node)) {
+            List<AccessibilityNodeInfo> checkables = new ArrayList<>();
+            collectCheckableNodes(node, checkables);
+            if (checkables.size() == 1 && !containsSameBounds(candidates, checkables.get(0))) {
+                candidates.add(new ToggleCandidate(checkables.get(0), subtreeSize(node)));
             }
         }
-        // Ultimo recurso: el primer nodo checkable de la pantalla (equivale al "primer
-        // android:id/checkbox" que usa hotspot_watch.sh).
-        return firstCheckable(root);
-    }
-
-    /** Sube al ancestro y baja buscando el primer nodo checkable (el switch). */
-    private AccessibilityNodeInfo firstCheckable(AccessibilityNodeInfo node) {
-        if (node == null) return null;
-        AccessibilityNodeInfo scope = node;
-        for (int up = 0; up < 4 && scope.getParent() != null; up++) scope = scope.getParent();
-        return searchCheckable(scope);
-    }
-
-    private AccessibilityNodeInfo searchCheckable(AccessibilityNodeInfo node) {
-        if (node == null) return null;
-        if (node.isCheckable()) return node;
         for (int i = 0; i < node.getChildCount(); i++) {
-            AccessibilityNodeInfo r = searchCheckable(node.getChild(i));
-            if (r != null) return r;
+            collectToggleCandidates(node.getChild(i), candidates);
         }
-        return null;
+    }
+
+    private boolean containsAnyHint(AccessibilityNodeInfo node) {
+        String text = nodeText(node);
+        for (String hint : TOGGLE_HINTS) {
+            if (text.contains(normalize(hint))) return true;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            if (containsAnyHint(node.getChild(i))) return true;
+        }
+        return false;
+    }
+
+    private void collectCheckableNodes(AccessibilityNodeInfo node,
+                                       List<AccessibilityNodeInfo> result) {
+        if (node == null) return;
+        if (node.isCheckable() && node.isEnabled()) result.add(node);
+        for (int i = 0; i < node.getChildCount(); i++) {
+            collectCheckableNodes(node.getChild(i), result);
+        }
+    }
+
+    private int subtreeSize(AccessibilityNodeInfo node) {
+        if (node == null) return 0;
+        int size = 1;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            size += subtreeSize(node.getChild(i));
+        }
+        return size;
+    }
+
+    private boolean containsSameBounds(List<ToggleCandidate> candidates,
+                                       AccessibilityNodeInfo node) {
+        for (ToggleCandidate candidate : candidates) {
+            if (sameBounds(candidate.node, node)) return true;
+        }
+        return false;
+    }
+
+    private boolean sameBounds(AccessibilityNodeInfo first, AccessibilityNodeInfo second) {
+        Rect a = new Rect();
+        Rect b = new Rect();
+        first.getBoundsInScreen(a);
+        second.getBoundsInScreen(b);
+        return a.equals(b);
+    }
+
+    private String nodeText(AccessibilityNodeInfo node) {
+        String text = node.getText() == null ? "" : node.getText().toString();
+        String description = node.getContentDescription() == null
+                ? "" : node.getContentDescription().toString();
+        String resource = node.getViewIdResourceName() == null
+                ? "" : node.getViewIdResourceName();
+        return normalize(text + " " + description + " " + resource);
+    }
+
+    private String normalize(String value) {
+        String folded = Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFKD);
+        folded = folded.replaceAll("\\p{M}", "");
+        return folded.toLowerCase(Locale.ROOT).replace('-', ' ').replace('_', ' ').trim();
     }
 
     private boolean clickNodeOrAncestor(AccessibilityNodeInfo node) {
-        AccessibilityNodeInfo n = node;
-        for (int up = 0; up < 5 && n != null; up++) {
-            if (n.isClickable() && n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true;
-            n = n.getParent();
+        AccessibilityNodeInfo current = node;
+        for (int depth = 0; depth < 5 && current != null; depth++) {
+            if (current.isClickable() && current.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return true;
+            }
+            current = current.getParent();
         }
-        // Intento directo aunque no se marque clickable.
         return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
     }
 
-    /** Gesto por coordenada (fallback). Requiere canPerformGestures en el config. */
-    private void tapFallback() {
-        Path p = new Path();
-        p.moveTo(FALLBACK_TAP_X, FALLBACK_TAP_Y);
-        GestureDescription.Builder b = new GestureDescription.Builder();
-        b.addStroke(new GestureDescription.StrokeDescription(p, 0, 60));
-        dispatchGesture(b.build(), null, null);
+    private void verifyHotspotAfterClick() {
+        if (mDone || !mActionInFlight) return;
+        if (hasHotspotIpv4()) {
+            mActionInFlight = false;
+            finishOnce("hotspot interface confirmed UP");
+            return;
+        }
+        if (mVerifyAttempts++ < VERIFY_ATTEMPTS) {
+            mHandler.postDelayed(this::verifyHotspotAfterClick, VERIFY_INTERVAL_MS);
+            return;
+        }
+        abort("switch click did not produce a hotspot IPv4");
     }
 
-    private void finishOnce() {
+    private boolean hasHotspotIpv4() {
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            while (interfaces != null && interfaces.hasMoreElements()) {
+                NetworkInterface network = interfaces.nextElement();
+                String name = network.getName();
+                if (!isHotspotInterface(name) || !network.isUp()) continue;
+                Enumeration<java.net.InetAddress> addresses = network.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    java.net.InetAddress address = addresses.nextElement();
+                    if (address instanceof Inet4Address
+                            && !address.isLoopbackAddress()
+                            && !address.isLinkLocalAddress()) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "could not inspect hotspot interfaces: " + e.getMessage());
+        }
+        return false;
+    }
+
+    private boolean isHotspotInterface(String name) {
+        return "wlan1".equals(name)
+                || name.startsWith("ap_br_")
+                || name.startsWith("softap");
+    }
+
+    private void abort(String reason) {
+        if (mDone) return;
+        mActionInFlight = false;
         mDone = true;
-        mHandler.postDelayed(() -> performGlobalAction(GLOBAL_ACTION_HOME), 2500);
-        Log.i(TAG, "listo -> HOME");
+        mHandler.removeCallbacksAndMessages(null);
+        Log.w(TAG, "recovery aborted: " + reason);
+        mHandler.postDelayed(() -> performGlobalAction(GLOBAL_ACTION_HOME), 500L);
+    }
+
+    private void finishOnce(String reason) {
+        if (mDone) return;
+        mDone = true;
+        mHandler.removeCallbacksAndMessages(null);
+        Log.i(TAG, "recovery finished: " + reason);
+        mHandler.postDelayed(() -> performGlobalAction(GLOBAL_ACTION_HOME), 500L);
     }
 
     @Override
-    public void onInterrupt() { }
+    public void onInterrupt() {
+        mHandler.removeCallbacksAndMessages(null);
+    }
 }

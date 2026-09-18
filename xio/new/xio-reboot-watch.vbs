@@ -14,4 +14,4 @@
 ' (re-arms Shizuku + tcpip over USB, starts the server, pings you via ntfy over 5G);
 ' otherwise it idles.
 Set s = CreateObject("WScript.Shell")
-s.Run """C:\Program Files\Git\bin\bash.exe"" -lc ""/c/IA/flujo/xio/new/pc_reboot_watch.sh""", 0, False
+s.Run """C:\Program Files\Git\bin\bash.exe"" -lc ""/c/IA/XIO/xio/new/pc_reboot_watch.sh""", 0, False

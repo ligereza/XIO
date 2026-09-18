@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">xio Hotspot Boot</string>
-    <string name="accessibility_description">Reenciende el hotspot al arrancar el telefono si quedo apagado. Solo toca el toggle de tethering; nunca apaga un hotspot activo.</string>
+    <string name="app_name">XIO</string>
+    <string name="accessibility_description">Recupera el hotspot al arrancar si quedo apagado y coordina Flujo RD, Flujo FOH y el servidor XIO.</string>
 </resources>

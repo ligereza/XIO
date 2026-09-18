@@ -3,11 +3,50 @@
     package="com.xio.hotspotboot">
 
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Termux must have allow-external-apps=true for the explicit start action. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+
+    <queries>
+        <package android:name="com.termux" />
+        <package android:name="cl.reduciendodano.xiofield" />
+        <package android:name="cl.xio.foh" />
+    </queries>
 
     <application
         android:allowBackup="false"
-        android:label="xio Hotspot Boot"
-        android:icon="@android:drawable/ic_menu_share">
+        android:label="XIO"
+        android:icon="@android:drawable/ic_menu_share"
+        android:usesCleartextTraffic="true">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="XIO">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".HubActivity"
+            android:exported="false"
+            android:label="Hub XIO" />
+
+        <service
+            android:name=".XioMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Read-only XIO network, radio and local host diagnostics" />
+        </service>
 
         <!-- AccessibilityService: arranca solo al boot cuando esta habilitado; no
              necesita Activity ni interaccion. Toca la UI de tethering para reencender

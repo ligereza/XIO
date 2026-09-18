@@ -7,6 +7,7 @@ silently touching the radios that carry the only internet:
   - tracks labelled devices (iPhone / iPad) by MAC; detects join / drop / rejoin
   - cross-checks Bluetooth (dumpsys bluetooth_manager) as an INFORMATIONAL side
     channel (bonded/known devices; non-root cannot guarantee live proximity)
+  - records read-only radio, data-registration and tethering diagnostics
   - logs events + (best effort) posts an on-device notification
   - exposes ONE guarded remediation: /reassert-hotspot (touches the only internet)
 
@@ -67,7 +68,7 @@ h1{font-size:19px;font-weight:700}
 <div class=chip><div class=k>Clients</div><div class="v" id=cl>--</div></div>
 </div>
 <div class=batt id=batt></div>
-<div class=batt id=wd></div>
+<div class=batt id=wd></div><div class=batt id=radio></div>
 <div class=sec>Present devices</div><div id=devs></div>
 <div class=sec>Recent events</div><div id=evs></div>
 <script>
@@ -87,6 +88,13 @@ function tick(){
   set('batt',p.length?('Battery &middot; '+p.join(' &middot; ')):'');
   var w=s.watchdogs||{};var wn={shizuku:'Shizuku',server:'Server',hotspot:'Hotspot'};var wp=[];
   for(var wk in wn){var wu=w[wk]>0;wp.push('<span class="'+(wu?'ok':'bad')+'">'+wn[wk]+(wu?' UP':' DOWN')+'</span>')}
+  var r=s.radio||{},t=s.tethering||{},rp=[];
+  if(r.network_type)rp.push(esc(r.network_type));
+  if(r.data_registered===false)rp.push('<span class=bad>data not registered</span>');
+  if(r.lte_rsrp!=null)rp.push('RSRP '+esc(r.lte_rsrp)+' dBm');
+  if(t.active===true)rp.push('<span class=ok>tether UP</span>');
+  else if(t.active===false)rp.push('<span class=bad>tether DOWN</span>');
+  set('radio',rp.length?('Radio &middot; '+rp.join(' &middot; ')):'' );
   set('wd',wp.length?('Watchdogs &middot; '+wp.join(' &middot; ')):'');
   set('devs',(s.present&&s.present.length)?s.present.map(function(p){return '<div class=dev><div><div class=nm>'+esc(p.name)+'</div><div class=meta>'+esc(p.ip||'')+' &middot; '+esc(p.mac)+'</div></div><span class="badge b-'+esc(p.mac_type||'unknown')+'">'+esc(p.mac_type||'?')+'</span></div>'}).join(''):'<div class=empty>no clients on the hotspot</div>');
   return fetch('events?limit=25',{cache:'no-store'});
@@ -119,6 +127,8 @@ class ConnectivitySupervisorPlugin(PluginBase):
         # keep an explicit value only as a diagnostic override.
         "ap_prefix": "",
         "bt_watch": False,        # poll BT too (slow dumpsys); /bt endpoint works on-demand regardless
+        "radio_watch": True,      # read-only telephony/radio diagnostics
+        "tethering_watch": True,  # read-only dumpsys tethering diagnostics
         "notify": True,           # best-effort on-device notification on events
         "triggers_enabled": False,  # gate for shell-command triggers (OFF by default)
         "on_drop_cmd": "",        # shell run on drop  (only if triggers_enabled)
@@ -135,8 +145,10 @@ class ConnectivitySupervisorPlugin(PluginBase):
         self._lock = threading.Lock()
         self._devices = {}   # mac -> device record
         self._events = []    # ring buffer of events
-        self._net_state = {"hotspot_up": None, "internet": None}  # infra change tracking
-        self._infra = {"hotspot_up": False, "internet": {"iface": "", "addr": ""}}  # cached for /status (poll refreshes)
+        self._net_state = {"hotspot_up": None, "internet": None, "radio_type": None,
+                           "data_registered": None, "tethering_active": None}  # infra change tracking
+        self._infra = {"hotspot_up": False, "internet": {"iface": "", "addr": ""},
+                       "radio": {}, "tethering": {}}  # cached for /status (poll refreshes)
         self._health = {}  # cached battery health (level/temp_c/status/charging) from the poll
         self._watchdogs = {}  # cached self-heal loop liveness (native pgrep) from the poll
 
@@ -362,6 +374,89 @@ class ConnectivitySupervisorPlugin(PluginBase):
                 return {"iface": name, "addr": addr}
         return {"iface": "", "addr": ""}
 
+    def _read_radio(self):
+        """Read radio/data state without changing the modem or preferred RAT.
+
+        The exact fields exposed by ``dumpsys telephony.registry`` vary across
+        Android/HyperOS builds. Missing fields deliberately stay ``None`` or
+        empty instead of being guessed, so this is useful evidence rather than
+        a false diagnosis.
+        """
+        radio = {
+            "network_type": self._sh("getprop gsm.network.type 2>/dev/null").strip(),
+            "data_network_type": self._sh("getprop gsm.data.network.type 2>/dev/null").strip(),
+            "operator": self._sh("getprop gsm.operator.alpha 2>/dev/null").strip(),
+            "data_reg_state": "",
+            "data_registered": None,
+            "lte_rssi": None,
+            "lte_rsrp": None,
+            "lte_rsrq": None,
+            "lte_rssnr": None,
+            "nr_available": None,
+            "endc_available": None,
+        }
+        registry = self._sh("dumpsys telephony.registry 2>/dev/null")
+
+        reg = re.search(r"\bmDataRegState\s*=\s*(-?\d+)(?:\s*\(([^)]+)\))?", registry, re.I)
+        if reg:
+            state_number = int(reg.group(1))
+            state_name = (reg.group(2) or {
+                0: "IN_SERVICE", 1: "OUT_OF_SERVICE", 2: "EMERGENCY_ONLY",
+                3: "POWER_OFF", 4: "UNKNOWN",
+            }.get(state_number, str(state_number))).strip()
+            radio["data_reg_state"] = state_name
+            radio["data_registered"] = state_number == 0 or state_name.upper() in {"IN_SERVICE", "HOME"}
+
+        for key, pattern in {
+            "lte_rssi": r"CellSignalStrengthLte:.*?\brssi\s*=\s*(-?\d+)",
+            "lte_rsrp": r"CellSignalStrengthLte:.*?\brsrp\s*=\s*(-?\d+)",
+            "lte_rsrq": r"CellSignalStrengthLte:.*?\brsrq\s*=\s*(-?\d+)",
+            "lte_rssnr": r"CellSignalStrengthLte:.*?\brssnr\s*=\s*(-?\d+)",
+        }.items():
+            match = re.search(pattern, registry, re.I)
+            if match:
+                try:
+                    radio[key] = int(match.group(1))
+                except (TypeError, ValueError):
+                    pass
+
+        for key, field in (("nr_available", "isNrAvailable"), ("endc_available", "isEnDcAvailable")):
+            match = re.search(rf"\b{field}\s*[:=]\s*(true|false)", registry, re.I)
+            if match:
+                radio[key] = match.group(1).lower() == "true"
+        return radio
+
+    def _read_tethering(self):
+        """Read tethering/BPF state; never starts, stops or reconfigures tethering."""
+        dump = self._sh("dumpsys tethering 2>/dev/null")
+        iface = str(self._cfg("ap_iface") or "wlan1")
+        active = bool(re.search(rf"\b{re.escape(iface)}\s*-\s*TetheredState\b", dump, re.I))
+        if not active:
+            active = bool(re.search(rf"\btethered[^\n]*\b{re.escape(iface)}\b", dump, re.I))
+
+        error_lines = [
+            line for line in dump.splitlines()
+            if re.search(r"conntrack|netlink", line, re.I)
+            and re.search(r"\b(?:ENOENT|ESRCH|EPERM|EACCES|EINVAL)\b", line, re.I)
+        ]
+        codes = re.findall(r"\b(?:ENOENT|ESRCH|EPERM|EACCES|EINVAL)\b", "\n".join(error_lines), re.I)
+        bpf = re.search(r"\bmIsBpfEnabled\s*[:=]\s*(true|false)", dump, re.I)
+        if not bpf:
+            bpf = re.search(r"\bbpf[^\n]*(?:enabled|enable)\s*[:=]\s*(true|false)", dump, re.I)
+        if re.search(r"offload hal[s]? started", dump, re.I):
+            hardware_offload = True
+        elif re.search(r"(?:hardware|hal).*offload[^\n]*(?:disabled|false)", dump, re.I):
+            hardware_offload = False
+        else:
+            hardware_offload = None
+        return {
+            "active": active,
+            "bpf_enabled": (bpf.group(1).lower() == "true") if bpf else None,
+            "hardware_offload": hardware_offload,
+            "conntrack_error_count": len(error_lines),
+            "conntrack_error_codes": sorted({code.upper() for code in codes}),
+        }
+
     # ── the poll: read, diff, emit (no radio writes) ─────────────────
     def _poll(self):
         try:
@@ -421,9 +516,18 @@ class ConnectivitySupervisorPlugin(PluginBase):
             netmap = self._ipv4_map()
             hs_up = self._cfg("ap_iface") in netmap
             inet = next((n for n in netmap if n.startswith("rmnet")), "")
-            self._check_infra(hs_up, inet)
+            radio = self._read_radio() if self._cfg("radio_watch") else {}
+            tethering = self._read_tethering() if self._cfg("tethering_watch") else {}
+            if tethering:
+                tethering["upstream_iface"] = inet
+            self._check_infra(hs_up, inet, radio, tethering)
             # cache for /status so the hot path never touches rish (no pileup)
-            self._infra = {"hotspot_up": hs_up, "internet": {"iface": inet, "addr": netmap.get(inet, "")}}
+            self._infra = {
+                "hotspot_up": hs_up,
+                "internet": {"iface": inet, "addr": netmap.get(inet, "")},
+                "radio": radio,
+                "tethering": tethering,
+            }
 
             # battery health (cheap single dumpsys) + overheat/low alerts
             self._check_battery(self._read_battery())
@@ -434,9 +538,11 @@ class ConnectivitySupervisorPlugin(PluginBase):
         except Exception as e:
             self.logger.error(f"connsup poll error: {e}")
 
-    def _check_infra(self, hs_up, inet_iface):
-        """Emit an event+notification when the hotspot or internet flips state.
+    def _check_infra(self, hs_up, inet_iface, radio=None, tethering=None):
+        """Emit events for real connectivity transitions, never signal noise.
         First poll (prev is None) never alerts -- only real transitions do."""
+        radio = radio or {}
+        tethering = tethering or {}
         prev = self._net_state
         if prev.get("hotspot_up") is not None and hs_up != prev["hotspot_up"]:
             self._emit_sys("hotspot_up" if hs_up else "hotspot_down",
@@ -444,7 +550,23 @@ class ConnectivitySupervisorPlugin(PluginBase):
         if prev.get("internet") is not None and bool(inet_iface) != bool(prev["internet"]):
             self._emit_sys("internet_up" if inet_iface else "internet_down",
                            f"Internet restored via {inet_iface}" if inet_iface else "INTERNET DOWN -- no mobile-data IPv4")
-        self._net_state = {"hotspot_up": hs_up, "internet": inet_iface}
+        if self._cfg("radio_watch"):
+            radio_type = radio.get("network_type") or radio.get("data_network_type") or ""
+            if prev.get("radio_type") and radio_type and radio_type != prev["radio_type"]:
+                self._emit_sys("radio_changed", f"Radio changed {prev['radio_type']} -> {radio_type}")
+            registered = radio.get("data_registered")
+            if prev.get("data_registered") is not None and registered is not None and registered != prev["data_registered"]:
+                self._emit_sys("data_registered" if registered else "data_unregistered",
+                               "Mobile data registered" if registered else "Mobile data not registered")
+        else:
+            radio_type, registered = "", None
+        tether_active = tethering.get("active") if self._cfg("tethering_watch") else None
+        if prev.get("tethering_active") is not None and tether_active is not None and tether_active != prev["tethering_active"]:
+            self._emit_sys("tethering_up" if tether_active else "tethering_down",
+                           "Tethering interface active" if tether_active else "Tethering interface inactive")
+        self._net_state = {"hotspot_up": hs_up, "internet": inet_iface,
+                           "radio_type": radio_type, "data_registered": registered,
+                           "tethering_active": tether_active}
 
     def _read_battery(self):
         """Cheap single `dumpsys battery` read -> {level, temp_c, status, charging}."""
@@ -554,6 +676,8 @@ class ConnectivitySupervisorPlugin(PluginBase):
             "hotspot_network": hotspot["network_text"],
             "hotspot_broadcast": hotspot["broadcast"],
             "internet": self._infra["internet"],
+            "radio": self._infra.get("radio", {}),
+            "tethering": self._infra.get("tethering", {}),
             "health": {k: self._health.get(k) for k in ("level", "temp_c", "status", "charging")},
             "watchdogs": self._watchdogs,
             "clients_present": len(present),

@@ -47,7 +47,7 @@ PHONE_SERIAL=8299e66f                              # USB serial, stable across r
 PHONE_WIFI_ADB=<IP_ACTUAL>:5555                   # wifi-adb target -- VERIFY subnet each show
 LOOPBACK_ADB=127.0.0.1:5555                        # on-device loopback target (watchdogs use this)
 XIO_PORT=5000                                       # Flask server port
-ADB=/c/IA/flujo/xio/actual/platform-tools/adb.exe   # PC-side adb.exe
+ADB=/c/XPEDR/XiaomiServer/platform-tools/adb.exe   # PC-side adb.exe
 XIO_DENY_IPS=                                      # opcional; unset en hotspot privado (see 5)
 ```
 Source: `xio/new/pc_reboot_watch.sh` (SERIAL, WIFI, ADB), `xio/new/server.py`
@@ -109,11 +109,13 @@ Shizuku, which blinds the on-device watchdogs.
   `/sdcard/xio_termux/ntfy_topic.txt`, never hardcoded) reporting hotspot state.
 - PC-side watcher (independent process, USB-based, survives hotspot being down):
   ```bash
-  bash /c/IA/flujo/xio/new/pc_reboot_watch.sh &
+  bash /c/IA/XIO/xio/new/pc_reboot_watch.sh &
   ```
   Polls every 15s over USB; on a fresh boot (uptime < 240s) or a sustained outage
-  it re-arms Shizuku, restores tcpip 5555, re-enables the hotspot by screen-tap if
-  down, and drives Termux to (re)launch `run_server.sh`. Single-instance lock at
+  it re-arms Shizuku, restores tcpip 5555, opens hotspot settings only when `wlan1`
+  is down and clicks a uniquely identified semantic switch if it is OFF, then asks
+  Termux to launch `run_server.sh` headlessly. No fixed coordinate or blind
+  first-checkbox fallback is used. Single-instance lock at
   `xio/new/.pc_watch.pid`. Log: `xio/new/pc_reboot_watch.log`.
 
 **The honest gap:** if the phone reboots with NO PC/host adb attached, neither
@@ -122,16 +124,18 @@ watcher above has a transport. `reboot_recover.sh` then sends an actionable ntfy
 DOWN, toca el hotspot en el telefono." No PIN on the phone -> one tap on the
 hotspot toggle fixes it (iPhone needs its OWN cellular data to receive this).
 
-**Close the gap for real -- AccessibilityService (built and installed; the reboot
-itself is what remains untested):** the Xiaomi carries `com.xio.hotspotboot` 1.0
-since 2026-07-22 with the service armed (`accessibility_enabled=1`, measured over
-ADB on 2026-09-16). The commands below are how it got there and how to verify or
-disable it; they are not pending work.
+**XIO APK orchestrator (source now integrated; APK upgrade pending):** the package
+`com.xio.hotspotboot` started as the boot recovery service and is now being extended
+as the XIO infrastructure APK. Its main screen starts the Termux XIO host, embeds
+the plugin hub, monitors the hotspot/radio and observes the RD/FOH endpoints without
+opening or controlling their Activities. The installed
+phone binary is still the previous 1.0 build; compiling/reinstalling version 3 adopts
+the orchestrator screen and the hardened recovery source.
 ```bash
 cd xio/hotspot_boot_service
 ./gradlew assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk
 
-ADB=/c/IA/flujo/xio/actual/platform-tools/adb.exe
+ADB=/c/XPEDR/XiaomiServer/platform-tools/adb.exe
 S=8299e66f
 "$ADB" -s "$S" install -r app/build/outputs/apk/debug/app-debug.apk
 SVC=com.xio.hotspotboot/.HotspotAccessibilityService
@@ -141,9 +145,9 @@ SVC=com.xio.hotspotboot/.HotspotAccessibilityService
 ```
 Disable: same two `settings put` commands with `''` and `0`. Double-gate design
 (same as `hotspot_watch.sh`): only clicks the toggle if it reads OFF, never
-touches a healthy hotspot. Fallback tap coordinate `540,583` is tuned for HyperOS
-on the Mi 11 Lite 5G NE -- verify on the real device if the text-search fallback
-doesn't fire.
+touches a healthy hotspot. The source now refuses ambiguous UI and has no fallback
+tap coordinate. The installed APK must be rebuilt/reinstalled before this source
+hardening is active on the phone.
 
 **One-time installs** (see section 7 for the full setup sequence):
 `setup_boot.sh` installs the Termux:Boot launcher; `setup_runcommand.sh` allows
@@ -160,7 +164,7 @@ their `*_start.sh` launchers -- safe to call directly too):
 
 | Loop | Launcher | Log | Heals | Cadence |
 |---|---|---|---|---|
-| `hotspot_watch.sh` | `sh /sdcard/xio_termux/hs_start.sh` | `.../hotspot_watch.log` | hotspot glitch (phone stays ON) | poll 15s, acts after 2 down cycles (~30s) |
+| `hotspot_watch.sh` | `sh /sdcard/xio_termux/hs_start.sh` | `.../hotspot_watch.log` | hotspot glitch (phone stays ON) | opt-in; poll 20s, acts once after 3 DOWN polls (~60s) |
 | `shizuku_watchdog.sh` | `sh /sdcard/xio_termux/wd_start.sh` | `.../shizuku_watchdog.log` | Shizuku dies | poll 20s |
 | `server_supervisor.sh` | `sh /sdcard/xio_termux/sup_start.sh` | `.../server_supervisor.log` | server.py dies | poll 15s, restarts after 3 fails (~45s) |
 
@@ -171,13 +175,26 @@ sh /sdcard/xio_termux/relaunch_watchdogs.sh
 ```
 
 Safety design (both `hotspot_watch.sh` and the AccessibilityService in section 3
-share it): double-gate -- only acts if `wlan1` has no IPv4 AND the settings
-toggle reads `checked="false"`. NEVER flips a healthy hotspot off.
+share it): the boot service is boot-triggered, while the runtime watcher is
+DISABLED unless explicitly armed. When armed, it requires a real UP -> DOWN
+transition, then `wlan1` must have no IPv4 and the semantic probe must find exactly
+one enabled hotspot switch with `checked="false"`. Ambiguous UI, initial DOWN, or
+an already-ON switch means no tap. NEVER flips a healthy hotspot off.
+
+Arm runtime hotspot recovery for a show only after verifying the current scripts:
+```bash
+adb -s 8299e66f shell "touch /sdcard/xio_termux/hotspot_runtime_recovery.enabled"
+```
+Remove the marker to return to passive monitoring:
+```bash
+adb -s 8299e66f shell "rm /sdcard/xio_termux/hotspot_runtime_recovery.enabled"
+```
 
 Live telemetry (read-only, never touches a radio): `connectivity_supervisor`
 plugin polls hotspot clients (`ip neigh show dev wlan1`) + watchdog pgrep
-liveness every 20s (default), tracks device join/drop by MAC, and cross-checks
-Bluetooth as an informational side-channel.
+liveness every 20s (default), records radio/data-registration and tethering/BPF
+state, tracks device join/drop by MAC, and cross-checks Bluetooth as an
+informational side-channel. It does not change the preferred 4G/5G mode.
 ```bash
 curl http://<phone>:5000/api/plugins/connectivity_supervisor/status
 curl http://<phone>:5000/api/plugins/connectivity_supervisor/events?limit=25
