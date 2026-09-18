@@ -152,6 +152,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
                        "backend": {}, "radio": {}, "tethering": {}}  # cached for /status (poll refreshes)
         self._health = {}  # cached battery health (level/temp_c/status/charging) from the poll
         self._watchdogs = {}  # cached self-heal loop liveness (native pgrep) from the poll
+        self._notify_lock = threading.Lock()
 
     # ── lifecycle ────────────────────────────────────────────────────
     def on_load(self):
@@ -698,12 +699,21 @@ class ConnectivitySupervisorPlugin(PluginBase):
             self._notify("Connectivity", detail)
 
     def _notify(self, title, body):
-        try:
-            t = title.replace("'", "")[:40]
-            b = body.replace("'", "")[:180]
-            self._sh(f"cmd notification post -S bigtext -t '{t}' xio_connsup '{b}'", timeout=10)
-        except Exception:
-            pass  # notification is a bonus, never critical
+        """Post a best-effort notification without blocking the network poll."""
+        if not self._notify_lock.acquire(blocking=False):
+            return  # one slow Binder notification must not queue a storm
+        t = title.replace("'", "")[:40]
+        b = body.replace("'", "")[:180]
+
+        def _send():
+            try:
+                self._sh(f"cmd notification post -S bigtext -t '{t}' xio_connsup '{b}'", timeout=5)
+            except Exception:
+                pass  # notification is a bonus, never critical
+            finally:
+                self._notify_lock.release()
+
+        threading.Thread(target=_send, daemon=True, name="connsup-notify").start()
 
     def _trigger(self, cmd, dev):
         """Run a user-configured shell trigger -- only when explicitly enabled."""
