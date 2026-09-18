@@ -154,6 +154,10 @@ class ConnectivitySupervisorPlugin(PluginBase):
         self._health = {}  # cached battery health (level/temp_c/status/charging) from the poll
         self._watchdogs = {}  # cached self-heal loop liveness (native pgrep) from the poll
         self._notify_lock = threading.Lock()
+        self._net_rish_lock = threading.Lock()
+        self._net_rish_out = os.environ.get(
+            "XIO_CONNSUP_RISH_OUT", "/sdcard/xio_termux/.connsup_rish_out"
+        )
 
     # ── lifecycle ────────────────────────────────────────────────────
     def on_load(self):
@@ -198,12 +202,37 @@ class ConnectivitySupervisorPlugin(PluginBase):
         if backend != "rish":
             return {"type": backend, "connected": True}
         try:
-            return {"type": backend, "connected": bool(self.controller.is_connected())}
+            return {"type": backend, "connected": "uid=2000" in self._sh("id", timeout=3)}
         except Exception:
             return {"type": backend, "connected": False}
 
     def _sh(self, cmdstr, timeout=25):
         """One shell string via the controller (rish on-device / adb on PC)."""
+        if getattr(self.controller, "backend", "") == "rish":
+            # Connectivity is infrastructure: isolate it from the controller's
+            # shared output file so another plugin cannot starve this monitor.
+            wrapped = f"({cmdstr}) 2>/dev/null | cat > {self._net_rish_out}"
+            wait = max(1.0, min(float(timeout), 8.0))
+            with self._net_rish_lock:
+                try:
+                    try:
+                        os.remove(self._net_rish_out)
+                    except FileNotFoundError:
+                        pass
+                    proc = subprocess.run(
+                        ["sh", self.controller.rish, "-c", wrapped],
+                        cwd="/sdcard",
+                        capture_output=True,
+                        timeout=wait,
+                        text=False,
+                    )
+                    if proc.returncode != 0:
+                        return ""
+                    with open(self._net_rish_out, "rb") as f:
+                        return f.read().decode("utf-8", errors="replace").strip()
+                except Exception as e:
+                    self.logger.error(f"connsup rish failed [{cmdstr!r}]: {e}")
+                    return ""
         try:
             return self.controller._shell(cmdstr, timeout=timeout)
         except Exception as e:
