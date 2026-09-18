@@ -22,4 +22,7 @@ def test_remote_hub_is_a_compatibility_alias_not_a_second_implementation() -> No
         for line in MANIFEST.read_text(encoding="utf-8").splitlines()
         if line.endswith("  projects/rd-field/bridge/hub_remote.py")
     )
-    assert hashlib.sha256(alias.read_bytes()).hexdigest() == expected
+    # Git may materialize this text alias with CRLF on Windows while the
+    # manifest is generated from its canonical LF bytes on MAK/Linux.
+    canonical_bytes = alias.read_bytes().replace(b"\r\n", b"\n")
+    assert hashlib.sha256(canonical_bytes).hexdigest() == expected
