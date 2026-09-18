@@ -65,9 +65,11 @@ public final class XioDiagnostics {
             JSONObject hosts = new JSONObject();
             JSONObject rd = probe(RD_HOST + "/api/plugins");
             JSONObject foh = probe(FOH_HOST + "/api/plugins/foh_monitor/status");
+            JSONObject runtime = probe(RD_HOST + "/api/status");
             JSONObject connectivity = probe(RD_HOST + "/api/plugins/connectivity_supervisor/status");
             hosts.put("rd", publicProbe(rd));
             hosts.put("foh", publicProbe(foh));
+            hosts.put("xio_runtime", publicProbe(runtime));
             hosts.put("connectivity_supervisor", publicProbe(connectivity));
             if (rd.has("payload") && rd.opt("payload") instanceof JSONArray) {
                 hosts.put("rd_plugins_loaded", rd.optJSONArray("payload").length());
@@ -315,7 +317,7 @@ public final class XioDiagnostics {
             if (payload instanceof JSONObject) {
                 JSONObject source = (JSONObject) payload;
                 JSONObject summary = new JSONObject();
-                for (String key : new String[]{"server", "listener", "httpPort", "hotspot_up", "hotspot_address", "internet", "radio", "tethering", "clients_present"}) {
+                for (String key : new String[]{"server", "listener", "httpPort", "connected", "connection_type", "hotspot_up", "hotspot_address", "internet", "radio", "tethering", "watchdogs", "clients_present"}) {
                     if (source.has(key)) summary.put(key, source.get(key));
                 }
                 if (summary.length() > 0) result.put("summary", summary);

@@ -221,6 +221,7 @@ public final class MainActivity extends Activity {
         JSONObject hosts = snapshot.optJSONObject("hosts");
         JSONObject rd = hosts == null ? null : hosts.optJSONObject("rd");
         JSONObject foh = hosts == null ? null : hosts.optJSONObject("foh");
+        JSONObject runtime = hosts == null ? null : hosts.optJSONObject("xio_runtime");
         JSONObject connsup = hosts == null ? null : hosts.optJSONObject("connectivity_supervisor");
 
         value.append("Muestra: ").append(snapshot.optString("timestamp", "N/D")).append('\n');
@@ -234,6 +235,10 @@ public final class MainActivity extends Activity {
                 .append(!battery.isNull("level") ? battery.optInt("level") + "%" : "N/D")
                 .append(" · ").append(battery.optString("temperature_c", "N/D")).append(" °C")
                 .append(battery.optBoolean("charging", false) ? " · cargando" : "");
+        value.append('\n').append("Runtime XIO :5000: ").append(probeState(runtime));
+        JSONObject runtimeSummary = runtime == null ? null : runtime.optJSONObject("summary");
+        if (runtimeSummary != null && runtimeSummary.has("connected")) value.append(" · ADB backend ")
+                .append(runtimeSummary.optBoolean("connected", false) ? "conectado" : "desconectado");
         value.append('\n').append("Host XIO/plugins :5000: ").append(probeState(rd));
         if (hosts != null && hosts.has("rd_plugins_loaded")) value.append(" · ").append(hosts.optInt("rd_plugins_loaded")).append(" plugins");
         value.append('\n').append("Host FOH :5100: ").append(probeState(foh));
@@ -249,6 +254,11 @@ public final class MainActivity extends Activity {
                         .append(tethering.optBoolean("active", false) ? "activo" : "inactivo")
                         .append(" · conntrack errors ").append(tethering.optInt("conntrack_error_count", 0));
             }
+            JSONObject watchdogs = summary == null ? null : summary.optJSONObject("watchdogs");
+            if (watchdogs != null) value.append('\n').append("Watchdogs: Shizuku=")
+                    .append(watchdogs.optInt("shizuku", 0) > 0 ? "UP" : "DOWN")
+                    .append(" · server=").append(watchdogs.optInt("server", 0) > 0 ? "UP" : "DOWN")
+                    .append(" · hotspot=").append(watchdogs.optInt("hotspot", 0) > 0 ? "UP" : "DOWN");
         }
 
         List<String> recent = XioDiagnostics.readRecentLines(this, 8);
