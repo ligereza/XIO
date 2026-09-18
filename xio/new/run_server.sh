@@ -4,14 +4,13 @@
 # Prereqs (once): Shizuku service armed, rish set up in $HOME, `pip install flask`,
 #   android-tools instalado y adb-key loopback autorizado (ver setup_watchdog.sh).
 
-# Keep the rish launcher and its Shizuku dex in Termux's private home. The
-# public copy is deliberately staged on /sdcard so ADB can repair it; the
-# Python host points at $HOME/rish and must never use the tutorial's PKG stub.
-if [ -f /sdcard/xio_termux/rish ] && [ -f /sdcard/xio_termux/rish_shizuku.dex ]; then
-  cp /sdcard/xio_termux/rish "$HOME/rish"
-  cp /sdcard/xio_termux/rish_shizuku.dex "$HOME/rish_shizuku.dex"
-  chmod 500 "$HOME/rish"
-  chmod 400 "$HOME/rish_shizuku.dex"
+# Keep rish on shared storage. Termux:Boot can execute the XIO runtime but its
+# launcher uid cannot write Termux's private home reliably; the old copy-to-$HOME
+# step therefore failed and left the server blind. Shizuku reads this public
+# launcher and its dex directly.
+if [ ! -f /sdcard/xio_termux/rish ] || [ ! -f /sdcard/xio_termux/rish_shizuku.dex ]; then
+  echo "rish launcher or dex missing under /sdcard/xio_termux" >&2
+  exit 1
 fi
 
 pkill -f 'python server.py' 2>/dev/null
@@ -28,7 +27,7 @@ rm -rf "$HOME/xioserver/__pycache__" "$HOME/xioserver/plugins/__pycache__"
 
 cd "$HOME/xioserver" || exit 1
 export XIO_BACKEND=rish
-export RISH_PATH="$HOME/rish"
+export RISH_PATH="${RISH_PATH:-/sdcard/xio_termux/rish}"
 export PLUGINS_DIR="$HOME/xioplugins"
 # The shared phone host is the RD surface. FOH/ISKVW is owned by the native
 # APK on port 5100; loading the Python FOH plugin here would bind the same
