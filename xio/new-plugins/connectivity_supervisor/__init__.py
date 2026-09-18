@@ -129,7 +129,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
         "bt_watch": False,        # poll BT too (slow dumpsys); /bt endpoint works on-demand regardless
         "radio_watch": True,      # read-only telephony/radio diagnostics
         "tethering_watch": True,  # read-only dumpsys tethering diagnostics
-        "notify": True,           # best-effort on-device notification on events
+        "notify": False,          # opt-in only; Android notification Binder can stall on some builds
         "triggers_enabled": False,  # gate for shell-command triggers (OFF by default)
         "on_drop_cmd": "",        # shell run on drop  (only if triggers_enabled)
         "on_join_cmd": "",        # shell run on join  (only if triggers_enabled)
