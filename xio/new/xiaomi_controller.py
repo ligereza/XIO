@@ -71,6 +71,11 @@ class XiaomiController:
         with self._shell_lock:
             proc = subprocess.run(
                 ["sh", self.rish, "-c", wrapped],
+                # Shizuku's shell uid cannot chdir into Termux's private home
+                # (the server normally runs from $HOME/xioserver). Use shared
+                # storage as a neutral cwd so rish can start instead of dying
+                # before the command reaches the shell.
+                cwd="/sdcard",
                 capture_output=True, timeout=timeout, text=False,
             )
             try:

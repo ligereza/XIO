@@ -4,6 +4,16 @@
 # Prereqs (once): Shizuku service armed, rish set up in $HOME, `pip install flask`,
 #   android-tools instalado y adb-key loopback autorizado (ver setup_watchdog.sh).
 
+# Keep the rish launcher and its Shizuku dex in Termux's private home. The
+# public copy is deliberately staged on /sdcard so ADB can repair it; the
+# Python host points at $HOME/rish and must never use the tutorial's PKG stub.
+if [ -f /sdcard/xio_termux/rish ] && [ -f /sdcard/xio_termux/rish_shizuku.dex ]; then
+  cp /sdcard/xio_termux/rish "$HOME/rish"
+  cp /sdcard/xio_termux/rish_shizuku.dex "$HOME/rish_shizuku.dex"
+  chmod 500 "$HOME/rish"
+  chmod 400 "$HOME/rish_shizuku.dex"
+fi
+
 pkill -f 'python server.py' 2>/dev/null
 sleep 1
 
