@@ -71,7 +71,7 @@ class XiaomiController:
         # A background plugin must not wait forever behind another plugin's
         # Shizuku call. Fail this sample closed; the supervisor retries on the
         # next poll and never turns a busy backend into a frozen host.
-        lock_timeout = max(1.0, min(float(timeout), 5.0))
+        lock_timeout = max(1.0, min(float(timeout), 2.0))
         if not self._shell_lock.acquire(timeout=lock_timeout):
             return types.SimpleNamespace(stdout=b"", returncode=124)
         try:
