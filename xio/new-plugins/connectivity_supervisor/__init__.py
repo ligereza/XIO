@@ -32,6 +32,7 @@ import os
 import re
 import subprocess
 import threading
+import time
 from datetime import datetime
 
 _MAC_RE = re.compile(r'([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})')
@@ -269,13 +270,13 @@ class ConnectivitySupervisorPlugin(PluginBase):
         except Exception:
             return "unknown"
 
-    def _scan_wifi_clients(self):
+    def _scan_wifi_clients(self, hotspot=None):
         """Current hotspot clients: {mac -> {ip, state, mac_type}} from the neighbor
         cache. `ip neigh` is the ONLY client source available to uid 2000 --
         `cmd wifi list-tethered-clients` throws SecurityException (denied) and the
         dnsmasq lease file is SELinux-walled, so neither is used."""
         iface = self._cfg("ap_iface")
-        hotspot = self._hotspot_details()
+        hotspot = hotspot or self._hotspot_details()
         network = hotspot["network"]
         # If wlan1 has no current IPv4, its neighbor cache may still contain
         # stale entries. Treat it as no active hotspot clients.
@@ -302,7 +303,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
                 clients[mac] = {"ip": ip, "state": state, "mac_type": self._mac_kind(mac)}
         return clients
 
-    def _hotspot_details(self):
+    def _hotspot_details(self, netmap=None):
         """Return the live hotspot IPv4/network/broadcast, never a stale default.
 
         The interface address is session state on Android.  An old persisted
@@ -310,7 +311,8 @@ class ConnectivitySupervisorPlugin(PluginBase):
         so a previous show's subnet cannot hide clients on today's hotspot.
         """
         iface = self._cfg("ap_iface")
-        raw = self._ipv4_map().get(iface, "")
+        netmap = netmap if netmap is not None else self._ipv4_map()
+        raw = netmap.get(iface, "")
         if not raw:
             return self._remember_hotspot({"address": "", "network": None, "network_text": "", "broadcast": ""})
         try:
@@ -375,7 +377,12 @@ class ConnectivitySupervisorPlugin(PluginBase):
         Parses the FULL `ip addr` table (toybox `ip` rejects the `-4` flag and
         mishandles per-interface name filters, so we read all and slice here).
         """
-        out = self._sh("ip addr show 2>/dev/null")
+        out = ""
+        for attempt in range(3):
+            out = self._sh("ip addr show 2>/dev/null")
+            if out.strip() or attempt == 2:
+                break
+            time.sleep(0.2)
         result = {}
         cur = None
         for line in out.splitlines():
@@ -511,7 +518,11 @@ class ConnectivitySupervisorPlugin(PluginBase):
                 return
             stale = int(self._cfg("stale_after"))
             now = self._now()
-            wifi = self._scan_wifi_clients()
+            # One interface snapshot keeps hotspot_up, mobile upstream and
+            # client-subnet parsing consistent when other plugins use rish too.
+            netmap = self._ipv4_map()
+            hotspot = self._hotspot_details(netmap)
+            wifi = self._scan_wifi_clients(hotspot)
             bt = self._scan_bt() if self._cfg("bt_watch") else {}
 
             # record sightings
@@ -562,7 +573,6 @@ class ConnectivitySupervisorPlugin(PluginBase):
                 dev["present"] = wifi_fresh
 
             # infrastructure health: alert on hotspot/internet state changes
-            netmap = self._ipv4_map()
             hs_up = self._cfg("ap_iface") in netmap
             inet = next((n for n in netmap if n.startswith("rmnet")), "")
             radio = self._read_radio() if self._cfg("radio_watch") else {}
