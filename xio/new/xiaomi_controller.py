@@ -68,7 +68,13 @@ class XiaomiController:
         andaban (cat/ls/dumpsys/ip/screencap). Empiricamente validado on-device.
         """
         wrapped = f"({cmdstr}) 2>/dev/null | cat > {self._rish_out}"
-        with self._shell_lock:
+        # A background plugin must not wait forever behind another plugin's
+        # Shizuku call. Fail this sample closed; the supervisor retries on the
+        # next poll and never turns a busy backend into a frozen host.
+        lock_timeout = max(1.0, min(float(timeout), 5.0))
+        if not self._shell_lock.acquire(timeout=lock_timeout):
+            return types.SimpleNamespace(stdout=b"", returncode=124)
+        try:
             proc = subprocess.run(
                 ["sh", self.rish, "-c", wrapped],
                 # Shizuku's shell uid cannot chdir into Termux's private home
@@ -83,6 +89,8 @@ class XiaomiController:
                     data = f.read()
             except Exception:
                 data = proc.stdout or b""   # fall back to the pipe if unreadable
+        finally:
+            self._shell_lock.release()
         return types.SimpleNamespace(stdout=data, returncode=proc.returncode)
 
     def _shell(self, *args, timeout=30) -> str:
