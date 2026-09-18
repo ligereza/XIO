@@ -465,6 +465,11 @@ class XiaomiController:
 
     def full_status(self) -> dict:
         """Comprehensive device status."""
+        if self.backend == "rish":
+            # The HTTP host is already running inside Termux. Do not make its
+            # liveness depend on the shared ADB/rish lock; the connectivity
+            # supervisor reports the detailed Shizuku backend state separately.
+            return {"connected": True, "connection_type": "on-device"}
         status = {
             "connected": self.is_connected(),
             "connection_type": self.connection_type(),
