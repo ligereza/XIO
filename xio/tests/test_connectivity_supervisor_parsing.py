@@ -62,3 +62,32 @@ def test_reads_tethering_bpf_and_conntrack_errors_without_guessing():
     assert result["hardware_offload"] is True
     assert result["conntrack_error_count"] == 1
     assert result["conntrack_error_codes"] == ["ENOENT"]
+
+
+def test_rejects_stale_multiline_shell_output_as_radio_props():
+    plugin = FakePlugin({
+        "getprop gsm.network.type 2>/dev/null": "Current Battery Service state:\nlevel: 0",
+        "getprop gsm.data.network.type 2>/dev/null": "Current Battery Service state:\nlevel: 0",
+        "getprop gsm.operator.alpha 2>/dev/null": "Current Battery Service state:\nlevel: 0",
+        "dumpsys telephony.registry 2>/dev/null": "Current Battery Service state:\nlevel: 0",
+    })
+
+    result = plugin._read_radio()
+
+    assert result["network_type"] == ""
+    assert result["data_network_type"] == ""
+    assert result["operator"] == ""
+    assert result["data_registered"] is None
+    assert result["lte_rsrp"] is None
+
+
+def test_marks_unrecognized_tethering_output_unavailable():
+    plugin = FakePlugin({
+        "dumpsys tethering 2>/dev/null": "Current Battery Service state:\nlevel: 0",
+    })
+
+    result = plugin._read_tethering()
+
+    assert result["available"] is False
+    assert result["active"] is None
+    assert result["conntrack_error_count"] is None

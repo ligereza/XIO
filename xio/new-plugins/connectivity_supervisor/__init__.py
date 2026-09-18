@@ -78,7 +78,7 @@ function evcls(e){var k=(e&&e.event)||'';return k.indexOf('join')>=0?'e-join':(k
 function set(id,h){var el=document.getElementById(id);if(el)el.innerHTML=h}
 function tick(){
  fetch('status',{cache:'no-store'}).then(function(r){return r.json()}).then(function(s){
-  set('hs',s.hotspot_up?'<span class=ok>UP</span>':'<span class=bad>DOWN</span>');
+  set('hs',s.hotspot_up==null?'<span>n/a</span>':(s.hotspot_up?'<span class=ok>UP</span>':'<span class=bad>DOWN</span>'));
   set('net',(s.internet&&s.internet.iface)?'<span class=ok>'+esc(s.internet.iface)+'</span>':'<span class=bad>none</span>');
   document.getElementById('cl').textContent=s.clients_present;
   var b=s.health||{};var p=[];
@@ -148,7 +148,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
         self._net_state = {"hotspot_up": None, "internet": None, "radio_type": None,
                            "data_registered": None, "tethering_active": None}  # infra change tracking
         self._infra = {"hotspot_up": False, "internet": {"iface": "", "addr": ""},
-                       "radio": {}, "tethering": {}}  # cached for /status (poll refreshes)
+                       "backend": {}, "radio": {}, "tethering": {}}  # cached for /status (poll refreshes)
         self._health = {}  # cached battery health (level/temp_c/status/charging) from the poll
         self._watchdogs = {}  # cached self-heal loop liveness (native pgrep) from the poll
 
@@ -183,6 +183,21 @@ class ConnectivitySupervisorPlugin(PluginBase):
     # ── small helpers ────────────────────────────────────────────────
     def _cfg(self, key):
         return self.get_config(key, self.DEFAULTS.get(key))
+
+    def _backend_info(self):
+        """Return whether the controller can currently read Android state.
+
+        A failed rish call can leave the shared output file containing an older
+        command's result. Never present that stale text as current radio or
+        tethering evidence; mark the backend unavailable instead.
+        """
+        backend = str(getattr(self.controller, "backend", "unknown") or "unknown")
+        if backend != "rish":
+            return {"type": backend, "connected": True}
+        try:
+            return {"type": backend, "connected": bool(self.controller.is_connected())}
+        except Exception:
+            return {"type": backend, "connected": False}
 
     def _sh(self, cmdstr, timeout=25):
         """One shell string via the controller (rish on-device / adb on PC)."""
@@ -382,10 +397,16 @@ class ConnectivitySupervisorPlugin(PluginBase):
         empty instead of being guessed, so this is useful evidence rather than
         a false diagnosis.
         """
+        def prop(command):
+            value = self._sh(command).strip()
+            lines = value.splitlines()
+            return lines[0].strip() if len(lines) == 1 and len(lines[0]) <= 64 else ""
+
         radio = {
-            "network_type": self._sh("getprop gsm.network.type 2>/dev/null").strip(),
-            "data_network_type": self._sh("getprop gsm.data.network.type 2>/dev/null").strip(),
-            "operator": self._sh("getprop gsm.operator.alpha 2>/dev/null").strip(),
+            "available": True,
+            "network_type": prop("getprop gsm.network.type 2>/dev/null"),
+            "data_network_type": prop("getprop gsm.data.network.type 2>/dev/null"),
+            "operator": prop("getprop gsm.operator.alpha 2>/dev/null"),
             "data_reg_state": "",
             "data_registered": None,
             "lte_rssi": None,
@@ -430,6 +451,10 @@ class ConnectivitySupervisorPlugin(PluginBase):
         """Read tethering/BPF state; never starts, stops or reconfigures tethering."""
         dump = self._sh("dumpsys tethering 2>/dev/null")
         iface = str(self._cfg("ap_iface") or "wlan1")
+        if not dump.strip() or not re.search(r"tether", dump, re.I):
+            return {"available": False, "active": None, "bpf_enabled": None,
+                    "hardware_offload": None, "conntrack_error_count": None,
+                    "conntrack_error_codes": [], "reason": "backend_unavailable_or_unrecognized"}
         active = bool(re.search(rf"\b{re.escape(iface)}\s*-\s*TetheredState\b", dump, re.I))
         if not active:
             active = bool(re.search(rf"\btethered[^\n]*\b{re.escape(iface)}\b", dump, re.I))
@@ -450,6 +475,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
         else:
             hardware_offload = None
         return {
+            "available": True,
             "active": active,
             "bpf_enabled": (bpf.group(1).lower() == "true") if bpf else None,
             "hardware_offload": hardware_offload,
@@ -460,6 +486,19 @@ class ConnectivitySupervisorPlugin(PluginBase):
     # ── the poll: read, diff, emit (no radio writes) ─────────────────
     def _poll(self):
         try:
+            backend = self._backend_info()
+            if not backend["connected"]:
+                # Do not scan clients or emit drops from stale rish output.
+                self._infra = {
+                    "hotspot_up": None,
+                    "internet": {"iface": "", "addr": ""},
+                    "backend": backend,
+                    "radio": {"available": False, "reason": "backend_unavailable"},
+                    "tethering": {"available": False, "active": None, "reason": "backend_unavailable"},
+                }
+                self._check_watchdogs()
+                self._save_state()
+                return
             stale = int(self._cfg("stale_after"))
             now = self._now()
             wifi = self._scan_wifi_clients()
@@ -525,6 +564,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
             self._infra = {
                 "hotspot_up": hs_up,
                 "internet": {"iface": inet, "addr": netmap.get(inet, "")},
+                "backend": backend,
                 "radio": radio,
                 "tethering": tethering,
             }
@@ -676,6 +716,7 @@ class ConnectivitySupervisorPlugin(PluginBase):
             "hotspot_network": hotspot["network_text"],
             "hotspot_broadcast": hotspot["broadcast"],
             "internet": self._infra["internet"],
+            "backend": self._infra.get("backend", {}),
             "radio": self._infra.get("radio", {}),
             "tethering": self._infra.get("tethering", {}),
             "health": {k: self._health.get(k) for k in ("level", "temp_c", "status", "charging")},

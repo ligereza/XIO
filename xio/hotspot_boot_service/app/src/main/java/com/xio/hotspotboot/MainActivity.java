@@ -248,6 +248,12 @@ public final class MainActivity extends Activity {
                 .append(" · FOH=").append(apps.optBoolean("cl.xio.foh", false) ? "sí" : "no");
         if (connsup != null && connsup.has("summary")) {
             JSONObject summary = connsup.optJSONObject("summary");
+            if (summary != null && summary.has("backend")) {
+                JSONObject backend = summary.optJSONObject("backend");
+                if (backend != null) value.append('\n').append("Plugin backend: ")
+                        .append(backend.optBoolean("connected", false) ? "conectado" : "NO DISPONIBLE")
+                        .append(" · ").append(backend.optString("type", "N/D"));
+            }
             if (summary != null && summary.has("tethering")) {
                 JSONObject tethering = summary.optJSONObject("tethering");
                 if (tethering != null) value.append('\n').append("Tethering plugin: ")

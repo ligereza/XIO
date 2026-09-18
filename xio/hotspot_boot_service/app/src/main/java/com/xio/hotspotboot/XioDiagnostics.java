@@ -317,7 +317,7 @@ public final class XioDiagnostics {
             if (payload instanceof JSONObject) {
                 JSONObject source = (JSONObject) payload;
                 JSONObject summary = new JSONObject();
-                for (String key : new String[]{"server", "listener", "httpPort", "connected", "connection_type", "hotspot_up", "hotspot_address", "internet", "radio", "tethering", "watchdogs", "clients_present"}) {
+                for (String key : new String[]{"server", "listener", "httpPort", "connected", "connection_type", "backend", "hotspot_up", "hotspot_address", "internet", "radio", "tethering", "watchdogs", "clients_present"}) {
                     if (source.has(key)) summary.put(key, source.get(key));
                 }
                 if (summary.length() > 0) result.put("summary", summary);
